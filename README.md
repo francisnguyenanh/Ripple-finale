@@ -4,7 +4,7 @@
 
 **AI proposes. Deterministic systems validate. Humans decide.**
 
-> **Development preview.** This repository is a development snapshot of Ripple's current implementation and its path to a fuller, validated build. It has not been deployed, has no human acceptance, and its real-model quality has not been independently measured. Exact limits are stated next to each claim and in [section 12](#12-known-limits-security-provenance-and-licence). Whether any team proceeds to a later competition round is decided by the organiser; this document makes no claim about it. Submission for the Google Cloud AI Builder Cup JAPAC 2026.
+> **Development preview, not a finished product.** This snapshot is not deployed, has no human acceptance, and its real-model quality has not been independently measured ([limits](#12-known-limits-security-provenance-and-licence)). Whether the team advances to a later round is the organiser's decision. Submission for the Google Cloud AI Builder Cup JAPAC 2026.
 
 ## Explore this repository
 
@@ -51,7 +51,11 @@ Conceptual comparison (responsibilities, not a performance claim):
 | Impact analysis tools | list dependencies | impact with explicit coverage, where "unknown" is never reported as "no impact" |
 | Approval workflows | route a request | approval bound to an exact semantic difference, with stale and moved-knowledge guards |
 
-Ripple does not claim to have invented these techniques; the contribution is combining them into one governed loop.
+Ripple does not claim to have invented these techniques; the contribution is combining them into one governed loop. Three ideas carry the product:
+
+1. **Governed business knowledge.** Rules are versioned, cited and carry an authority label (observed or decided). Open questions and disagreements are first-class records, so the knowledge base says what it does not know instead of guessing.
+2. **Human authority separate from AI interpretation.** A model may read, ask and draft, but only a person's own words answer a question, accept knowledge or approve a change, and approval needs a different person from the requester. The system can refuse or downgrade a model output; it can never promote one.
+3. **Evidence-based, multi-axis completion.** A change is not "done" when a file is edited. Decided knowledge, source alignment, behaviour verification and business acceptance are tracked as separate states, and only the first two can be established by this product today.
 
 ## 3. A concrete example: Harbor
 
@@ -96,7 +100,7 @@ The journey ends in a per-change view of nine steps, each with a state and a nex
 
 ## 5. Generative AI implementation
 
-Gemini is useful here because the inputs are messy language: policy prose, comments, spreadsheet labels and a person's free-text request. Deterministic code cannot read these, but it can verify what a model says about them. Ripple uses the model where language understanding is needed, and never where a decision is.
+Gemini is useful here because the inputs are messy language: policy prose, comments, spreadsheet labels and a person's free-text request. Bounded deterministic parsing can read fixed formats such as a YAML key, but it cannot reliably resolve paraphrase, implicit scope or a vague instruction ("keep this limited to the approval file") into a structured proposal. Gemini supplies that semantic reasoning: it proposes cited rules, finds questions the structure does not expose, and turns a request into candidate operations. Deterministic code then verifies each proposal against the sources and schemas, and people decide. Ripple uses the model where language understanding is needed, and never where a decision is.
 
 | Responsibility | Model proposes | Deterministic code checks | Human confirms | Current quality evidence |
 |---|---|---|---|---|
@@ -114,10 +118,12 @@ Gemini is useful here because the inputs are messy language: policy prose, comme
 1. *Implemented roles and integrations*: present in the code and contracts.
 2. *Deterministic validation*: tested without any model.
 3. *Synthetic-stub integration tests*: stubs pass through the production callers, validators, budget boundary and persistence; they prove the pipeline, not Gemini's quality.
-4. *Bounded live-model pilot (self-check)*: each role ran end to end on a real model (28 calls on Gemini 3.5 Flash-Lite, one paired case on Gemini 3.8 Flash) under a hard cost cap of 2 USD, of which 0.17475295 USD had been recorded at the snapshot. Two sealed sets written by the project's own agent were scored mechanically: questions 10/14, then 8/14 after a server fix; change requests 6/8. These sets are small and **not independent**. Observed: missing required citations with the lighter model, unreliability on three-part requests, varying abstention wording.
+4. *Bounded live-model pilot (self-check)*: every role ran end to end on a real model under a hard cost cap; this shows the integration works, not how good it is. Observations are listed below, unchanged.
 5. *Independent real-model quality evaluation*: **not yet performed**; a protocol exists, no result does. Results will be added to [`docs/release/FINAL_PREVIEW_EVIDENCE.md`](docs/release/FINAL_PREVIEW_EVIDENCE.md) and the [quality plan](docs/evaluation/FINAL_AI_QUALITY_PLAN.md) without changing this structure.
 
-**AI capability implemented does not mean AI quality independently validated.** An earlier snapshot's held-out evaluation (2026-10-02) did not reach its targets ([record](docs/evaluation/HELD_OUT_EVALUATION.md)); it is kept as history and was not repeated on this snapshot.
+**AI capability implemented does not mean AI quality independently validated.**
+
+**Live pilot observations (self-check, unchanged).** 28 calls on Gemini 3.5 Flash-Lite and one paired case on Gemini 3.8 Flash, under a hard cost cap of 2 USD, of which 0.17475295 USD had been recorded at the snapshot. Two sealed sets written by the project's own agent were scored mechanically: questions 10/14, then 8/14 after a server fix; change requests 6/8. These sets are small and **not independent**. Observed: missing required citations with the lighter model, unreliability on three-part requests, varying abstention wording. An earlier snapshot's held-out evaluation (2026-10-02) did not reach its targets ([record](docs/evaluation/HELD_OUT_EVALUATION.md)); it is kept as history and was not repeated on this snapshot.
 
 ## 6. Engineering foundation and trust
 
@@ -152,18 +158,16 @@ Labels: **Local** = implemented and verified with stub models on a disposable da
 | Documents (Business, Technical), exact export | Local | [`test_doc02_documents.py`](tests/final_loop/test_doc02_documents.py), [`test_doc05_export.py`](tests/final_loop/test_doc05_export.py) | deterministic templates, English |
 | Reliability: concurrency, killed worker, upgrade chain | Local | [`test_rel02_reliability.py`](tests/final_loop/test_rel02_reliability.py), [`test_rel02_process_kill.py`](tests/final_loop/test_rel02_process_kill.py), [`test_rel02_upgrade_chain.py`](tests/final_loop/test_rel02_upgrade_chain.py) | local injection, not production |
 
-**Extensions (secondary; each is gated and not a core claim)**
+**Optional extensions (secondary; not required for core-product readiness).** All are Local or Mock/emulator verified with synthetic data and none has real-model quality evidence; full rows and limits are in the [claims document](docs/release/FINAL_CLAIMS_EVIDENCE_LIMITS.md).
 
-| Capability | Status | Tests | Important limit |
+| Extension | Status | Test (example) | Main limit |
 |---|---|---|---|
-| Typed policy decisions, audit package | Local, API | [`test_mon_policy_audit.py`](tests/final_loop/test_mon_policy_audit.py) | not an authorization token; hashes are not signatures |
-| Candidate code patch; Git read connector; pull-request path | Local; Mock (pull request); read-only check on one private test repository | [`test_fex_code_change.py`](tests/final_loop/test_fex_code_change.py), [`test_fex_git_remote.py`](tests/final_loop/test_fex_git_remote.py) | no product-created pull request on a real repository; never a merge |
-| Business CI drift check, ROI replay | Local, API | [`test_mon_ci_check.py`](tests/final_loop/test_mon_ci_check.py), [`test_mon_roi_replay.py`](tests/final_loop/test_mon_roi_replay.py) | fixture or synthetic data only |
-| Multi-agent review board, arbiter, coder/tester with repair loop, simulation | Local (synthetic specialists), API | [`test_ma_review_board.py`](tests/final_loop/test_ma_review_board.py), [`test_ma_repair_loop.py`](tests/final_loop/test_ma_repair_loop.py), [`test_ma_recovery.py`](tests/final_loop/test_ma_recovery.py) | no real-model quality; agreement is never evidence |
-| Interview, audience variants, conflict mining | Local, API | [`test_aix_k2_interview.py`](tests/final_loop/test_aix_k2_interview.py), [`test_aix_d1_variants.py`](tests/final_loop/test_aix_d1_variants.py), [`test_aix_k1_mining.py`](tests/final_loop/test_aix_k1_mining.py) | stub wording; quality unmeasured |
-| Firebase hybrid satellite (identity exchange, projection, notifications, listener tokens) | Mock; Firestore sink on a local emulator | [`test_fb_identity_exchange.py`](tests/final_loop/test_fb_identity_exchange.py), [`test_fs_emulator.py`](tests/final_loop/test_fs_emulator.py) | no cloud resource, real sign-in or latency measurement |
+| Policy decisions, audit package, business CI drift check, ROI replay | Local, API | [`test_mon_policy_audit.py`](tests/final_loop/test_mon_policy_audit.py) | hashes are not signatures; fixture or synthetic data only |
+| Candidate code patch, Git connector, pull-request path | Local; Mock (pull request); read-only check on one private test repository | [`test_fex_git_remote.py`](tests/final_loop/test_fex_git_remote.py) | no product-created pull request on a real repository; never a merge |
+| Multi-agent workflows, interview, audience variants, conflict mining | Local (synthetic specialists), API | [`test_ma_review_board.py`](tests/final_loop/test_ma_review_board.py) | quality unmeasured; agreement is never evidence |
+| Firebase hybrid satellite | Mock; local emulator for the Firestore sink | [`test_fs_emulator.py`](tests/final_loop/test_fs_emulator.py) | no cloud resource, real sign-in or latency measurement |
 
-Every claim with its limit: [`FINAL_CLAIMS_EVIDENCE_LIMITS.md`](docs/release/FINAL_CLAIMS_EVIDENCE_LIMITS.md). **Test totals** recorded in earlier snapshots (for example 1,238 passed, 3 skipped, 1 deselected for an earlier export) are historical evidence, not a result for this export. This exact tree was rehearsed once with `pytest tests/contract tests/unit -q` (1,268 passed, 3 skipped, 1 deselected on the recording machine; no database, no provider); the database and browser suites were not rerun for the export.
+Every claim with its limit: [`FINAL_CLAIMS_EVIDENCE_LIMITS.md`](docs/release/FINAL_CLAIMS_EVIDENCE_LIMITS.md). **Test totals** recorded in earlier snapshots (for example 1,238 passed, 3 skipped, 1 deselected for an earlier export) are historical evidence, not a result for this export. A single rehearsal of the earlier published export (source commit `a6fdb72`, which differs from this tree only in `README.md`) ran `pytest tests/contract tests/unit -q` with no database and no provider: 1,268 passed, 3 skipped, 1 deselected, on one machine. It is recorded in the release notes of the `preview-1` tag, not in a file of this repository, and has not been repeated on the current tree; database and browser suites were not part of it.
 
 ## 8. Business value and potential
 
@@ -226,17 +230,17 @@ After about 30-60 seconds the console prints `http://127.0.0.1:8765/app-next/` a
 | UI unit tests | `cd frontend && npm test` | Node.js |
 
 ```bash
-docker run -d --name ripple-test-pg -e POSTGRES_PASSWORD=localtest -p 127.0.0.1:55831:5432 postgres:16
-docker exec ripple-test-pg psql -U postgres -c "CREATE DATABASE pbrief"
+# reuse the container started above (ripple-pg); do not start a second one on port 55831
+docker exec ripple-pg psql -U postgres -c "CREATE DATABASE pbrief"
 export PITCH_BRIEF_TEST_DSN="host=127.0.0.1 port=55831 dbname=pbrief user=postgres password=localtest"
 export AI2_T02_TEST_DSN="$PITCH_BRIEF_TEST_DSN"
 ```
 
-**Skip semantics.** Without a database DSN the database tests are skipped, without Playwright the browser tests are skipped, and without the Firestore emulator the emulator tests are skipped. **A skip is not a pass**; read the skip count in the summary. No test calls a provider. Use a different container name or port if `ripple-pg` or 55831 is already in use.
+**Skip semantics.** Without a database DSN the database tests are skipped, without Playwright the browser tests are skipped, and without the Firestore emulator the emulator tests are skipped. **A skip is not a pass**; read the skip count in the summary. No test calls a provider. One container serves both the rehearsal server and the tests (separate databases). If port 55831 or the name `ripple-pg` is already taken, choose another host port and set `REHEARSAL_ADMIN_DSN` (rehearsal) and the DSN variables (tests) to match; check with `docker ps` first. Stop with `docker rm -f ripple-pg` when done.
 
 ## 11. Roadmap toward Final readiness
 
-These are plans, not features. Reaching them does not guarantee selection for any later round.
+These are plans, not features. Reaching them does not guarantee selection for any later round. **Priorities:** independent model-quality evaluation and human acceptance are critical gates for the core product; real integration (interface merge, staging, a real pull request) is important; the optional extensions of section 7 are not required for core-product readiness and are developed only after the critical gates.
 
 | Stage | Status | Contents | Completion evidence |
 |---|---|---|---|
