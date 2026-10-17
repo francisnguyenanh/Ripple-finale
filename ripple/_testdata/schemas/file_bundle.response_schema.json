@@ -1,0 +1,90 @@
+{
+  "type": "OBJECT",
+  "properties": {
+    "stage": {
+      "type": "STRING"
+    },
+    "batch": {
+      "type": "STRING"
+    },
+    "status": {
+      "type": "STRING",
+      "enum": [
+        "COMPLETE",
+        "NEEDS_INPUT",
+        "NEEDS_CONTINUATION"
+      ]
+    },
+    "files": {
+      "type": "ARRAY",
+      "items": {
+        "type": "OBJECT",
+        "properties": {
+          "path": {
+            "type": "STRING"
+          },
+          "content": {
+            "type": "STRING"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ]
+      }
+    },
+    "commands": {
+      "type": "ARRAY",
+      "items": {
+        "type": "STRING"
+      }
+    },
+    "checks": {
+      "type": "ARRAY",
+      "items": {
+        "type": "OBJECT",
+        "properties": {
+          "name": {
+            "type": "STRING"
+          },
+          "status": {
+            "type": "STRING",
+            "enum": [
+              "NOT_RUN",
+              "PASS",
+              "FAIL",
+              "BLOCKED"
+            ]
+          },
+          "detail": {
+            "type": "STRING"
+          }
+        },
+        "required": [
+          "name",
+          "status",
+          "detail"
+        ]
+      }
+    },
+    "questions": {
+      "type": "ARRAY",
+      "items": {
+        "type": "STRING"
+      }
+    },
+    "next_batch": {
+      "type": "STRING"
+    }
+  },
+  "required": [
+    "stage",
+    "batch",
+    "status",
+    "files",
+    "commands",
+    "checks",
+    "questions",
+    "next_batch"
+  ]
+}

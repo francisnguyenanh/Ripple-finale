@@ -1,0 +1,17 @@
+# Sample configuration of the Firebase hybrid satellite (extensions FB-00/A1/R1/N1/H1/B1; contract docs/contracts/EXTENSION_FIREBASE_HYBRID.md).
+# PUBLIC sample: no credential, key, token or private identifier belongs here. Every value is read from the environment by the product; this file documents the keys.
+# The local profile runs with everything "off": the core API, workers and PostgreSQL never depend on any satellite.
+identity:                                   # FB-A1
+  RIPPLE_FIREBASE_MODE: off                 # off | local-mock (tests and local runs only; mock tokens) | admin-sdk (Admin SDK installed and configured through ADC; never a fallback to mock)
+  RIPPLE_FIREBASE_PROJECT_ID: ""            # the ONE trusted project: issuer must be https://securetoken.google.com/<project>, audience must be <project>
+  RIPPLE_FIREBASE_TENANT: ""                # optional Identity Platform tenant the token must carry; empty = no tenant check
+  RIPPLE_FIREBASE_MAX_AUTH_AGE_SECONDS: 300 # a fresh provider sign-in is required for the exchange
+  RIPPLE_FIREBASE_SESSION_SECONDS: 3600     # the issued Ripple session's lifetime (same cookie, flags and server-side revocation as /v2/auth/login)
+realtime:                                   # FB-R1 / FS-R1
+  RIPPLE_PROJECTION_SINK: off               # off | memory (process-local mock); a Firestore sink is the activation step and implements the same conditional monotonic put
+notifications:                              # FB-N1 / FS-I1
+  RIPPLE_NOTIFICATION_TRANSPORT: off        # off | memory (process-local mock); an FCM transport is the activation step and implements the same send(token, payload)
+hosting:                                    # FB-H1 (documentation only in this build; no deploy)
+  note: "Firebase Hosting rewrites forward only the __session cookie; the product's ripple_v2 cookie is not forwarded. Hosting is therefore static-assets-only until a same-origin session strategy is decided (ADR section 6)."
+storage:                                    # FB-B1 (compatibility statement only; no bucket change)
+  RIPPLE_V2_BLOB_BUCKET: ""                 # the existing immutable blob adapter (ImmutableGCSBlobs) works with any bucket the server identity may write; Firebase import of the bucket is not required

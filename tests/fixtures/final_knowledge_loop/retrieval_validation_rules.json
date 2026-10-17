@@ -1,0 +1,736 @@
+{
+  "note": "QRY-02 validation corpus: a different domain (leave, access, expenses, remote work) from the development set, with 10 distractors. Written before the rework of the retrieval method; the method is not tuned on it.",
+  "rules": [
+    {
+      "rule_id": "rule-leave-long",
+      "concept_ids": [
+        "concept-leave"
+      ],
+      "title": "Leave of 10 working days or more needs approval by the department head",
+      "condition": {
+        "field": "leave.days",
+        "op": "gte",
+        "value": 10,
+        "unit": "days"
+      },
+      "actor_ref": "role-department-head",
+      "outcome": {
+        "kind": "review_required"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-leave-long"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-leave-long"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-leave-long-alt",
+      "concept_ids": [
+        "concept-leave"
+      ],
+      "title": "Leave of 15 working days or more needs approval by the department head",
+      "condition": {
+        "field": "leave.days",
+        "op": "gte",
+        "value": 15,
+        "unit": "days"
+      },
+      "actor_ref": "role-department-head",
+      "outcome": {
+        "kind": "review_required"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-leave-long-alt"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-leave-long-alt"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-leave-report",
+      "concept_ids": [
+        "concept-leave-reporting"
+      ],
+      "title": "Any leave longer than 30 days is reported to Human Resources",
+      "condition": {
+        "field": "leave.days",
+        "op": "gt",
+        "value": 30,
+        "unit": "days"
+      },
+      "actor_ref": "role-human-resources",
+      "outcome": {
+        "kind": "report_required"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-leave-report"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-leave-report"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-access-admin",
+      "concept_ids": [
+        "concept-access"
+      ],
+      "title": "Administrator access to production systems needs sign-off by the security officer",
+      "condition": {
+        "field": "access.level",
+        "op": "eq",
+        "value": "ADMIN"
+      },
+      "actor_ref": "role-security-officer",
+      "outcome": {
+        "kind": "review_required"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-access-admin"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-access-admin"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-access-contractor",
+      "concept_ids": [
+        "concept-access-contractor"
+      ],
+      "title": "Contractors get system access only after a sponsor confirms their contract end date",
+      "condition": {
+        "field": "worker.type",
+        "op": "eq",
+        "value": "CONTRACTOR"
+      },
+      "actor_ref": "role-sponsor",
+      "outcome": {
+        "kind": "confirmation_required"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-access-contractor"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-access-contractor"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-travel-expense",
+      "concept_ids": [
+        "concept-expense"
+      ],
+      "title": "Travel expenses above 200,000 yen are approved by the finance office",
+      "condition": {
+        "field": "expense.travel",
+        "op": "gt",
+        "value": 200000,
+        "unit": "JPY"
+      },
+      "actor_ref": "role-finance-office",
+      "outcome": {
+        "kind": "review_required"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-travel-expense"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-travel-expense"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-remote-work",
+      "concept_ids": [
+        "concept-remote-work"
+      ],
+      "title": "Remote work for more than 3 days a week needs the managers agreement",
+      "condition": {
+        "field": "remote.days_per_week",
+        "op": "gt",
+        "value": 3,
+        "unit": "days"
+      },
+      "actor_ref": "role-manager",
+      "outcome": {
+        "kind": "review_required"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-remote-work"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-remote-work"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-security-training",
+      "concept_ids": [
+        "concept-training"
+      ],
+      "title": "New employees finish security training within 14 days",
+      "condition": {
+        "field": "employee.tenure_days",
+        "op": "lte",
+        "value": 14,
+        "unit": "days"
+      },
+      "actor_ref": "role-employee",
+      "outcome": {
+        "kind": "training_required"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-security-training"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-security-training"
+        }
+      ],
+      "implementation_status": "not_required"
+    }
+  ],
+  "distractors": [
+    {
+      "rule_id": "rule-printer-service",
+      "concept_ids": [
+        "concept-facilities"
+      ],
+      "title": "Office printers are serviced every quarter",
+      "condition": {
+        "field": "printer.age_days",
+        "op": "gt",
+        "value": 90,
+        "unit": "days"
+      },
+      "actor_ref": "role-facilities",
+      "outcome": {
+        "kind": "service_due"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-printer-service"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-printer-service"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-parking",
+      "concept_ids": [
+        "concept-facilities"
+      ],
+      "title": "Parking spaces are assigned by seniority",
+      "condition": {
+        "field": "employee.seniority",
+        "op": "gte",
+        "value": 1
+      },
+      "actor_ref": "role-facilities",
+      "outcome": {
+        "kind": "space_assigned"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-parking"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-parking"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-meeting-rooms",
+      "concept_ids": [
+        "concept-facilities"
+      ],
+      "title": "Meeting rooms are booked through the shared calendar",
+      "condition": {
+        "field": "room.booked",
+        "op": "eq",
+        "value": "true"
+      },
+      "actor_ref": "role-facilities",
+      "outcome": {
+        "kind": "booking_required"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-meeting-rooms"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-meeting-rooms"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-dress-code",
+      "concept_ids": [
+        "concept-conduct"
+      ],
+      "title": "Client visits require business attire",
+      "condition": {
+        "field": "visit.client",
+        "op": "eq",
+        "value": "true"
+      },
+      "actor_ref": "role-employee",
+      "outcome": {
+        "kind": "attire_required"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-dress-code"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-dress-code"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-supplies-order",
+      "concept_ids": [
+        "concept-supplies"
+      ],
+      "title": "Office supplies above 50,000 yen are ordered by the office manager",
+      "condition": {
+        "field": "supplies.cost",
+        "op": "gt",
+        "value": 50000,
+        "unit": "JPY"
+      },
+      "actor_ref": "role-office-manager",
+      "outcome": {
+        "kind": "order_by_manager"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-supplies-order"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-supplies-order"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-fire-drill",
+      "concept_ids": [
+        "concept-safety"
+      ],
+      "title": "A fire drill is held twice a year",
+      "condition": {
+        "field": "drill.count",
+        "op": "lt",
+        "value": 2
+      },
+      "actor_ref": "role-facilities",
+      "outcome": {
+        "kind": "drill_due"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-fire-drill"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-fire-drill"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-visitor-badge",
+      "concept_ids": [
+        "concept-safety"
+      ],
+      "title": "Visitors wear a badge and are escorted",
+      "condition": {
+        "field": "visitor.present",
+        "op": "eq",
+        "value": "true"
+      },
+      "actor_ref": "role-reception",
+      "outcome": {
+        "kind": "badge_required"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-visitor-badge"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-visitor-badge"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-equipment-return",
+      "concept_ids": [
+        "concept-offboarding"
+      ],
+      "title": "Equipment is returned on the last working day",
+      "condition": {
+        "field": "employment.ending",
+        "op": "eq",
+        "value": "true"
+      },
+      "actor_ref": "role-employee",
+      "outcome": {
+        "kind": "return_required"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-equipment-return"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-equipment-return"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-password-rotation",
+      "concept_ids": [
+        "concept-passwords"
+      ],
+      "title": "Passwords are changed every 90 days",
+      "condition": {
+        "field": "password.age_days",
+        "op": "gt",
+        "value": 90,
+        "unit": "days"
+      },
+      "actor_ref": "role-employee",
+      "outcome": {
+        "kind": "change_required"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-password-rotation"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-password-rotation"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-holiday-calendar",
+      "concept_ids": [
+        "concept-calendar"
+      ],
+      "title": "The holiday calendar is published each December",
+      "condition": {
+        "field": "calendar.month",
+        "op": "eq",
+        "value": "DECEMBER"
+      },
+      "actor_ref": "role-human-resources",
+      "outcome": {
+        "kind": "publish_calendar"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-holiday-calendar"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "hr-doc",
+          "revision_id": "rev-1",
+          "evidence_ref": "hr.md#rule-holiday-calendar"
+        }
+      ],
+      "implementation_status": "not_required"
+    }
+  ]
+}

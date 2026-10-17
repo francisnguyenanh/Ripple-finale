@@ -1,0 +1,56 @@
+{
+  "schema_version": "source_changed.v1",
+  "event_id": "evt-0001",
+  "connector": {
+    "connector_id": "conn-git-main",
+    "kind": "git"
+  },
+  "tenant_id": "tenant-acme",
+  "project_id": "project-harbor",
+  "workspace_id": "workspace-harbor",
+  "registered_source_id": "regsrc-harbor-repo",
+  "previous_revision": "1111111111111111111111111111111111111111",
+  "next_revision": "2222222222222222222222222222222222222222",
+  "git": {
+    "commit": "3333333333333333333333333333333333333333",
+    "ref": "refs/heads/main"
+  },
+  "changed_manifest": [
+    {
+      "path": "config/approval.yaml",
+      "change": "modified",
+      "sha256": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "byte_size": 812
+    },
+    {
+      "path": "docs/new.md",
+      "change": "added",
+      "sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "byte_size": 120
+    },
+    {
+      "path": "docs/old.md",
+      "change": "deleted"
+    },
+    {
+      "path": "docs/renamed.md",
+      "change": "renamed",
+      "previous_path": "docs/before.md",
+      "sha256": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "byte_size": 64
+    }
+  ],
+  "occurred_at": "2026-09-30T08:15:00Z",
+  "auth_provenance": {
+    "method": "hmac_sha256",
+    "key_id": "key-2026-09",
+    "verified_by": "connector_gateway",
+    "verified_at": "2026-09-30T08:15:01Z"
+  },
+  "_expect": {
+    "codes": [
+      "revision_mismatch"
+    ],
+    "layer": "validator"
+  }
+}

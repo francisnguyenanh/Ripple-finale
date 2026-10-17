@@ -1,0 +1,27 @@
+{
+  "files": {
+    "app/__init__.py": "596773779df7034d7e94a294d3947f02249ff3c4fa8e8413d5cebf65c956b7a0",
+    "app/approval.py": "e8c904b3313d59bbc28606617f97a960afcf328498b704f134c5aae3930792ed",
+    "app/calculations.py": "259628d74a4c9ba4142557758a6278b346906c94f2d5507cd4541c9de2dd4c49",
+    "app/cli.py": "dde5111714981d1c1c39426ecc89093a06030a6d1ce1c6140e710d5b2cf3688a",
+    "app/config_loader.py": "b16e2837db60195692f660d0003d04febfa4f4ddda215945e068476ef2f2e8a9",
+    "app/data_loader.py": "1ef1e65922566a8121b19e79be69c404b2d845e33c77fcc313707eab715e852d",
+    "app/emergency.py": "7b380324cc9cf723c2e6ba789e509c238c20321a7f63cb4e0893ea14139ed499",
+    "app/enums.py": "0ebd62cd394990479dd51deaf6cca68d8509b5ec52a1c78edf5f0cc8ece2dac9",
+    "app/matching.py": "403b921a96442e045636369441373b02b72778ff3948dc51f5fca4c60e5b131e",
+    "app/models.py": "2e9f0642ce268dedd368b0516e6c5e5a5728486389e46ba96bc5fc917afcc681",
+    "app/routing.py": "84328e5a44834f328a5e1eacd56d6d2d80ef381df5dd9f64844c2e66aa405b60",
+    "config/approval.yaml": "1daa028ecd1854b7c45459efcbe63a53e1856324f0ff9c3ec22fa3a3a10df7f9",
+    "data/employees.csv": "af2fea44b201ad5db52008a1a4481fafd6d8c07b4e3eb6f06880a5fea4f5a5ff",
+    "data/invoices.jsonl": "33e19047cd34e578a7ae94967b587481215002f6258c9123b2622aabcd24ff25",
+    "data/purchase_orders.jsonl": "80b70d45230a431532c32b5754fdb2e6b5f87547347a16f65e138b2f2451473f",
+    "data/receipts.jsonl": "f949b53e645b6a3ef11dca26c944a152e55c94b1ad572c02a64efea4f113c229",
+    "data/requisitions.jsonl": "22cf6c894f8b8ec025c71bdea109346e9e8b9ee9c5a3ef3faf6f84e586b457d8",
+    "data/suppliers.csv": "8f1ab823c879a7dfaf53396602a15da9b9f4b387722386e1575d5df287d84710",
+    "run_output/invoice_decisions.jsonl": "bb8ca3542c7a98e2f51c10e3b3ce62a1c11d439525c75a30c828b98e4934ceb9",
+    "run_output/routes.jsonl": "c018480c4557caaadf9ee5e9fc9aaaf9669097da0b0c4bee5def544a8b499267"
+  },
+  "fixture": "harbor_public",
+  "note": "Pinned copy of the public Harbor package, config, transactions and shipped baseline outputs. Only this hash-verified copy may be executed by the simulation adapter; never workspace-uploaded code.",
+  "origin": "ripple/_testdata/generated/bundles/harbor_demo/input (PUBLIC input only)"
+}

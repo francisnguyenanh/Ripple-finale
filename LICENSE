@@ -1,0 +1,27 @@
+Ripple Phase 1 - Proprietary Licence, Competition Evaluation Only
+
+Copyright (c) 2026 Eiki Tomobe. All rights reserved, except as expressly granted below.
+
+This is NOT an open-source licence. It does not grant the rights of the MIT, Apache, GPL or any similar licence.
+
+1. Permitted use. Judges and evaluators who are authorised by the organiser of the Google Cloud AI Builder Cup JAPAC 2026 (the "Competition") to evaluate this submission may, solely to evaluate this submission within the Competition:
+   (a) read this repository and its documentation;
+   (b) clone or download a copy of it;
+   (c) build, run and test it on their own equipment or accounts; and
+   (d) modify a local copy for that evaluation.
+
+2. Not granted. No right is granted to:
+   (a) use the software, documentation, data or any part of them for commercial, production or internal-business purposes;
+   (b) reuse the software, its design or its code in another product or service;
+   (c) distribute, publish, sublicense, sell or otherwise make available the repository, a copy, or a modified copy to anyone outside the group of evaluators described in section 1; or
+   (d) use the names, logos or trademarks of the owner.
+
+3. Reservation of rights. All rights that are not expressly granted in this licence are reserved by the copyright holder.
+
+4. Other sources of rights. This licence governs what a person who reads this repository receives from the copyright holder through this licence. It does not restrict any right you have under applicable law (including exceptions and limitations to copyright) or under the GitHub Terms of Service (for example, the ability that those terms give other GitHub users to view and fork a public repository within GitHub); those rights do not enlarge what this licence grants, and any further use, copy or distribution still needs the copyright holder's permission. Separately, the copyright holder has agreed to the Competition's own terms, which govern the rights given to the Competition organiser and its sponsors; this licence neither enlarges nor limits those rights, and they are not rights that other readers of this repository receive through this licence.
+
+5. Third-party components. Third-party software, fonts and assets included in or required by this repository remain under their own licences, listed in THIRD_PARTY_NOTICES.md, frontend/THIRD_PARTY_NOTICES.md and the licence files that ship with each component. This licence does not change those licences.
+
+6. No warranty. The repository is provided "as is", without warranty of any kind, express or implied. To the extent permitted by law, the copyright holder is not liable for any claim or damage arising from its use.
+
+7. Duration. This licence is not tied to how long any hosted prototype or service stays online. It stays in effect until the copyright holder publishes a different licence.

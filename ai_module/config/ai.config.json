@@ -1,0 +1,62 @@
+{
+  "translation_mode": "vertex_ai",
+  "vertex_ai": {
+    "project_id": "",
+    "regions": "global",
+    "model": "gemini-3.5-flash-lite",
+    "fallback_model": "gemini-3.5-flash",
+    "service_account_json": "",
+    "max_output_tokens": 20000,
+    "temperature": 0.1,
+    "regions_us_eu": "global",
+    "regions_asia": "global",
+    "use_geo_optimization": false,
+    "language_chunk_sizes": {
+      "vi_en": 350,
+      "en_vi": 350,
+      "vi_ja": 180,
+      "ja_vi": 180,
+      "vi_zh": 180,
+      "zh_vi": 180,
+      "vi_ko": 230,
+      "ko_vi": 230
+    },
+    "fallback_strategy": {
+      "enabled": true,
+      "retry_ratios": [
+        0.8,
+        0.6,
+        0.4
+      ],
+      "min_chunk_size": 50
+    },
+    "language_token_ratios": {
+      "en": {
+        "chars_per_token": 4.0,
+        "expansion_ratio": 1.0
+      },
+      "ja": {
+        "chars_per_token": 2.0,
+        "expansion_ratio": 1.1
+      },
+      "zh": {
+        "chars_per_token": 2.0,
+        "expansion_ratio": 1.1
+      },
+      "ko": {
+        "chars_per_token": 2.5,
+        "expansion_ratio": 1.05
+      },
+      "vi": {
+        "chars_per_token": 4.0,
+        "expansion_ratio": 1.0
+      }
+    },
+    "token_calculation": {
+      "prompt_tokens": 600,
+      "safety_margin_tokens": 500,
+      "avg_key_name_chars": 50,
+      "translation_expansion_ratio": 1.0
+    }
+  }
+}

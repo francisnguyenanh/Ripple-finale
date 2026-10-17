@@ -1,0 +1,386 @@
+{
+  "note": "SEALED unseen Q-set v1 (agent-authored 2026-10-17 by an independent reviewer session; pending owner review; never used for tuning)",
+  "questions": [
+    {
+      "id": "U01",
+      "group": "paraphrase",
+      "text": "A standard OPEX order for office chairs comes to 1,750,000 JPY and the supplier is not flagged. Which role has to review it?",
+      "expected": {
+        "status_any_of": [
+          "ANSWERED",
+          "PARTIAL"
+        ],
+        "must_cite_rule_ids": [
+          "rule-standard-manager-review"
+        ],
+        "must_not_cite_rule_ids": [
+          "rule-capex-finance-config",
+          "rule-capex-finance-policy",
+          "rule-high-risk-director"
+        ],
+        "answer_contains_any": [
+          "manager",
+          "Manager"
+        ],
+        "answer_must_not_contain": [
+          "Finance review is required",
+          "Director approval is required"
+        ],
+        "rationale": "rule-standard-manager-review (>= 1,000,000 JPY, STANDARD) is the only rule whose condition the stated OPEX amount and normal supplier satisfy; the CAPEX rules need category CAPEX and the Director rule needs HIGH risk."
+      }
+    },
+    {
+      "id": "U02",
+      "group": "paraphrase",
+      "text": "If a stationery requisition is worth 650,000 JPY, does any person have to sign it before the order goes out?",
+      "expected": {
+        "status_any_of": [
+          "ANSWERED",
+          "PARTIAL"
+        ],
+        "must_cite_rule_ids": [
+          "rule-standard-manager-review"
+        ],
+        "must_not_cite_rule_ids": [
+          "rule-capex-finance-config",
+          "rule-capex-finance-policy"
+        ],
+        "answer_contains_any": [
+          "no",
+          "automatic",
+          "automatically",
+          "below 1,000,000"
+        ],
+        "answer_must_not_contain": [
+          "manager approval is required",
+          "Finance"
+        ],
+        "rationale": "650,000 JPY is under the 1,000,000 JPY manager line in rule-standard-manager-review and procurement_policy.md section 3.3 says such standard requisitions are cleared automatically; no other approval rule is triggered."
+      }
+    },
+    {
+      "id": "U03",
+      "group": "paraphrase",
+      "text": "The vendor on a 300,000 JPY order is rated HIGH risk. Is anyone's authorization needed, and whose?",
+      "expected": {
+        "status_any_of": [
+          "ANSWERED",
+          "PARTIAL"
+        ],
+        "must_cite_rule_ids": [
+          "rule-high-risk-director"
+        ],
+        "must_not_cite_rule_ids": [
+          "rule-capex-finance-config",
+          "rule-capex-finance-policy"
+        ],
+        "answer_contains_any": [
+          "Director"
+        ],
+        "answer_must_not_contain": [
+          "no approval is needed",
+          "cleared automatically"
+        ],
+        "rationale": "rule-high-risk-director has no amount condition (supplier.risk == HIGH only) and policy section 3.1 says the Director requirement holds regardless of amount, so the low amount does not remove it."
+      }
+    },
+    {
+      "id": "U04",
+      "group": "paraphrase",
+      "text": "Our order has a net goods value of 420,000 JPY. Will we be charged for shipping?",
+      "expected": {
+        "status_any_of": [
+          "ANSWERED",
+          "PARTIAL"
+        ],
+        "must_cite_rule_ids": [
+          "rule-shipping-fee"
+        ],
+        "must_not_cite_rule_ids": [
+          "rule-standard-manager-review",
+          "rule-free-freight"
+        ],
+        "answer_contains_any": [
+          "2,000",
+          "2000"
+        ],
+        "answer_must_not_contain": [
+          "free freight",
+          "no charge"
+        ],
+        "rationale": "rule-shipping-fee (order.net_goods_jpy < 500,000) applies and names the 2,000 JPY charge; the free-freight rule needs 500,000 or more and the approval rules are unrelated to freight."
+      }
+    },
+    {
+      "id": "U05",
+      "group": "multi_hop",
+      "text": "A standard CAPEX requisition of 6,000,000 JPY names a supplier on the HIGH-risk list. List every role that has to review it.",
+      "expected": {
+        "status_any_of": [
+          "ANSWERED",
+          "PARTIAL"
+        ],
+        "must_cite_rule_ids": [
+          "rule-high-risk-director",
+          "rule-capex-finance-config"
+        ],
+        "must_not_cite_rule_ids": [],
+        "answer_contains_any": [
+          "Director"
+        ],
+        "answer_must_not_contain": [
+          "only the manager",
+          "Finance is not involved"
+        ],
+        "rationale": "6,000,000 JPY satisfies the manager rule (>= 1,000,000), the CAPEX Finance rule on both the decided 2,000,000 side and the policy 5,000,000 side, and the HIGH-risk condition sends it to the Director; all three roles are reachable from the structured rules."
+      }
+    },
+    {
+      "id": "U06",
+      "group": "multi_hop",
+      "text": "An OPEX purchase of 2,500,000 JPY from a supplier with normal risk, standard process. Does Finance have to look at it, and who does?",
+      "expected": {
+        "status_any_of": [
+          "ANSWERED",
+          "PARTIAL"
+        ],
+        "must_cite_rule_ids": [
+          "rule-standard-manager-review"
+        ],
+        "must_not_cite_rule_ids": [
+          "rule-high-risk-director"
+        ],
+        "answer_contains_any": [
+          "manager",
+          "Manager"
+        ],
+        "answer_must_not_contain": [
+          "Finance review is required",
+          "Finance must review"
+        ],
+        "rationale": "Both CAPEX Finance rules require request.category == CAPEX, which OPEX fails, and the supplier is not HIGH risk, so only rule-standard-manager-review (>= 1,000,000 JPY) applies; the finance desk guide's 2,000,000 rule of thumb is not a structured rule."
+      }
+    },
+    {
+      "id": "U07",
+      "group": "multi_hop",
+      "text": "A 480,000 JPY requisition is for a supplier whose status is BLOCKED. Because it is under the manager line, is it cleared automatically?",
+      "expected": {
+        "status_any_of": [
+          "ANSWERED",
+          "PARTIAL"
+        ],
+        "must_cite_rule_ids": [
+          "rule-blocked-supplier"
+        ],
+        "must_not_cite_rule_ids": [
+          "rule-capex-finance-config",
+          "rule-capex-finance-policy"
+        ],
+        "answer_contains_any": [
+          "rejected",
+          "reject"
+        ],
+        "answer_must_not_contain": [
+          "cleared automatically",
+          "approved automatically"
+        ],
+        "rationale": "rule-blocked-supplier rejects any requisition for a BLOCKED supplier and policy section 3.1 gives vendor restrictions precedence; the amount being under rule-standard-manager-review's 1,000,000 JPY line does not make it an automatic approval."
+      }
+    },
+    {
+      "id": "U08",
+      "group": "exception_scope",
+      "text": "An emergency OPEX requisition of 1,300,000 JPY: does the standard manager approval rule bind it, or does the emergency process change who reviews?",
+      "expected": {
+        "status_any_of": [
+          "PARTIAL",
+          "NEEDS_CLARIFICATION",
+          "ABSTAINED"
+        ],
+        "must_cite_rule_ids": [
+          "rule-emergency-routing"
+        ],
+        "must_not_cite_rule_ids": [
+          "rule-capex-finance-policy"
+        ],
+        "answer_contains_any": [
+          "emergency",
+          "Emergency"
+        ],
+        "answer_must_not_contain": [
+          "cleared automatically",
+          "no approval is needed",
+          "Finance must review"
+        ],
+        "rationale": "rule-standard-manager-review is scoped to STANDARD only and rule-emergency-routing has no evaluable condition or actor (PENDING_HUMAN, divergent implementation), so the approver for a 1,300,000 JPY emergency OPEX request cannot be stated with certainty."
+      }
+    },
+    {
+      "id": "U09",
+      "group": "exception_scope",
+      "text": "When a requisition is flagged EMERGENCY, does the Director requirement for HIGH-risk vendors lapse?",
+      "expected": {
+        "status_any_of": [
+          "ANSWERED",
+          "PARTIAL"
+        ],
+        "must_cite_rule_ids": [
+          "rule-high-risk-director"
+        ],
+        "must_not_cite_rule_ids": [
+          "rule-standard-manager-review",
+          "rule-capex-finance-policy"
+        ],
+        "answer_contains_any": [
+          "Director"
+        ],
+        "answer_must_not_contain": [
+          "does not apply to emergencies",
+          "bypass",
+          "lapses"
+        ],
+        "rationale": "rule-high-risk-director's scope lists both STANDARD and EMERGENCY and emergency_purchases.md section 2.1 states emergency status does not bypass vendor risk controls."
+      }
+    },
+    {
+      "id": "U10",
+      "group": "concrete_case",
+      "text": "Who must review a standard CAPEX requisition of 3,200,000 JPY for a forklift from a supplier with normal risk?",
+      "expected": {
+        "status_any_of": [
+          "PARTIAL",
+          "ANSWERED"
+        ],
+        "must_cite_rule_ids": [
+          "rule-capex-finance-config",
+          "rule-standard-manager-review"
+        ],
+        "must_not_cite_rule_ids": [
+          "rule-high-risk-director"
+        ],
+        "answer_contains_any": [
+          "Finance"
+        ],
+        "answer_must_not_contain": [
+          "Director approval is required",
+          "no human approval"
+        ],
+        "rationale": "3,200,000 JPY meets the manager rule and the decided CAPEX Finance line of 2,000,000 JPY (rule-capex-finance-config); the policy's 5,000,000 JPY side (rule-capex-finance-policy) is not met and should be disclosed as the disagreeing value, which forces PARTIAL if disclosed."
+      }
+    },
+    {
+      "id": "U11",
+      "group": "concrete_case",
+      "text": "A standard CAPEX laptop refresh of 1,400,000 JPY from an ordinary supplier: which approvals does it need?",
+      "expected": {
+        "status_any_of": [
+          "ANSWERED",
+          "PARTIAL"
+        ],
+        "must_cite_rule_ids": [
+          "rule-standard-manager-review"
+        ],
+        "must_not_cite_rule_ids": [
+          "rule-high-risk-director"
+        ],
+        "answer_contains_any": [
+          "manager",
+          "Manager"
+        ],
+        "answer_must_not_contain": [
+          "Finance review is required",
+          "Finance must review",
+          "no human approval"
+        ],
+        "rationale": "1,400,000 JPY is at or above the type-agnostic manager line but below both CAPEX Finance values (2,000,000 decided and 5,000,000 policy), so only rule-standard-manager-review fires; the supplier is not HIGH risk."
+      }
+    },
+    {
+      "id": "U12",
+      "group": "abstain",
+      "text": "How many competing quotes must a buyer collect before raising a 2,000,000 JPY OPEX requisition?",
+      "expected": {
+        "status_any_of": [
+          "ABSTAINED",
+          "NEEDS_CLARIFICATION"
+        ],
+        "must_cite_rule_ids": [],
+        "must_not_cite_rule_ids": [
+          "rule-capex-finance-config",
+          "rule-capex-finance-policy",
+          "rule-standard-manager-review"
+        ],
+        "answer_contains_any": [
+          "no rule",
+          "not covered",
+          "unknown",
+          "cannot"
+        ],
+        "answer_must_not_contain": [
+          "three quotes",
+          "two quotes",
+          "Finance"
+        ],
+        "rationale": "No structured rule or source passage sets a quotation count; the 2,000,000 JPY figure matches the CAPEX Finance line only by number and the request is OPEX, so citing those rules would be a misapplication."
+      }
+    },
+    {
+      "id": "U13",
+      "group": "abstain",
+      "text": "What approval is needed to extend a supplier's payment terms from 30 to 60 days?",
+      "expected": {
+        "status_any_of": [
+          "ABSTAINED",
+          "NEEDS_CLARIFICATION"
+        ],
+        "must_cite_rule_ids": [],
+        "must_not_cite_rule_ids": [
+          "rule-payment-term",
+          "rule-standard-manager-review",
+          "rule-capex-finance-config"
+        ],
+        "answer_contains_any": [
+          "no rule",
+          "not covered",
+          "unknown",
+          "cannot"
+        ],
+        "answer_must_not_contain": [
+          "manager approval",
+          "Finance approves"
+        ],
+        "rationale": "rule-payment-term states that invoices are paid within 30 days; neither it nor any other rule governs who may change a supplier's terms, so the matter is outside the structured knowledge."
+      }
+    },
+    {
+      "id": "U14",
+      "group": "abstain",
+      "text": "Which role approves returning a lot to the supplier after it arrived damaged?",
+      "expected": {
+        "status_any_of": [
+          "ABSTAINED",
+          "NEEDS_CLARIFICATION"
+        ],
+        "must_cite_rule_ids": [],
+        "must_not_cite_rule_ids": [
+          "rule-receipt-match",
+          "rule-high-risk-director",
+          "rule-standard-manager-review"
+        ],
+        "answer_contains_any": [
+          "no rule",
+          "not covered",
+          "unknown",
+          "cannot"
+        ],
+        "answer_must_not_contain": [
+          "manager",
+          "Director",
+          "Finance"
+        ],
+        "rationale": "The SOP only says damaged lots are logged as DAMAGED and excluded from payable quantities; no structured rule assigns an approver for returns, and the receipt-matching and purchase-approval rules do not cover it."
+      }
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter/index.css";
+@import "@fontsource-variable/jetbrains-mono/index.css";
+@import "@xyflow/react/dist/style.css";
+
+/* Tokens from UI_DESIGN_SYSTEM.md section 1. Light default; dark via prefers-color-scheme and [data-theme]. */
+:root {
+  --bg: #F7F8FA; --surface: #FFFFFF; --surface-2: #F0F2F5; --border: #D9DEE5;
+  --text: #141A22; --text-muted: #566170; --primary: #2557D6; --on-primary: #FFFFFF;
+  --success: #137A3F; --warning: #A15C00; --danger: #B3261E; --info: #0B6E8A; --sim: #6B3FA0; --focus: #0B57D0;
+  --shadow-1: 0 1px 2px rgba(0,0,0,.08); --shadow-2: 0 8px 24px rgba(0,0,0,.16);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E1116; --surface: #151A21; --surface-2: #1B222B; --border: #2A3340;
+    --text: #E8ECF1; --text-muted: #9AA6B5; --primary: #6D95F5; --on-primary: #0E1116;
+    --success: #4CC58A; --warning: #F0B35A; --danger: #FF8A80; --info: #5CC7E0; --sim: #B79CFF; --focus: #8AB4FF;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E1116; --surface: #151A21; --surface-2: #1B222B; --border: #2A3340;
+  --text: #E8ECF1; --text-muted: #9AA6B5; --primary: #6D95F5; --on-primary: #0E1116;
+  --success: #4CC58A; --warning: #F0B35A; --danger: #FF8A80; --info: #5CC7E0; --sim: #B79CFF; --focus: #8AB4FF;
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+  --color-bg: var(--bg); --color-surface: var(--surface); --color-surface-2: var(--surface-2);
+  --color-border: var(--border); --color-text: var(--text); --color-muted: var(--text-muted);
+  --color-primary: var(--primary); --color-on-primary: var(--on-primary);
+  --color-success: var(--success); --color-warning: var(--warning); --color-danger: var(--danger);
+  --color-info: var(--info); --color-sim: var(--sim);
+  --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px;
+  --shadow-card: var(--shadow-1); --shadow-pop: var(--shadow-2);
+}
+
+html, body, #root { height: 100%; }
+body { background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: 16px; line-height: 24px; margin: 0; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+code, kbd, .mono { font-family: var(--font-mono); font-size: 13px; }
+.tnum { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: no-preference) {
+  .anim-in { animation: rp-in 150ms ease-out; }
+  @keyframes rp-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+.react-flow { --xy-background-color: var(--surface); --xy-node-border-radius: 8px; }
+
+body.modal-open { overflow: hidden; }
+.rp-dialog::backdrop { background: rgb(0 0 0 / 0.4); }
+
+/* Graph edges: solid = provenance, dashed amber = a proposed link that is NOT proof of dependency. */
+.react-flow__edge-path { stroke: var(--text-muted); stroke-width: 1.4; }
+.rp-edge-active .react-flow__edge-path { stroke: var(--primary); stroke-width: 2.4; }
+.rp-edge-projection .react-flow__edge-path { stroke: var(--warning); stroke-dasharray: 6 4; }
+.react-flow__node:focus-visible, .react-flow__node button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Commercial Invoice - INV-000002</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; margin: 40px; color: #222; }
+  .watermark { color: #cc0000; font-weight: bold; font-size: 14px; text-transform: uppercase; border: 2px dashed #cc0000; padding: 8px 16px; display: inline-block; margin-bottom: 20px; }
+  .header { display: flex; justify-content: space-between; border-bottom: 2px solid #1F497D; padding-bottom: 12px; margin-bottom: 24px; }
+  .title { font-size: 24px; font-weight: bold; color: #1F497D; }
+  .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+  .meta-table td { padding: 6px 12px; font-size: 14px; }
+  .meta-label { font-weight: bold; width: 25%; background: #f4f6f9; }
+  .items-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+  .items-table th { background: #1F497D; color: #fff; text-align: left; padding: 10px 12px; font-size: 13px; }
+  .items-table td { border-bottom: 1px solid #e0e0e0; padding: 10px 12px; font-size: 13px; }
+  .text-right { text-align: right; }
+  .totals { width: 320px; margin-left: auto; border-collapse: collapse; }
+  .totals td { padding: 6px 12px; font-size: 14px; }
+  .totals .grand-total { font-weight: bold; font-size: 16px; border-top: 2px solid #1F497D; color: #1F497D; }
+</style>
+</head>
+<body>
+  <div class="watermark">SYNTHETIC DEMO — NOT FOR PAYMENT</div>
+  <div class="header">
+    <div class="title">COMMERCIAL INVOICE</div>
+    <div><strong>SUP-003</strong><br>Invoice No: INV-HARBOR-SUP-003-0002</div>
+  </div>
+
+  <table class="meta-table">
+    <tr>
+      <td class="meta-label">Invoice ID</td>
+      <td>INV-000002</td>
+      <td class="meta-label">Purchase Order ID</td>
+      <td>PO-000002</td>
+    </tr>
+    <tr>
+      <td class="meta-label">Issue Date</td>
+      <td>2026-09-01</td>
+      <td class="meta-label">Received Date</td>
+      <td>2026-09-01</td>
+    </tr>
+    <tr>
+      <td class="meta-label">Buyer</td>
+      <td>Harbor Office Supply Ltd</td>
+      <td class="meta-label">Currency</td>
+      <td>JPY</td>
+    </tr>
+  </table>
+
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th class="text-right">Quantity</th>
+        <th class="text-right">Net Goods (JPY)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Procured Office Equipment & Supplies (PO-000002)</td>
+        <td class="text-right">10</td>
+        <td class="text-right">600,000</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <table class="totals">
+    <tr>
+      <td>Net Goods:</td>
+      <td class="text-right">600,000 JPY</td>
+    </tr>
+    <tr>
+      <td>Freight:</td>
+      <td class="text-right">0 JPY</td>
+    </tr>
+    <tr>
+      <td>Estimated Tax (10%):</td>
+      <td class="text-right">60,000 JPY</td>
+    </tr>
+    <tr class="grand-total">
+      <td>Total Amount:</td>
+      <td class="text-right">660,000 JPY</td>
+    </tr>
+  </table>
+</body>
+</html>

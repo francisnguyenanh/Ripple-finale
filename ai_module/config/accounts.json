@@ -1,0 +1,15 @@
+{
+  "_comment": "Set GCP_PROJECT in the environment to use Vertex AI with Application Default Credentials.",
+  "accounts": [
+    {
+      "id": "default",
+      "label": "Vertex AI via Application Default Credentials",
+      "auth": "adc",
+      "service_account_json": "",
+      "project_id": "",
+      "default_region": "global",
+      "aistudio_api_key_env": "GEMINI_API_KEY",
+      "notes": "The GCP project is supplied by GCP_PROJECT at runtime."
+    }
+  ]
+}

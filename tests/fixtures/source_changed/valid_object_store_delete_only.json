@@ -1,0 +1,27 @@
+{
+  "schema_version": "source_changed.v1",
+  "event_id": "evt-0003",
+  "connector": {
+    "connector_id": "conn-store-1",
+    "kind": "object_store"
+  },
+  "tenant_id": "tenant-acme",
+  "project_id": "project-harbor",
+  "workspace_id": "workspace-harbor",
+  "registered_source_id": "regsrc-bucket",
+  "previous_revision": "1111111111111111111111111111111111111111",
+  "next_revision": "2222222222222222222222222222222222222222",
+  "changed_manifest": [
+    {
+      "path": "docs/old.md",
+      "change": "deleted"
+    }
+  ],
+  "occurred_at": "2026-09-30T08:15:00Z",
+  "auth_provenance": {
+    "method": "hmac_sha256",
+    "key_id": "key-2026-09",
+    "verified_by": "connector_gateway",
+    "verified_at": "2026-09-30T08:15:01Z"
+  }
+}

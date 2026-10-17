@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ripple · Source inspection</title><link rel="stylesheet" href="/judge.css"><script src="/sources.js" defer></script></head>
+<body><header><strong>Ripple</strong><span>Source workspace inspection</span></header><main>
+<h1>Inspect an imported source revision</h1>
+<p>See what was parsed, click through to the exact evidence behind it, and export a workbook to check it independently.</p>
+<form id="login"><label>Account ID <input id="account" required></label><label>Credential <input id="credential" type="password" required></label><button>Sign in</button></form>
+<p id="status" role="status" aria-live="polite"></p>
+<section id="load" hidden><h2>1 · Load a revision</h2>
+<label>Workspace ID <input id="workspaceId" required></label>
+<label>Revision ID <input id="revisionId" required></label>
+<button id="loadRevision">Load source revision</button>
+</section>
+<section id="revision" hidden><h2>2 · Coverage and artifacts</h2>
+<pre id="coverage"></pre>
+<div id="artifacts"></div>
+</section>
+<section id="evidence" hidden><h2>3 · Evidence</h2>
+<p>Click an artifact's <strong>List evidence</strong> button, then click one of its observations below.</p>
+<div id="observationList"></div>
+<pre id="evidenceDetail"></pre>
+</section>
+<section id="refresh" hidden><h2>4 · Manual source refresh</h2>
+<p>Manual source refresh: upload the WHOLE changed source, review the diff, then commit it. Ripple does not watch a repository; a person starts every refresh, and a refresh never approves anything.</p>
+<label>Changed source files <input id="refreshFiles" type="file" multiple></label>
+<button id="refreshPrepare">Prepare refresh (diff only, nothing is published)</button>
+<pre id="refreshDiff"></pre>
+<label id="refreshAckLabel" hidden><input id="refreshAck" type="checkbox"> I acknowledge the deleted artifacts listed above</label>
+<button id="refreshCommit" hidden>Commit refresh</button>
+<button id="refreshStatus" class="secondary" hidden>Refresh status</button>
+<h3>Stale reasons and who acts next</h3>
+<pre id="staleReasons"></pre>
+</section>
+<button id="reset" class="secondary" hidden>Reset this session</button>
+</main><footer>Every artifact, coverage stage and evidence value shown here is read live from the durable source revision -- nothing on this page is fabricated or cached client-side.</footer></body></html>

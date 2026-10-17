@@ -1,0 +1,35 @@
+# The reference seed is content-addressed: baseline_id is a hash of these
+# bytes (reference_system/reset/baseline.py). A Windows checkout with
+# core.autocrlf=true rewrote LF to CRLF and produced a different baseline_id
+# from the committed and deployed one (P10-T04). Never convert them.
+reference_system/** -text
+# release package: byte-identity of the Harbor sample on every platform (tests/pitch_brief/test_harbor_sim.py)
+ripple/_testdata/generated/bundles/harbor_demo/input/** -text
+ripple/_testdata/generated/bundles/harbor_demo/input/data/**/*.csv text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/data/*.csv text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/data/**/*.jsonl text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/data/*.jsonl text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/data/**/*.json text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/data/*.json text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/data/**/*.txt text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/data/*.txt text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/data/**/*.yaml text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/data/*.yaml text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/data/**/*.yml text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/data/*.yml text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/data/**/*.md text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/data/*.md text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/run_output/**/*.csv text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/run_output/*.csv text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/run_output/**/*.jsonl text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/run_output/*.jsonl text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/run_output/**/*.json text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/run_output/*.json text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/run_output/**/*.txt text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/run_output/*.txt text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/run_output/**/*.yaml text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/run_output/*.yaml text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/run_output/**/*.yml text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/run_output/*.yml text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/run_output/**/*.md text eol=crlf
+ripple/_testdata/generated/bundles/harbor_demo/input/run_output/*.md text eol=crlf

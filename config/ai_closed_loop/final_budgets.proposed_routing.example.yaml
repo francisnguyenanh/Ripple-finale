@@ -1,0 +1,50 @@
+# PROPOSED routing shape (option B of the model routing review, 2026-10-16): one fixed model per role, a pinned thinking level per role.
+# NOT APPROVED, NOT ACTIVE, NOT a spending grant. Every model below is the zero-price stand-in: nothing can cost anything until an owner replaces the ids with the
+# real model ids, enters prices verified on the Vertex global endpoint on the day of use (set price_snapshot_date), approves a live window and sets real caps.
+# Loaded by infra/worker/budget_config.py::load_budget_config like final_budgets.example.yaml. Candidate mapping to be verified by a paired check before use:
+#   understand / impact dependencies / draft guidance / semantic layers -> the lighter model (validators and human confirmation cover the main failure modes)
+#   extraction / QA -> the stronger model at thinking LOW (omissions are not caught by validators; paired check first; never claim the lighter model is enough)
+default_model_id: stand_in_light
+role_model_ids:
+  extraction: stand_in_strong        # candidate: strong model, thinking LOW (omission risk not caught by validators)
+  analysis: stand_in_light
+  gap.answer: stand_in_light
+  intent.interpret: stand_in_light
+  impact.judge: stand_in_light
+  change.draft: stand_in_light
+  sim.analysis: stand_in_light
+  explain: stand_in_light
+  knowledge.qa: stand_in_strong      # candidate: strong model, thinking LOW
+  change.understand: stand_in_light  # candidate: light model (quote/value/rule validators + human confirmation)
+  change.impact_deps: stand_in_light # always PROPOSED, a person checks
+  change.draft_guidance: stand_in_light
+  retrieval.semantic: stand_in_light # three short classification calls per question; only inside the knowledge.qa budget
+  document.wording: stand_in_light   # planned role, not used in Final (documents are deterministic)
+role_thinking_levels:
+  extraction: LOW
+  knowledge.qa: LOW
+  change.understand: MINIMAL
+  change.impact_deps: MINIMAL
+  change.draft_guidance: MINIMAL
+  retrieval.semantic: MINIMAL
+model_prices:
+  stand_in_light:
+    input_usd_per_1k: "0.00"
+    output_usd_per_1k: "0.00"
+  stand_in_strong:
+    input_usd_per_1k: "0.00"
+    output_usd_per_1k: "0.00"
+  replay:
+    input_usd_per_1k: "0.00"
+    output_usd_per_1k: "0.00"
+# Reservation ceiling (output + thinking) stays max_output_tokens; the request cap below leaves room for thinking (loader requires max_output_tokens >= 2 x generation cap).
+per_job_cap_usd: "0.01"
+total_cap_usd: "0.01"
+max_input_tokens_per_call: 24000
+max_output_tokens: 12288
+generation_max_output_tokens: 6144
+max_retries: 1                   # ceiling per attempt = 2 calls: the answer call plus one semantic call inside knowledge.qa (planned_calls)
+max_concurrent_jobs_per_workspace: 2
+fail_closed_on_missing_usage: true
+latency_slo_p50_seconds: 30.0
+latency_slo_p95_seconds: 90.0

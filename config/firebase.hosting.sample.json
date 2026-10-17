@@ -1,0 +1,20 @@
+{
+  "_comment": "FB-H1 sample (not deployed): Firebase Hosting serves the static app-next bundle ONLY. No /api rewrite until a same-origin session strategy is decided (the product's ripple_v2 cookie is not forwarded by Hosting rewrites; only __session is). Validated by tools/firebase/validate_hosting.py.",
+  "hosting": {
+    "public": "app-next-dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      {"source": "!/v2/**", "destination": "/index.html"}
+    ],
+    "headers": [
+      {"source": "**/*.@(js|css|woff2)", "headers": [{"key": "Cache-Control", "value": "public, max-age=31536000, immutable"}]},
+      {"source": "/index.html", "headers": [{"key": "Cache-Control", "value": "no-store"}]},
+      {"source": "**", "headers": [{"key": "X-Content-Type-Options", "value": "nosniff"}, {"key": "Referrer-Policy", "value": "no-referrer"}]}
+    ]
+  },
+  "ripple": {
+    "api_origin": "https://api.example.invalid",
+    "session_strategy": "undecided",
+    "allow_api_rewrite": false
+  }
+}

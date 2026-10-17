@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Supporting: replay guide - Ripple judge guide</title><meta name="robots" content="noindex"><link rel="stylesheet" href="style.css"><script src="site.js" defer></script></head>
+<body><a class="skip" href="#main">Skip to content</a>
+<header><strong>Ripple - judge guide</strong><nav aria-label="Guide"><a href="index.html">Start here</a><a href="one-role-guide.html">A. Try it yourself</a><a href="four-role-case.html">B. Recorded four-role case</a><a href="four-role-replay.html" aria-current="page">Supporting: replay guide</a></nav><a class="btn" href="https://pitchrc---ripple-s6pcepa2cq-as.a.run.app/app-next/" target="_blank" rel="noopener noreferrer">Open Ripple <span class="ext">(opens in a new tab)</span></a></header>
+<main id="main"><h1>Four-role workflow (optional) - not yet available</h1>
+<blockquote>
+<p><strong>Starting point.</strong> This walkthrough uses a specific starting baseline. If earlier changes have been applied in this workspace, the sample values and expected results may no longer match. Check the current source revision and values before starting. For subsequent runs, follow the same workflow using the latest data.</p>
+</blockquote>
+<p><strong>Status: not yet available.</strong> There is no workspace, account or allowance for a hands-on four-role run yet, and this page does not give you one. It describes what the run will involve so you can see what is planned. Until it is announced as available, use the <a href="one-role-guide.html">one-role demo</a> (recommended) and the <a href="four-role-case.html">recorded case</a> (read-only evidence).</p>
+<h2>What it will be</h2>
+<p>A hands-on run, on a workspace <strong>separate</strong> from the one-role demo, in which four different accounts take one change from request to an applied change: a <strong>requester</strong>, a <strong>knowledge owner</strong>, a <strong>reviewer</strong> and an <strong>approver</strong>. Applying changes the source of that workspace, so it is kept away from the demo workspace and the one-role demo is not affected.</p>
+<div class="tw" tabindex="0" role="region" aria-label="Table (scrolls only if the screen is very narrow)"><table>
+<thead>
+<tr>
+<th>Person</th>
+<th>What they do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Requester</td>
+<td>states the change, confirms it, asks for the draft and the analysis, builds the proposal, runs the review, prepares the approval bundle and applies the approved change</td>
+</tr>
+<tr>
+<td>Knowledge owner</td>
+<td>decides open points and accepts the updated knowledge</td>
+</tr>
+<tr>
+<td>Reviewer</td>
+<td>reads the proposal and its evidence and may add a note</td>
+</tr>
+<tr>
+<td>Approver</td>
+<td>states the check that must hold after the change, approves, and accepts the result</td>
+</tr>
+</tbody>
+</table></div>
+<p>Nobody can approve their own request; the server checks that.</p>
+<h2>Guided example and continued exploration</h2>
+<ul>
+<li><strong>Guided example:</strong> one specific starting value and request, as in the <a href="one-role-guide.html">one-role guide</a>. Use it when the workspace is still at that starting value.</li>
+<li><strong>Continued exploration:</strong> after someone has applied a change, the workspace starts from the newest data. Follow the same workflow with the current value and a new request; the numbers will differ from any example. Nothing is reset between runs, and earlier requests, decisions and history stay visible.</li>
+</ul>
+<h2>Starting a further run (when available)</h2>
+<ol>
+<li>Read the current value first (<strong>Explorer</strong>, then the rule; its <strong>Value</strong> and <strong>Taken from</strong> tell you what it is now). Technical view shows the current source revision.</li>
+<li>Open <strong>Changes</strong> from another page, so the conversation is new. Your own earlier requests are listed in <strong>My work</strong>; do not open someone else's.</li>
+<li>Write the request with the <strong>current</strong> value and the new value you want. Check the AI's preview ("This is what I understood") before confirming.</li>
+<li>Read the simulation of this run as it is; do not expect numbers from an earlier run.</li>
+<li>A draft or proposal made before the source changed is marked out of date. Ask for a new draft instead of using it.</li>
+<li><strong>Where it is waiting:</strong> the <strong>Next</strong> card at the top of the Changes page and the row <strong>Where this change is</strong> name the person who has to act next.</li>
+</ol>
+<h2>Follow the recorded case in the meantime (read-only)</h2>
+<p>With a judge account you can read and follow the evidence of <a href="four-role-case.html">the recorded case</a>; you do not repeat its approve and apply steps.</p>
+<div class="tw" tabindex="0" role="region" aria-label="Table (scrolls only if the screen is very narrow)"><table>
+<thead>
+<tr>
+<th>To follow</th>
+<th>Where</th>
+<th>What to check</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The request and the draft</td>
+<td>Changes, with the ids from the case (draft, intent)</td>
+<td>One supported edit; open points listed; carried items marked with their origin</td>
+</tr>
+<tr>
+<td>The decision on the open point</td>
+<td>Draft stage, <em>Clarifications used</em></td>
+<td>The person's own words kept exactly; files named with role; "Recorded by the server"</td>
+</tr>
+<tr>
+<td>The measures</td>
+<td>stage 3 <em>Impact and simulation</em></td>
+<td>240 cases, baseline reproduced 240/240; the AI reading is labelled as interpretation</td>
+</tr>
+<tr>
+<td>The proposal</td>
+<td>stage 4 <em>Proposal</em></td>
+<td>exact diff; <em>Left for people</em></td>
+</tr>
+<tr>
+<td>Approval and apply history</td>
+<td>History, Changes (Technical view)</td>
+<td>who approved which fingerprint; verification PASSED</td>
+</tr>
+<tr>
+<td>The post-change answer</td>
+<td>stage 11 <em>Ask again on the new revision</em> (stored)</td>
+<td>ABSTAINED with the conflicting sources</td>
+</tr>
+</tbody>
+</table></div>
+<p>Opening a stored result never starts an AI job. If the page shows "not started" you opened it without the full link: use <strong>My work</strong> or the Changes chooser instead of typing ids.</p></main>
+<footer><p>Read-only documentation. It calls no Ripple API and no AI. Source: <code>docs/judges/*.md</code> in the repository. This site does not replace the working prototype. Screenshots of this site are QA images of the guide, not product-run evidence.</p></footer></body></html>

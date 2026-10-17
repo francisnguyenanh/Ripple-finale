@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "title": "KnowledgeRecord",
+  "description": "An evidence-backed interpretation of facts. I2: evidence and lineage are never empty.",
+  "required": [
+    "schema_version",
+    "knowledge_type",
+    "id",
+    "evidence",
+    "lineage",
+    "state"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "description": "Contract version. P8 detects a stale record by comparing this."
+    },
+    "knowledge_type": {
+      "enum": [
+        "rule",
+        "constraint",
+        "process",
+        "gap",
+        "convention"
+      ]
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "semantic_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Cross-artifact identity (P3-T09). Metrics match on this, never on wording."
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "Evidence.json"
+      }
+    },
+    "lineage": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "derived_from"
+      ],
+      "properties": {
+        "derived_from": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "created_from": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "km_version": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "state": {
+      "enum": [
+        "PROPOSED",
+        "VERIFIED",
+        "SUPERSEDED"
+      ]
+    },
+    "gap_id": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "knowledge_type": {
+            "const": "gap"
+          }
+        },
+        "required": [
+          "knowledge_type"
+        ]
+      },
+      "then": {
+        "required": [
+          "gap_id",
+          "reason"
+        ]
+      }
+    }
+  ],
+  "$id": "KnowledgeRecord.json"
+}

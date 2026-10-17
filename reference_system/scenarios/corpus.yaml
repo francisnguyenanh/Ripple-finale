@@ -1,0 +1,234 @@
+# P6-T08 -- the answer key for the simulation engine.
+#
+# NOT the same corpus as history/transactions.jsonl. That one is 220
+# records of DATA TO RUN, and it produces the operational numbers (47/220).
+# This one is a smaller set of ANSWERS TO MARK AGAINST, and it produces the
+# correctness metric for the simulator itself. Without it, "the simulation
+# ran" and "the simulation was right" are the same green tick.
+#
+# Every expected outcome below was written from the RULES as the documents
+# and the workflow state them, in the order the policy states them:
+#
+#     BR-005  a high-risk supplier escalates to the Operations Director,
+#             whatever the amount and whoever is asking
+#     BR-004  capital expenditure at or above 5,000,000 is Finance's call
+#     BR-002  strategic-tier customers skip approval entirely
+#             (the 2020 Q4 campaign exemption, never reverted -- UN-001)
+#     BR-001  at or above the threshold, a manager signs off
+#
+# `current` assumes BR-001 = 1,000,000. `shadow` assumes BR-001 = 500,000.
+# Both use "at or above", not "above": the one-yen difference between those
+# two readings is AMB-001 in the seed manifest, and it is the kind of thing
+# an answer key exists to pin down.
+#
+# Where an expected answer looks surprising, the `why` says which rule won
+# and which rule it beat. A key that only records the answer cannot tell a
+# reader whether a disagreement is a bug in the engine or a mistake in the
+# key.
+
+shadow_change:
+  target: approval_threshold
+  rule_id: BR-001
+  current_value: 1000000
+  proposed_value: 500000
+
+scenarios:
+
+  # --- boundary values -------------------------------------------------
+  #
+  # The threshold is "at or above", so the interesting pairs are
+  # (499,999 / 500,000) for the shadow and (999,999 / 1,000,000) for the
+  # current policy. Off-by-one here is a real policy change: it decides
+  # whether a request for exactly the threshold needs a signature.
+
+  - id: BOUND-001
+    group: boundary
+    request: {amount: 499999, category: opex, customer_tier: standard, supplier_risk: normal, process: standard_po}
+    current: auto_approved
+    shadow: auto_approved
+    why: below both thresholds
+
+  - id: BOUND-002
+    group: boundary
+    request: {amount: 500000, category: opex, customer_tier: standard, supplier_risk: normal, process: standard_po}
+    current: auto_approved
+    shadow: manager_approval
+    why: exactly the proposed threshold; "at or above" means this one changes
+
+  - id: BOUND-003
+    group: boundary
+    request: {amount: 500001, category: opex, customer_tier: standard, supplier_risk: normal, process: standard_po}
+    current: auto_approved
+    shadow: manager_approval
+    why: just above the proposed threshold
+
+  - id: BOUND-004
+    group: boundary
+    request: {amount: 999999, category: opex, customer_tier: standard, supplier_risk: normal, process: standard_po}
+    current: auto_approved
+    shadow: manager_approval
+    why: one yen below the current threshold, well above the proposed one
+
+  - id: BOUND-005
+    group: boundary
+    request: {amount: 1000000, category: opex, customer_tier: standard, supplier_risk: normal, process: standard_po}
+    current: manager_approval
+    shadow: manager_approval
+    why: exactly the current threshold; already needs a signature
+
+  - id: BOUND-006
+    group: boundary
+    request: {amount: 1000001, category: opex, customer_tier: standard, supplier_risk: normal, process: standard_po}
+    current: manager_approval
+    shadow: manager_approval
+    why: above both thresholds
+
+  # --- exceptions -------------------------------------------------------
+  #
+  # These test rule ORDER, which is where systems that get every individual
+  # rule right still get the answer wrong.
+
+  - id: EXC-001
+    group: exception
+    request: {amount: 3000000, category: opex, customer_tier: strategic, supplier_risk: normal, process: standard_po}
+    current: auto_approved
+    shadow: auto_approved
+    why: BR-002 exempts strategic customers before BR-001 is consulted, so the threshold never applies
+
+  - id: EXC-002
+    group: exception
+    request: {amount: 50000, category: opex, customer_tier: standard, supplier_risk: high, process: standard_po}
+    current: director_approval
+    shadow: director_approval
+    why: BR-005 escalates on risk regardless of amount; a small request still goes to the Director
+
+  - id: EXC-003
+    group: exception
+    request: {amount: 50000, category: opex, customer_tier: strategic, supplier_risk: high, process: standard_po}
+    current: director_approval
+    shadow: director_approval
+    why: escalation beats exemption -- reversing these two would let a strategic account route a high-risk supplier past the Director
+
+  - id: EXC-004
+    group: exception
+    request: {amount: 6000000, category: capex, customer_tier: standard, supplier_risk: normal, process: standard_po}
+    current: finance_approval
+    shadow: finance_approval
+    why: BR-004 sends capex at or above 5,000,000 to Finance before BR-001 is reached
+
+  - id: EXC-005
+    group: exception
+    request: {amount: 6000000, category: capex, customer_tier: strategic, supplier_risk: normal, process: standard_po}
+    current: finance_approval
+    shadow: finance_approval
+    why: capex is checked before the strategic exemption, so Finance still decides
+
+  - id: EXC-006
+    group: exception
+    request: {amount: 700000, category: opex, customer_tier: standard, supplier_risk: normal, process: emergency_purchase}
+    handler: emergency
+    current: auto_approved
+    shadow: auto_approved
+    why: >
+      The emergency fast-track answers this, and its ceiling is written into
+      the code rather than read from configuration. The documents all say the
+      ceiling IS configuration, so a reader would expect this to change with
+      the threshold. It does not -- and that gap is the point. This row is the
+      answer key's record of a DEFECT, not of correct behaviour.
+
+  - id: EXC-007
+    group: exception
+    request: {amount: 2000000, category: opex, customer_tier: standard, supplier_risk: normal, process: emergency_purchase}
+    handler: emergency
+    current: manager_approval
+    shadow: manager_approval
+    why: above the emergency fast-track ceiling under either policy
+
+  - id: EXC-008
+    group: exception
+    request: {amount: 50000, category: opex, customer_tier: standard, supplier_risk: high, process: emergency_purchase}
+    handler: emergency
+    current: director_approval
+    shadow: director_approval
+    why: the emergency path also escalates on supplier risk first
+
+  # --- normal cases ------------------------------------------------------
+
+  - id: NORM-001
+    group: normal
+    request: {amount: 120000, category: opex, customer_tier: standard, supplier_risk: normal, process: standard_po}
+    current: auto_approved
+    shadow: auto_approved
+    why: small routine purchase, unaffected either way
+
+  - id: NORM-002
+    group: normal
+    request: {amount: 250000, category: opex, customer_tier: standard, supplier_risk: normal, process: standard_po}
+    current: auto_approved
+    shadow: auto_approved
+    why: below both thresholds
+
+  - id: NORM-003
+    group: normal
+    request: {amount: 750000, category: opex, customer_tier: standard, supplier_risk: normal, process: standard_po}
+    current: auto_approved
+    shadow: manager_approval
+    why: the middle of the affected band -- the single value TEST-OLD-002 asserts stays automatic
+
+  - id: NORM-004
+    group: normal
+    request: {amount: 1500000, category: opex, customer_tier: standard, supplier_risk: normal, process: standard_po}
+    current: manager_approval
+    shadow: manager_approval
+    why: above both thresholds
+
+  - id: NORM-005
+    group: normal
+    request: {amount: 4999999, category: capex, customer_tier: standard, supplier_risk: normal, process: standard_po}
+    current: manager_approval
+    shadow: manager_approval
+    why: capex below the Finance threshold falls through to BR-001, and it is above both values
+
+  - id: NORM-006
+    group: normal
+    request: {amount: 300000, category: capex, customer_tier: standard, supplier_risk: normal, process: standard_po}
+    current: auto_approved
+    shadow: auto_approved
+    why: capex below the Finance threshold and below both approval thresholds
+
+  # --- historical --------------------------------------------------------
+  #
+  # Values taken from exceptions that really occurred in the seed's own
+  # changelog, so the key covers the cases the enterprise actually hit.
+
+  - id: HIST-001
+    group: historical
+    request: {amount: 588000, category: opex, customer_tier: standard, supplier_risk: normal, process: emergency_purchase}
+    handler: emergency
+    current: auto_approved
+    shadow: auto_approved
+    why: one of three real transactions in the affected band that the fast-track keeps approving automatically
+
+  - id: HIST-002
+    group: historical
+    request: {amount: 588000, category: opex, customer_tier: standard, supplier_risk: normal, process: standard_po}
+    current: auto_approved
+    shadow: manager_approval
+    why: >
+      The same amount through the standard route. Compared with HIST-001 this
+      is the contradiction in one pair of rows: one number, two routes, two
+      answers once the threshold moves.
+
+  - id: HIST-003
+    group: historical
+    request: {amount: 942000, category: opex, customer_tier: standard, supplier_risk: normal, process: standard_po}
+    current: auto_approved
+    shadow: manager_approval
+    why: a real transaction from September 2025, inside the affected band
+
+  - id: HIST-004
+    group: historical
+    request: {amount: 220000, category: opex, customer_tier: standard, supplier_risk: normal, process: standard_po}
+    current: auto_approved
+    shadow: auto_approved
+    why: a real transaction below both thresholds

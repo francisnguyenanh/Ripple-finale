@@ -1,0 +1,25 @@
+workflow_name: "Harbor Procurement Workflow"
+version: "1.0.0"
+
+steps:
+  - id: "step_requisition"
+    name: "Requisition Entry"
+    role: "BUYER"
+  - id: "step_manager_approval"
+    name: "Manager Approval"
+    threshold_jpy: 1000000
+    role: "MANAGER"
+  - id: "step_finance_approval"
+    name: "Finance Review"
+    threshold_jpy: 2000000
+    category: "CAPEX"
+    role: "FINANCE"
+  - id: "step_director_approval"
+    name: "Director Approval"
+    condition: "HIGH_RISK_SUPPLIER"
+    role: "DIRECTOR"
+
+escalation_policy:
+  unanswered_days: 2
+  target: "NEXT_LEVEL_MANAGER"
+  automated: false

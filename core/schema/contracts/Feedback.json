@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "title": "Feedback",
+  "description": "One human utterance, classified. Seven types drive seven downstream paths (P1-T06).",
+  "required": [
+    "schema_version",
+    "comment_id",
+    "semantic_type",
+    "author",
+    "timestamp",
+    "body"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "description": "Contract version. P8 detects a stale record by comparing this."
+    },
+    "comment_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "semantic_type": {
+      "enum": [
+        "observation",
+        "correction",
+        "clarification",
+        "intent",
+        "exception",
+        "approval",
+        "rejection"
+      ]
+    },
+    "author": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 1
+    },
+    "body": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target": {
+      "type": "string"
+    },
+    "session_id": {
+      "type": "string"
+    }
+  },
+  "$id": "Feedback.json"
+}

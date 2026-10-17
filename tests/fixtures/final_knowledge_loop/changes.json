@@ -1,0 +1,326 @@
+{
+  "note": "C-set (scenarios S3-S6): 7 change requests covering numeric, actor (x2), condition, scope, exception and a multi-part request. expected_operations are valid change_operation objects the product must reproduce in meaning (ids may differ). expected_affected lists the rules, observed source locations and code locations that a correct impact analysis must include; not_affected lists same-value or same-name rules that must NOT be touched. Written by the test author before any model or runtime exists.",
+  "rule_ids": [
+    "rule-standard-manager-review",
+    "rule-capex-finance-config",
+    "rule-capex-finance-policy",
+    "rule-high-risk-director",
+    "rule-emergency-routing"
+  ],
+  "changes": [
+    {
+      "id": "C1",
+      "scenario": "S3",
+      "kind": "numeric",
+      "request": "Raise the standard manager approval threshold from 1,000,000 to 1,500,000 JPY.",
+      "expected_operations": [
+        {
+          "op_id": "op-c1-1",
+          "kind": "set_value",
+          "rule_id": "rule-standard-manager-review",
+          "before": {
+            "value": 1000000,
+            "unit": "JPY"
+          },
+          "desired": {
+            "value": 1500000,
+            "unit": "JPY"
+          },
+          "user_quote": "Raise the standard manager approval threshold from 1,000,000 to 1,500,000 JPY.",
+          "evidence_refs": [
+            "approval.yaml#routing_rules.standard_manager_threshold_jpy"
+          ],
+          "status": "proposed"
+        }
+      ],
+      "expected_affected": {
+        "rules": [
+          "rule-standard-manager-review"
+        ],
+        "sources": [
+          "approval.yaml#routing_rules.standard_manager_threshold_jpy",
+          "procurement-policy.md#2.1"
+        ],
+        "code": [
+          "routing.py"
+        ]
+      },
+      "not_affected": [
+        "rule-emergency-routing"
+      ],
+      "note": "Regression control: the numeric journey that already exists must keep its meaning. emergency.py hard-codes 1,000,000, a same-number different-rule trap."
+    },
+    {
+      "id": "C2",
+      "scenario": "S4",
+      "kind": "actor",
+      "request": "Finance, not the department manager, must review CAPEX requests of 2,000,000 JPY or more.",
+      "expected_operations": [
+        {
+          "op_id": "op-c2-1",
+          "kind": "set_actor",
+          "rule_id": "rule-capex-finance-config",
+          "before": "role-finance",
+          "desired": "role-finance",
+          "user_quote": "Finance, not the department manager, must review CAPEX requests of 2,000,000 JPY or more.",
+          "evidence_refs": [
+            "approval.yaml#routing_rules.capex_finance_threshold_jpy"
+          ],
+          "status": "proposed"
+        }
+      ],
+      "expected_outcome": "NO_OP_OR_CLARIFY",
+      "note": "The observed config already routes CAPEX 2,000,000 and above to Finance. A correct system reports that the observed rule already has this actor and asks which of the two CAPEX rules is meant (conflict), instead of inventing a change."
+    },
+    {
+      "id": "C3",
+      "scenario": "S4",
+      "kind": "actor",
+      "request": "Purchases from high-risk suppliers should be approved by the Finance Controller instead of the Operations Director.",
+      "expected_operations": [
+        {
+          "op_id": "op-c3-1",
+          "kind": "set_actor",
+          "rule_id": "rule-high-risk-director",
+          "before": "role-director",
+          "desired": "role-finance",
+          "user_quote": "Purchases from high-risk suppliers should be approved by the Finance Controller instead of the Operations Director.",
+          "evidence_refs": [
+            "procurement-policy.md#2.3"
+          ],
+          "status": "proposed"
+        }
+      ],
+      "expected_affected": {
+        "rules": [
+          "rule-high-risk-director"
+        ],
+        "sources": [
+          "procurement-policy.md#2.3",
+          "approval.yaml#routing_rules.high_risk_route"
+        ],
+        "code": [
+          "routing.py",
+          "approval.py"
+        ]
+      },
+      "not_affected": [
+        "rule-capex-finance-config",
+        "rule-capex-finance-policy"
+      ],
+      "note": "Actor change without any number. The Finance role also appears in the CAPEX rules, which must not be rewritten."
+    },
+    {
+      "id": "C4",
+      "scenario": "S5",
+      "kind": "condition",
+      "request": "Manager approval is also required when the supplier is new, even below 1,000,000 JPY.",
+      "expected_operations": [
+        {
+          "op_id": "op-c4-1",
+          "kind": "add_or_change_condition",
+          "rule_id": "rule-standard-manager-review",
+          "before": {
+            "field": "request.net_amount_jpy",
+            "op": "gte",
+            "value": 1000000,
+            "unit": "JPY"
+          },
+          "desired": {
+            "any": [
+              {
+                "field": "request.net_amount_jpy",
+                "op": "gte",
+                "value": 1000000,
+                "unit": "JPY"
+              },
+              {
+                "field": "supplier.is_new",
+                "op": "eq",
+                "value": "true"
+              }
+            ]
+          },
+          "user_quote": "Manager approval is also required when the supplier is new, even below 1,000,000 JPY.",
+          "evidence_refs": [
+            "procurement-policy.md#2.1"
+          ],
+          "status": "proposed"
+        }
+      ],
+      "expected_affected": {
+        "rules": [
+          "rule-standard-manager-review"
+        ],
+        "sources": [
+          "procurement-policy.md#2.1"
+        ],
+        "code": [
+          "routing.py"
+        ]
+      },
+      "not_affected": [
+        "rule-high-risk-director"
+      ],
+      "note": "OR condition. 'Even below' must produce any(), not replace the amount threshold. A field supplier.is_new may not exist in the data model: the system must flag that as an implementation gap, not invent the code."
+    },
+    {
+      "id": "C7",
+      "scenario": "S5",
+      "kind": "scope",
+      "request": "The high-risk supplier rule should apply to standard purchases only, not to emergency purchases.",
+      "expected_operations": [
+        {
+          "op_id": "op-c7-1",
+          "kind": "set_scope",
+          "rule_id": "rule-high-risk-director",
+          "before": {
+            "process": [
+              "STANDARD",
+              "EMERGENCY"
+            ]
+          },
+          "desired": {
+            "process": [
+              "STANDARD"
+            ]
+          },
+          "user_quote": "The high-risk supplier rule should apply to standard purchases only, not to emergency purchases.",
+          "evidence_refs": [
+            "procurement-policy.md#2.3",
+            "emergency.py#route_emergency"
+          ],
+          "status": "proposed"
+        }
+      ],
+      "expected_affected": {
+        "rules": [
+          "rule-high-risk-director"
+        ],
+        "sources": [
+          "procurement-policy.md#2.3"
+        ],
+        "code": [
+          "emergency.py"
+        ]
+      },
+      "not_affected": [
+        "rule-capex-finance-config",
+        "rule-capex-finance-policy",
+        "rule-standard-manager-review"
+      ],
+      "note": "Scope change without any number. The policy text never limits the rule to standard purchases, so the product must show that emergency.py currently applies it to emergencies (observed) and that the change narrows it (target)."
+    },
+    {
+      "id": "C5",
+      "scenario": "S6",
+      "kind": "exception",
+      "request": "Emergency purchases of up to 500,000 JPY may be approved by the plant manager without Finance.",
+      "expected_operations": [
+        {
+          "op_id": "op-c5-1",
+          "kind": "set_exception",
+          "rule_id": "rule-emergency-routing",
+          "before": [],
+          "desired": [
+            {
+              "text": "Emergency purchases up to 500,000 JPY may be approved by the plant manager without Finance.",
+              "condition": {
+                "all": [
+                  {
+                    "field": "request.process",
+                    "op": "eq",
+                    "value": "EMERGENCY"
+                  },
+                  {
+                    "field": "request.net_amount_jpy",
+                    "op": "lte",
+                    "value": 500000,
+                    "unit": "JPY"
+                  }
+                ]
+              }
+            }
+          ],
+          "user_quote": "Emergency purchases of up to 500,000 JPY may be approved by the plant manager without Finance.",
+          "evidence_refs": [
+            "manager-guide.md#what-does-not-come-to-you"
+          ],
+          "status": "needs_clarification"
+        }
+      ],
+      "expected_outcome": "CLARIFY",
+      "note": "Exception to an observed rule whose actor is unknown. The product must keep the 500,000 limit and the 'without Finance' exclusion, and ask what applies above 500,000 and for CAPEX (the CAPEX Finance rule also covers emergencies in code)."
+    },
+    {
+      "id": "C6",
+      "scenario": "S6",
+      "kind": "multi_part",
+      "request": "Raise the manager threshold to 1,500,000 JPY, send high-risk suppliers to Finance instead of the Director, and allow emergency purchases up to 500,000 JPY without Finance.",
+      "expected_operations": [
+        {
+          "op_id": "op-c6-1",
+          "kind": "set_value",
+          "rule_id": "rule-standard-manager-review",
+          "before": {
+            "value": 1000000,
+            "unit": "JPY"
+          },
+          "desired": {
+            "value": 1500000,
+            "unit": "JPY"
+          },
+          "user_quote": "Raise the manager threshold to 1,500,000 JPY",
+          "evidence_refs": [
+            "approval.yaml#routing_rules.standard_manager_threshold_jpy"
+          ],
+          "status": "proposed"
+        },
+        {
+          "op_id": "op-c6-2",
+          "kind": "set_actor",
+          "rule_id": "rule-high-risk-director",
+          "before": "role-director",
+          "desired": "role-finance",
+          "user_quote": "send high-risk suppliers to Finance instead of the Director",
+          "evidence_refs": [
+            "procurement-policy.md#2.3"
+          ],
+          "status": "proposed"
+        },
+        {
+          "op_id": "op-c6-3",
+          "kind": "set_exception",
+          "rule_id": "rule-emergency-routing",
+          "before": [],
+          "desired": [
+            {
+              "text": "Emergency purchases up to 500,000 JPY without Finance.",
+              "condition": {
+                "field": "request.net_amount_jpy",
+                "op": "lte",
+                "value": 500000,
+                "unit": "JPY"
+              }
+            }
+          ],
+          "user_quote": "allow emergency purchases up to 500,000 JPY without Finance",
+          "evidence_refs": [
+            "manager-guide.md#what-does-not-come-to-you"
+          ],
+          "status": "needs_clarification"
+        }
+      ],
+      "expected_outcome": "THREE_OPERATIONS_ALL_ACCOUNTED",
+      "note": "Every sub-request must map to one operation or an explicit refusal/clarification. Dropping the third part silently is a failure."
+    }
+  ],
+  "unsupported_requests": [
+    {
+      "id": "U1",
+      "request": "From 1 April the Finance threshold becomes 3,000,000 JPY.",
+      "expected": "REFUSE_UNSUPPORTED_OPERATION",
+      "note": "Effective-date scheduling is not supported in this contract version; it must be refused explicitly, never recorded as applied."
+    }
+  ]
+}

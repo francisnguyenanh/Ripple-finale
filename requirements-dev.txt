@@ -1,0 +1,10 @@
+# Everything `python -m pytest tests core` needs on a fresh clone (P10-T04).
+-r requirements.txt
+pytest==8.3.3
+httpx==0.28.1
+jsonschema==4.26.0
+referencing==0.37.0
+Markdown==3.5.1
+# Optional: tools/browser_journey.py (then run `playwright install chrome`
+# or use an installed Google Chrome).
+# playwright==1.59.0

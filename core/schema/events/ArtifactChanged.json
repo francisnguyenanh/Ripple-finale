@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ArtifactChanged.json",
+  "title": "ArtifactChanged",
+  "description": "Reality moved. The reverse-drift trigger, and the reason this is not called SourceChanged: a spreadsheet edit must drive the loop exactly as a code edit does.",
+  "x-loop-triggering": true,
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$"
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dedup_key": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable across re-emissions of the same underlying fact. Two events with one dedup_key are one event."
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "loop_triggering": {
+      "type": "boolean",
+      "description": "P8-T01 subscribes to exactly the events where this is true. A contract test compares the two lists.",
+      "const": true
+    },
+    "event_type": {
+      "const": "ArtifactChanged"
+    },
+    "payload": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "snapshot_before": {
+          "type": "string",
+          "minLength": 1
+        },
+        "snapshot_after": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "snapshot_before",
+        "snapshot_after",
+        "artifacts"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "event_id",
+    "dedup_key",
+    "session_id",
+    "occurred_at",
+    "loop_triggering",
+    "event_type",
+    "payload"
+  ]
+}

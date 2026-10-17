@@ -1,0 +1,16 @@
+{
+  "note": "Valid examples for the shapes in docs/contracts/FINAL_KNOWLEDGE_LOOP.md. IDs and values are synthetic.",
+  "snapshot_pin": {"snapshot_id": "business-12", "business_revision": 12, "source_revision_id": "source-4", "km_revision_id": "km-9", "decision_epoch": 3, "schema_version": "fkl/1"},
+  "target_rule": {
+    "contract_version": "fkl/1", "rule_id": "rule-capex-finance-target", "concept_ids": ["concept-purchase-approval", "concept-capex"], "title": "CAPEX of 2,000,000 JPY or more is reviewed by Finance",
+    "condition": {"all": [{"field": "request.category", "op": "eq", "value": "CAPEX"}, {"field": "request.net_amount_jpy", "op": "gte", "value": 2000000, "unit": "JPY"}]},
+    "actor_ref": "role-finance", "outcome": {"kind": "review_required"}, "exceptions": [], "scope": {"process": ["STANDARD", "EMERGENCY"]}, "status": "CONFIRMED", "authority": "TARGET",
+    "provenance": [{"kind": "human_decision", "decision_id": "decision-s1-capex"}],
+    "source_bindings": [{"artifact_id": "cfg-approval", "revision_id": "rev-1", "evidence_ref": "approval.yaml#routing_rules.capex_finance_threshold_jpy"}],
+    "implementation_status": "partial"
+  },
+  "relation": {"edge_id": "edge-5", "from": "role-finance", "to": "rule-capex-finance-target", "type": "approves", "status": "CONFIRMED", "provenance_refs": ["decision-s1-capex"]},
+  "gap": {"gap_id": "gap-example-emergency-actor", "kind": "missing_actor", "question": "Who approves an emergency purchase above the fast-track limit?", "affected_rule_ids": ["rule-emergency-routing"], "status": "OPEN", "evidence_refs": ["manager-guide.md#what-does-not-come-to-you"], "requires_permission": "knowledge.confirm", "priority": "critical"},
+  "document_request": {"snapshot_id": "business-12", "mode": "business", "scope": {"concept_ids": ["concept-capex", "concept-purchase-approval"]}, "locale": "en", "template_version": "1"},
+  "document_artifact": {"artifact_id": "doc-8", "snapshot_id": "business-12", "mode": "business", "content_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000", "template_version": "1", "freshness": "available"}
+}

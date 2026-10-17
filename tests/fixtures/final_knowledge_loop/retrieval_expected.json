@@ -1,0 +1,87 @@
+{
+  "note": "QRY-02 expected context per question of questions.json, written by the test author from the rule fixtures. A question passes when every id in `required` is among the first `window` returned rules and no id in `forbidden` is among them. REVISION 2 (before any method other than term frequency was tuned): the first version had 6 rules and a window of 6, so the baseline passed 10 of 12 without discriminating anything; 14 distractor rules were added (retrieval_distractors.json) and the window cut to 4. Do not edit after seeing results; a miss is reported as a miss.",
+  "window": 4,
+  "expected": {
+    "Q01": {
+      "required": [
+        "rule-standard-manager-review"
+      ],
+      "forbidden": []
+    },
+    "Q02": {
+      "required": [
+        "rule-standard-manager-review"
+      ],
+      "forbidden": []
+    },
+    "Q03": {
+      "required": [
+        "rule-high-risk-director"
+      ],
+      "forbidden": []
+    },
+    "Q04": {
+      "required": [
+        "rule-standard-manager-review"
+      ],
+      "forbidden": []
+    },
+    "Q05": {
+      "required": [
+        "rule-high-risk-director",
+        "rule-capex-finance-config",
+        "rule-capex-finance-policy"
+      ],
+      "forbidden": []
+    },
+    "Q06": {
+      "required": [
+        "rule-standard-manager-review",
+        "rule-capex-finance-config",
+        "rule-high-risk-director"
+      ],
+      "forbidden": []
+    },
+    "Q07": {
+      "required": [
+        "rule-emergency-routing"
+      ],
+      "forbidden": []
+    },
+    "Q08": {
+      "required": [
+        "rule-capex-finance-config",
+        "rule-emergency-routing"
+      ],
+      "forbidden": []
+    },
+    "Q09": {
+      "required": [
+        "rule-capex-finance-config",
+        "rule-capex-finance-policy"
+      ],
+      "forbidden": []
+    },
+    "Q10": {
+      "required": [],
+      "forbidden": [
+        "rule-high-risk-director",
+        "rule-emergency-routing",
+        "rule-capex-finance-policy"
+      ]
+    },
+    "Q11": {
+      "required": [
+        "rule-capex-finance-config-target",
+        "rule-capex-finance-config"
+      ],
+      "forbidden": []
+    },
+    "Q12": {
+      "required": [
+        "rule-capex-finance-config-target"
+      ],
+      "forbidden": []
+    }
+  }
+}

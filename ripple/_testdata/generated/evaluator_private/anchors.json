@@ -1,0 +1,23 @@
+{
+  "routing_anchors": [
+    {"name": "STANDARD_499999", "process": "STANDARD", "category": "OPEX", "amount": 499999, "supplier_status": "ACTIVE", "supplier_risk": "NORMAL", "expected": {"S0": "AUTO", "S1": "AUTO", "S2": "AUTO"}},
+    {"name": "STANDARD_500000", "process": "STANDARD", "category": "OPEX", "amount": 500000, "supplier_status": "ACTIVE", "supplier_risk": "NORMAL", "expected": {"S0": "AUTO", "S1": "NEEDS_MANAGER", "S2": "AUTO"}},
+    {"name": "STANDARD_600000", "process": "STANDARD", "category": "OPEX", "amount": 600000, "supplier_status": "ACTIVE", "supplier_risk": "NORMAL", "expected": {"S0": "AUTO", "S1": "NEEDS_MANAGER", "S2": "AUTO"}},
+    {"name": "STANDARD_750000", "process": "STANDARD", "category": "OPEX", "amount": 750000, "supplier_status": "ACTIVE", "supplier_risk": "NORMAL", "expected": {"S0": "AUTO", "S1": "NEEDS_MANAGER", "S2": "NEEDS_MANAGER"}},
+    {"name": "STANDARD_1000000", "process": "STANDARD", "category": "OPEX", "amount": 1000000, "supplier_status": "ACTIVE", "supplier_risk": "NORMAL", "expected": {"S0": "NEEDS_MANAGER", "S1": "NEEDS_MANAGER", "S2": "NEEDS_MANAGER"}},
+    {"name": "EMERGENCY_600000", "process": "EMERGENCY", "category": "OPEX", "amount": 600000, "supplier_status": "ACTIVE", "supplier_risk": "NORMAL", "expected": {"S0": "AUTO", "S1": "NEEDS_MANAGER", "S2": "AUTO"}},
+    {"name": "CAPEX_2000000", "process": "STANDARD", "category": "CAPEX", "amount": 2000000, "supplier_status": "ACTIVE", "supplier_risk": "NORMAL", "expected": {"S0": "NEEDS_FINANCE", "S1": "NEEDS_FINANCE", "S2": "NEEDS_FINANCE"}},
+    {"name": "OPEX_2000000", "process": "STANDARD", "category": "OPEX", "amount": 2000000, "supplier_status": "ACTIVE", "supplier_risk": "NORMAL", "expected": {"S0": "NEEDS_MANAGER", "S1": "NEEDS_MANAGER", "S2": "NEEDS_MANAGER"}},
+    {"name": "HIGH_RISK_CAPEX_2000000", "process": "STANDARD", "category": "CAPEX", "amount": 2000000, "supplier_status": "ACTIVE", "supplier_risk": "HIGH", "expected": {"S0": "NEEDS_DIRECTOR", "S1": "NEEDS_DIRECTOR", "S2": "NEEDS_DIRECTOR"}},
+    {"name": "BLOCKED_SUPPLIER_100000", "process": "STANDARD", "category": "OPEX", "amount": 100000, "supplier_status": "BLOCKED", "supplier_risk": "NORMAL", "expected": {"S0": "REJECTED", "S1": "REJECTED", "S2": "REJECTED"}}
+  ],
+  "invoice_anchors": [
+    {"name": "PRICE_TOLERANCE_PASS_400K", "po_goods": 400000, "inv_goods": 408000, "po_state": "APPROVED", "po_qty": 10, "inv_qty": 10, "accepted_qty": 10, "is_duplicate": false, "expected_status": "READY", "expected_due_date": "2026-10-01"},
+    {"name": "PRICE_TOLERANCE_FAIL_400K", "po_goods": 400000, "inv_goods": 408001, "po_state": "APPROVED", "po_qty": 10, "inv_qty": 10, "accepted_qty": 10, "is_duplicate": false, "expected_status": "HOLD_PRICE"},
+    {"name": "PRICE_TOLERANCE_PASS_1M", "po_goods": 1000000, "inv_goods": 1010000, "po_state": "APPROVED", "po_qty": 5, "inv_qty": 5, "accepted_qty": 5, "is_duplicate": false, "expected_status": "READY", "expected_due_date": "2026-10-01"},
+    {"name": "PRICE_TOLERANCE_FAIL_1M", "po_goods": 1000000, "inv_goods": 1010001, "po_state": "APPROVED", "po_qty": 5, "inv_qty": 5, "accepted_qty": 5, "is_duplicate": false, "expected_status": "HOLD_PRICE"},
+    {"name": "UNAPPROVED_PO", "po_goods": 500000, "inv_goods": 500000, "po_state": "DRAFT", "po_qty": 5, "inv_qty": 5, "accepted_qty": 5, "is_duplicate": false, "expected_status": "HOLD_UNAPPROVED"},
+    {"name": "QUANTITY_MISMATCH", "po_goods": 500000, "inv_goods": 500000, "po_state": "APPROVED", "po_qty": 10, "inv_qty": 10, "accepted_qty": 8, "is_duplicate": false, "expected_status": "HOLD_QUANTITY"},
+    {"name": "DUPLICATE_KEY", "po_goods": 500000, "inv_goods": 500000, "po_state": "APPROVED", "po_qty": 5, "inv_qty": 5, "accepted_qty": 5, "is_duplicate": true, "expected_status": "REJECTED"}
+  ]
+}

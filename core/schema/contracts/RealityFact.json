@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "title": "RealityFact",
+  "description": "A machine-observable claim. I1: only scripts write this layer, never a model. Interpretive keys are forbidden by the schema itself, so a well-meaning writer cannot smuggle an inference into the Fact layer.",
+  "required": [
+    "schema_version",
+    "kind",
+    "id",
+    "provenance",
+    "snapshot_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "description": "Contract version. P8 detects a stale record by comparing this."
+    },
+    "kind": {
+      "type": "string",
+      "minLength": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "provenance": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "extractor",
+        "artifact",
+        "location"
+      ],
+      "properties": {
+        "extractor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "snapshot_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "value": {},
+    "unit": {
+      "type": "string"
+    }
+  },
+  "not": {
+    "anyOf": [
+      {
+        "required": [
+          "meaning"
+        ]
+      },
+      {
+        "required": [
+          "confidence"
+        ]
+      },
+      {
+        "required": [
+          "purpose"
+        ]
+      },
+      {
+        "required": [
+          "intent"
+        ]
+      },
+      {
+        "required": [
+          "rationale"
+        ]
+      },
+      {
+        "required": [
+          "interpretation"
+        ]
+      },
+      {
+        "required": [
+          "implication"
+        ]
+      }
+    ]
+  },
+  "$id": "RealityFact.json"
+}

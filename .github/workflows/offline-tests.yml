@@ -1,0 +1,58 @@
+# Offline contract and unit tests. No cloud, no AI provider, no secrets, no database.
+# Manual trigger only (workflow_dispatch): nothing runs on push or pull request.
+# The test step keeps its real exit code: a failing test fails the job. The report is uploaded either way.
+name: offline-tests
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Run tests and record evidence
+        run: |
+          mkdir -p evidence
+          {
+            echo "checked_sha=$(git rev-parse HEAD)"
+            echo "workflow_sha=${GITHUB_SHA}"
+            echo "started_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "python=$(python --version 2>&1)"
+            echo "command=python -m pytest tests/contract tests/unit -q -rs --junitxml=evidence/junit.xml"
+            python -m pip list --format=freeze | grep -i -E '^(pytest|pytest-mock|fastapi|starlette|psycopg2-binary|PyYAML|openpyxl|jsonschema)==' || true
+          } > evidence/environment.txt
+          set +e
+          python -m pytest tests/contract tests/unit -q -rs --junitxml=evidence/junit.xml 2>&1 | tee evidence/pytest.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          echo "pytest_exit_code=${rc}" | tee -a evidence/environment.txt
+          echo "finished_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> evidence/environment.txt
+          {
+            echo '### Offline contract and unit tests'
+            echo '```'
+            cat evidence/environment.txt
+            echo '```'
+            echo '```'
+            tail -n 40 evidence/pytest.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "${rc}"
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-test-evidence
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 14

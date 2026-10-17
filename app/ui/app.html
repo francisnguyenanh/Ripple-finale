@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ripple workspace</title>
+<link rel="stylesheet" href="/app-assets/app.css">
+<script src="/app-assets/app_core.js" defer></script>
+<script src="/app-assets/app_present.js" defer></script>
+<script src="/app-assets/app_sources.js" defer></script>
+<script src="/app-assets/app_knowledge.js" defer></script>
+<script src="/app-assets/app_explorer.js" defer></script>
+<script src="/app-assets/app_sandbox.js" defer></script>
+<script src="/app-assets/app_support.js" defer></script>
+<script src="/app-assets/app_change.js" defer></script>
+</head>
+<body>
+<div id="notice" class="notice" role="note" hidden></div>
+<header class="top">
+  <h1>Ripple</h1>
+  <div id="mode-switch" class="seg" role="group" aria-label="Kiểu xem: Nghiệp vụ hoặc Kỹ thuật (View: Business or Technical)" hidden>
+    <button type="button" data-mode="business" data-testid="mode-business" aria-pressed="true">Nghiệp vụ <small>Business</small></button>
+    <button type="button" data-mode="technical" data-testid="mode-technical" aria-pressed="false">Kỹ thuật <small>Technical</small></button>
+  </div>
+  <div id="session" hidden></div>
+</header>
+<div id="status" role="status" aria-live="polite" data-testid="status-live"></div>
+<section id="login" aria-labelledby="login-h" hidden>
+  <h2 id="login-h">Sign in</h2>
+  <p id="login-context" class="muted" data-testid="login-context" hidden>Sign in with the account that should act on this link. You will come back to the same request afterwards.</p>
+  <form id="login-form">
+    <label for="acct">Account ID</label>
+    <input id="acct" name="account" autocomplete="username" required>
+    <label for="cred">Credential</label>
+    <input id="cred" name="credential" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+  </form>
+  <div id="login-error-slot"></div>
+</section>
+<section id="workspace-bar" class="bar" hidden>
+  <label for="ws-select">Workspace</label>
+  <select id="ws-select"></select>
+  <span class="chip">Roles: <span data-testid="workspace-roles" id="ws-roles"></span></span>
+  <span class="chip tech-only">Source revision: <code data-testid="head-source-revision" id="head-source"></code></span>
+  <span class="chip tech-only">Knowledge revision: <code data-testid="head-knowledge-revision" id="head-km"></code></span>
+  <span class="chip" id="lease-chip" data-testid="lease-chip" hidden></span>
+</section>
+<nav id="main-nav" aria-label="Main" hidden></nav>
+<div id="banner-slot"></div>
+<div id="lease-slot"></div>
+<div id="stale-slot"></div>
+<main id="view" tabindex="-1"></main>
+<footer class="foot">Every value on these pages is read from the server after you sign in. Nothing here is stored in your browser and nothing is confirmed until the server has recorded it.</footer>
+</body>
+</html>

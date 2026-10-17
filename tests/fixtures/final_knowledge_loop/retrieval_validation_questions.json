@@ -1,0 +1,92 @@
+{
+  "note": "Validation questions with expected context, written BEFORE the rework and never used to tune it. A question passes when all `required` rules are in the first `window` rules returned and no `forbidden` rule is. Self-check, not a live or independent evaluation.",
+  "window": 4,
+  "questions": [
+    {
+      "id": "VQ1",
+      "group": "paraphrase",
+      "text": "Who has to say yes when someone wants a three week holiday?",
+      "required": [
+        "rule-leave-long",
+        "rule-leave-long-alt"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "VQ2",
+      "group": "paraphrase",
+      "text": "Does a contractor need anyone's confirmation before getting into our systems?",
+      "required": [
+        "rule-access-contractor"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "VQ3",
+      "group": "multi_rule",
+      "text": "A contractor asks for administrator access to the production systems. Who is involved?",
+      "required": [
+        "rule-access-admin",
+        "rule-access-contractor"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "VQ4",
+      "group": "multi_rule",
+      "text": "An employee takes 35 days of leave and then wants to work remotely 4 days a week. Which approvals are needed?",
+      "required": [
+        "rule-leave-long",
+        "rule-leave-report",
+        "rule-remote-work"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "VQ5",
+      "group": "distractor",
+      "text": "Who approves travel spending over 250,000 yen?",
+      "required": [
+        "rule-travel-expense"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "VQ6",
+      "group": "conflict",
+      "text": "From how many days of leave does the department head have to approve?",
+      "required": [
+        "rule-leave-long",
+        "rule-leave-long-alt"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "VQ7",
+      "group": "no_evidence",
+      "text": "What is the policy on pets in the office?",
+      "required": [],
+      "forbidden": [
+        "rule-leave-long",
+        "rule-leave-long-alt",
+        "rule-leave-report",
+        "rule-access-admin",
+        "rule-access-contractor",
+        "rule-travel-expense",
+        "rule-remote-work",
+        "rule-security-training"
+      ]
+    },
+    {
+      "id": "VQ8",
+      "group": "no_evidence",
+      "text": "Who approves a company car purchase?",
+      "required": [],
+      "forbidden": [
+        "rule-leave-long",
+        "rule-leave-long-alt",
+        "rule-travel-expense"
+      ]
+    }
+  ]
+}

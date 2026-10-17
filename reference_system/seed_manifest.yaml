@@ -1,0 +1,255 @@
+# Seed manifest — ground truth for the Acme procurement reference system
+#
+# This is the answer key. Every evaluation metric is scored against it, which is
+# why it is kept apart from the seed's builder: if one person
+# writes both the hidden rule and the expected answer, the two agree by
+# construction and every number downstream is circular.
+#
+# `semantic_id` is the most important field here. It is the ground truth for
+# cross-artifact identity resolution (P3-T09). Metrics match on it, never on
+# wording -- three sentences can state one rule in three vocabularies, and a
+# string match would score that as a total failure of a system that worked
+# perfectly.
+#
+# Validated by tests/reference/test_seed_ground_truth.py on every commit:
+# every representation below is OPENED and its value CONFIRMED. If somebody
+# edits a document, renumbers a line or changes a spreadsheet cell, that
+# test goes red immediately -- not at P9 when every metric has quietly
+# become meaningless.
+
+schema_version: "1.0"
+baseline: Acme Industrial Components — Procurement & Orders
+artifact_families: [software, workflow, docs, spreadsheet, tests, history]
+
+# The phrases this organisation uses for each rule, when its prose does not
+# cite a rule id. Supplied by the PROJECT, never built into the product: a
+# document adapter that knew "approval" meant `approval_threshold` would
+# work on this seed and nothing else. Used only as a hint -- tier 1 of
+# identity resolution outranks it, and a claim it cannot place becomes a Gap.
+semantic_hints:
+  approval_threshold: [approval, sign-off, manager, approve]
+  capex_finance_threshold: [capital expenditure, capex, finance]
+  emergency_purchase_ceiling: [emergency, fast-track, fast track]
+  high_risk_supplier_escalation: [high-risk, high risk, risk register]
+  strategic_customer_exemption: [strategic, tier, exempt]
+
+# ---------------------------------------------------------------------------
+# Business rules
+# ---------------------------------------------------------------------------
+
+rules:
+
+  BR-001:
+    semantic_id: approval_threshold
+    description: Purchase requests at or above the threshold require manager sign-off.
+    expected_state: conflict
+    expected_resolution: pending_human
+    # Nine representations of one rule. This is the count P2 §3 requires,
+    # and the reason the hero scenario reads as a systems problem rather
+    # than a typo in one file.
+    representations:
+      - {artifact: workflow/approval_routes.yaml, family: workflow, locator: "approval_routes[3].condition.value", value: 1000000, unit: JPY}
+      - {artifact: data/approval_matrix.xlsx, family: spreadsheet, locator: "Thresholds!C2", value: 500000, unit: JPY}
+      - {artifact: docs/procurement-policy.md, family: docs, locator: "section 2.1", value: 1000000, unit: JPY}
+      - {artifact: docs/procurement-sop.md, family: docs, locator: "section 4 table", value: 1000000, unit: JPY}
+      - {artifact: docs/manager-guide.md, family: docs, locator: "What lands in your queue", value: 1000000, unit: JPY}
+      - {artifact: docs/audit-checklist.md, family: docs, locator: "Control PA-01", value: 1000000, unit: JPY}
+      - {artifact: docs/faq.md, family: docs, locator: "How much is small", value: 1000000, unit: JPY}
+      - {artifact: application/config.py, family: software, locator: "default_config BR-001 threshold", value: 1000000, unit: JPY}
+      - {artifact: tests/test_approval_rules.py, family: tests, locator: "test_a_request_at_the_threshold_needs_a_manager", value: 1000000, unit: JPY}
+    divergence:
+      # The spreadsheet alone disagrees. Nothing marks any representation
+      # authoritative, and the only dated evidence (2022-06) sits on the
+      # side that disagrees -- which is what makes this a CONFLICT for a
+      # human to settle, not a DRIFT the system may settle itself.
+      minority: [data/approval_matrix.xlsx]
+      majority_value: 1000000
+      minority_value: 500000
+
+  BR-002:
+    semantic_id: strategic_customer_exemption
+    description: Strategic-tier customers skip procurement approval entirely.
+    expected_state: undocumented
+    expected_resolution: pending_human
+    historical_reason: "2020-11 Q4 campaign, marked temporary, never reverted"
+    representations:
+      - {artifact: workflow/approval_routes.yaml, family: workflow, locator: "approval_routes[1].approver_role", value: "NONE"}
+      - {artifact: application/approval_service.py, family: software, locator: "BR-002 branch", value: "auto_approved"}
+    doc_representations: []
+
+  BR-004:
+    semantic_id: capex_finance_threshold
+    description: Capital expenditure at or above the threshold goes to Finance.
+    expected_state: conflict
+    expected_resolution: pending_human
+    representations:
+      - {artifact: workflow/approval_routes.yaml, family: workflow, locator: "approval_routes[2].condition.value", value: 5000000, unit: JPY}
+      - {artifact: data/approval_matrix.xlsx, family: spreadsheet, locator: "Thresholds!C3", value: 5000000, unit: JPY}
+      - {artifact: docs/procurement-policy.md, family: docs, locator: "section 2.2", value: 5000000, unit: JPY}
+      - {artifact: docs/procurement-sop.md, family: docs, locator: "section 4 table", value: 5000000, unit: JPY}
+      - {artifact: docs/manager-guide.md, family: docs, locator: "What does NOT come to you", value: 5000000, unit: JPY}
+      - {artifact: application/config.py, family: software, locator: "default_config BR-004 threshold", value: 5000000, unit: JPY}
+    divergence:
+      # The amounts agree everywhere. The CONDITION does not: the workflow
+      # routes any request at or above 5,000,000 to Finance, while the code
+      # requires category == capex. An opex request of 6,000,000 is routed
+      # two different ways by two live representations of one rule.
+      kind: condition_not_value
+      workflow_condition: "amount >= 5000000"
+      code_condition: "category == capex AND amount >= 5000000"
+
+  BR-005:
+    semantic_id: high_risk_supplier_escalation
+    description: A supplier on the high-risk register escalates regardless of amount.
+    expected_state: aligned
+    expected_resolution: none
+    representations:
+      - {artifact: workflow/approval_routes.yaml, family: workflow, locator: "approval_routes[0].approver_role", value: "DIRECTOR"}
+      - {artifact: application/approval_service.py, family: software, locator: "BR-005 branch", value: "director_approval"}
+      - {artifact: docs/procurement-policy.md, family: docs, locator: "section 2.3", value: "Operations Director"}
+      - {artifact: data/supplier_categories.xlsx, family: spreadsheet, locator: "Suppliers!D", value: "high"}
+
+  BR-006:
+    semantic_id: emergency_purchase_ceiling
+    description: Emergency purchases are fast-tracked below a ceiling.
+    expected_state: conflict
+    expected_resolution: pending_human
+    representations:
+      - {artifact: application/emergency_purchase.py, family: software, locator: "evaluate_emergency literal", value: 1000000, unit: JPY}
+      - {artifact: application/config.py, family: software, locator: "default_config BR-006 threshold", value: 1000000, unit: JPY}
+      - {artifact: docs/procurement-sop.md, family: docs, locator: "section 6", value: "set in the system configuration"}
+      - {artifact: docs/faq.md, family: docs, locator: "What is the ceiling", value: "configured in the system"}
+    divergence:
+      # Both documents say the ceiling is configurable. The code does not
+      # read configuration at all. The values agree TODAY, which is why no
+      # review catches it -- and stop agreeing the moment the policy moves.
+      kind: value_agrees_mechanism_does_not
+      config_is_read: false
+
+# ---------------------------------------------------------------------------
+# Seed conditions
+# ---------------------------------------------------------------------------
+
+conflicts:
+  CONF-001:
+    semantic_id: approval_threshold
+    artifacts: [workflow/approval_routes.yaml, data/approval_matrix.xlsx]
+    expected_state: conflict
+    why_not_drift: >
+      The spreadsheet carries a date (2022-06-14) and the workflow carries
+      none. One dated side does not order two sides. Calling this a DRIFT
+      would assert that the spreadsheet is authoritative, which no evidence
+      supports.
+  CONF-002:
+    semantic_id: capex_finance_threshold
+    artifacts: [workflow/approval_routes.yaml, application/approval_service.py]
+    expected_state: conflict
+    kind: condition_not_value
+  CONF-003:
+    semantic_id: emergency_purchase_ceiling
+    artifacts: [application/emergency_purchase.py, docs/procurement-sop.md]
+    expected_state: conflict
+    kind: value_agrees_mechanism_does_not
+
+undocumented:
+  UN-001:
+    semantic_id: strategic_customer_exemption
+    where: workflow/approval_routes.yaml
+    why: No policy, SOP, guide or FAQ describes an approval exemption for strategic accounts.
+  UN-002:
+    semantic_id: emergency_purchase_ceiling
+    where: application/emergency_purchase.py
+    why: The ceiling is a literal in code; every document says it is configuration.
+  UN-003:
+    semantic_id: capex_condition_scope
+    where: application/approval_service.py
+    why: The code restricts BR-004 to capex. No document says the restriction exists.
+  UN-004:
+    semantic_id: escalation_window
+    where: docs/procurement-sop.md
+    why: >
+      The SOP says a request escalates after two working days. Nothing
+      implements it -- documented behaviour with no representation in code
+      or workflow, which is the mirror image of UN-001.
+
+stale_docs:
+  STALE-001: {artifact: docs/procurement-policy.md, last_reviewed: "2019-03-14", why: "Predates the 2022 spreadsheet change"}
+  STALE-002: {artifact: docs/manager-guide.md, last_reviewed: "2020-02-11", why: "Predates both the 2020 exemption and the 2022 change"}
+  STALE-003: {artifact: docs/exception-handling.md, last_reviewed: "2019-11-02", why: "Register entry EXC-2020-011 was never completed"}
+  STALE-004: {artifact: docs/audit-checklist.md, last_reviewed: "2022-01-19", why: "PA-02 observation carried forward, never closed"}
+
+outdated_tests:
+  TEST-OLD-001: {test: test_old_001_requests_under_a_million_are_always_automatic, green_today: true, red_after_change: true}
+  TEST-OLD-002: {test: test_old_002_a_seven_hundred_fifty_thousand_request_needs_no_approval, green_today: true, red_after_change: true}
+  TEST-OLD-003: {test: test_old_003_managers_see_nothing_below_one_million, green_today: true, red_after_change: true}
+
+ambiguous:
+  AMB-001:
+    text: "Requests above one million yen require approval"
+    why: >
+      "above" against "at or above". The code uses >=, so a request of
+      exactly 1,000,000 needs approval, and the prose says it does not.
+      A one-yen disagreement that no reader notices.
+    expected: flag_for_human
+  AMB-002:
+    text: "Emergency requests are fast-tracked and approved automatically"
+    why: >
+      The SOP omits the ceiling in the same sentence that promises automatic
+      approval. Read alone, it states an unconditional rule.
+    expected: flag_for_human
+
+historical_exc:
+  HIST-001: {commit: "2020-11", what: "Strategic customer exemption for the Q4 campaign", reverted: false}
+  HIST-002: {commit: "2022-06", what: "Approval matrix lowered to 500,000", synchronised: false}
+
+intent_changes:
+  INTENT-001: {actor: ops.lead, requested: "Lower BR-001 to 500,000 JPY", rationale: "2026 Q3 audit finding"}
+  INTENT-002: {actor: governance, requested: "Close EXC-2020-011 or make it permanent", rationale: "Exception with no end date"}
+
+knowledge_only:
+  KO-001:
+    what: "Document the strategic customer exemption in the SOP"
+    changes: [docs]
+    does_not_change: [software, workflow]
+    why: The behaviour is intended. Only the record of it is missing.
+  KO-002:
+    what: "Record the 2022 spreadsheet change in the exception register"
+    changes: [docs]
+    does_not_change: [software, workflow, spreadsheet]
+
+wrong_inference:
+  WRONG-001:
+    trap: >
+      docs/faq.md answers a question about strategic accounts by describing
+      cancellation fees and payment windows. A model that reads it alongside
+      the strategic exemption in approval_routes.yaml is likely to conclude
+      the exemption IS documented. It is not: the FAQ is about commercial
+      terms, and customer_types.xlsx says so explicitly.
+    correct_answer: strategic_customer_exemption remains UNDOCUMENTED (UN-001)
+    likely_wrong_answer: strategic_customer_exemption is documented in the FAQ
+
+impact_cases:
+  IMPACT-001:
+    change: "BR-001 threshold 1,000,000 -> 500,000"
+    direct: [workflow/approval_routes.yaml, data/approval_matrix.xlsx, application/config.py]
+    indirect: [docs/procurement-policy.md, docs/procurement-sop.md, docs/manager-guide.md, docs/audit-checklist.md, docs/faq.md, tests/test_approval_rules.py]
+    not_impacted: [data/supplier_categories.xlsx, data/customer_types.xlsx, application/notification.py, application/audit.py]
+  IMPACT-002:
+    change: "BR-001 threshold 1,000,000 -> 500,000"
+    behavioural: "47 of 220 historical transactions change outcome"
+    computed_by: reference_system/history/replay.py
+    never_hardcoded: true
+  IMPACT-003:
+    change: "BR-001 threshold 1,000,000 -> 500,000"
+    surfaced_defect: application/emergency_purchase.py
+    how: >
+      Three historical transactions in the affected range keep their
+      outcome. Not because of any exemption -- because the handler never
+      reads configuration. Visible only by running it.
+
+no_change_cases:
+  NOCHANGE-001:
+    change: "Raise BR-004 capex threshold from 5,000,000 to 5,000,000 (no-op)"
+    expected_alignment: ALIGNED
+    expected_decision: NO_CHANGE_REQUIRED
+    expected_actions: 0

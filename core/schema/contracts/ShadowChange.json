@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "title": "ShadowChange",
+  "description": "A candidate state, isolated. `base_snapshot` is what makes it replayable and what keeps it off the baseline.",
+  "required": [
+    "schema_version",
+    "shadow_id",
+    "base_snapshot",
+    "session_id",
+    "target",
+    "current_value",
+    "proposed_value",
+    "intent",
+    "impacted_artifacts",
+    "scenario_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "description": "Contract version. P8 detects a stale record by comparing this."
+    },
+    "shadow_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "base_snapshot": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1
+    },
+    "current_value": {},
+    "proposed_value": {},
+    "intent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "impacted_artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "scenario_id": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$id": "ShadowChange.json"
+}

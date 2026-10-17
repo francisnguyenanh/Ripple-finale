@@ -1,0 +1,60 @@
+{
+  "artifact_count": 20,
+  "baseline_id": "b376ac0a4b62b2d7eeee7c19c3c421d0acf00206bd14898ff404ad2b62cb0b27",
+  "families": {
+    "docs": [
+      "docs/audit-checklist.md",
+      "docs/exception-handling.md",
+      "docs/faq.md",
+      "docs/manager-guide.md",
+      "docs/procurement-policy.md",
+      "docs/procurement-sop.md"
+    ],
+    "history": [
+      "history/changelog.jsonl",
+      "history/transactions.jsonl"
+    ],
+    "software": [
+      "application/approval_service.py",
+      "application/audit.py",
+      "application/config.py",
+      "application/emergency_purchase.py",
+      "application/notification.py",
+      "application/repository.py",
+      "application/workflow_engine.py"
+    ],
+    "spreadsheet": [
+      "data/approval_matrix.xlsx",
+      "data/customer_types.xlsx",
+      "data/supplier_categories.xlsx"
+    ],
+    "tests": [
+      "tests/test_approval_rules.py"
+    ],
+    "workflow": [
+      "workflow/approval_routes.yaml"
+    ]
+  },
+  "manifest": {
+    "application/approval_service.py": "a81c43d3358d711657af4ed25c6461310a50afb14cf9a82ad18d0feb89368cc5",
+    "application/audit.py": "256125696daec1f9537516cb91d0069fd4e22e8913f66522f066199b97b12f47",
+    "application/config.py": "31c300753d75389bcff2e63cd5f2e086ccb57e498e95e89a4ef7380be714343d",
+    "application/emergency_purchase.py": "a91e8de9379e3dae6fd996c9e9a0ecf235e9daa7ea8ced7ba5bf481e32991474",
+    "application/notification.py": "0ed8d783d87d696c9cd2516ef2aa6515228d59627d880ddc179a587bb232deff",
+    "application/repository.py": "aa8f4f351a602fcb9fb26823fb5a46a727f0feae381fb41f431d21816811d5f4",
+    "application/workflow_engine.py": "9a7e8d5ffea8e9ed83d455f330eec4a99be03a97987143bca2d176b159d04f1a",
+    "data/approval_matrix.xlsx": "1884feb592e90ca0aa90494b73660d226d8bc09ad7ddf89f62f0368f4eeecd49",
+    "data/customer_types.xlsx": "dc63db798d0456e0b6bc0fffb2bfb7ddd46724b88b7443956001580ad102d2cd",
+    "data/supplier_categories.xlsx": "53086a0c8247a2d9825d64c0b93473e0cb1ab104f57deb0a841e60e37893aa3e",
+    "docs/audit-checklist.md": "b282dfc0c653aaff08dc5e4b6b338540813bb4ce3a216f1ebcb196dd1e544a2e",
+    "docs/exception-handling.md": "2605b10c5130e1312e7decfc672383380bc5685a5faa36ca3877f03272767f87",
+    "docs/faq.md": "7fad054fa7cdd10e4c8f8dd7b93127c9f27b8f1d927a7ae30c89ed88e7b4ba2b",
+    "docs/manager-guide.md": "f83dbe1b4fba00dd7850e51e4ca6ed71a92055a36ad2c09dd3ca27770b735157",
+    "docs/procurement-policy.md": "57eacd7c51e2bbac6079c7fb26259d5a1e02552e26b19a1bd59618a284404214",
+    "docs/procurement-sop.md": "e2639a6a591ba7d2db2863c9c20bb79329653020c46b0c730c602cbada100981",
+    "history/changelog.jsonl": "331240d6081620ab2aa41d27a381e7450ff818478fc97e28ce8178d7329223e9",
+    "history/transactions.jsonl": "bd7993f3cdcff0d77280634c543bbf685243677c8c438db5870c2a8abb035db1",
+    "tests/test_approval_rules.py": "6aef7c4374e5730811315e12255f20adf0557bf2ca80ac610887727959e7fe02",
+    "workflow/approval_routes.yaml": "39937ca4f06465423bc94f2194f7f258d52917b067c030fe38d39f834f4619db"
+  }
+}

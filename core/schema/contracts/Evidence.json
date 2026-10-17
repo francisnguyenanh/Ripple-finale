@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "title": "Evidence",
+  "description": "Where a claim was read from. I4: the quote must genuinely exist at `location` in `snapshot_id` -- checked at runtime, not merely shaped here.",
+  "required": [
+    "schema_version",
+    "artifact",
+    "location",
+    "quote",
+    "snapshot_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "description": "Contract version. P8 detects a stale record by comparing this."
+    },
+    "artifact": {
+      "type": "string",
+      "minLength": 1
+    },
+    "location": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Addressable within the artifact: rules[0].threshold, row 2 column threshold, L118-L120."
+    },
+    "quote": {
+      "type": "string",
+      "minLength": 1
+    },
+    "snapshot_id": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$id": "Evidence.json"
+}

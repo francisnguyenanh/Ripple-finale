@@ -1,0 +1,78 @@
+{
+  "note": "Author-written expectations (scenario S1). Rule IDs and decision/model_run IDs are synthetic. The CAPEX Finance threshold is a REAL conflict in the public inputs: config and code say 2,000,000 JPY, procurement-policy.md and manager-guide.md say 5,000,000 JPY. Emergency handling also differs: manager-guide.md says emergency purchases are fast-tracked automatically, emergency.py still routes 1,000,000 JPY and above to a manager and CAPEX 2,000,000 JPY and above to Finance.",
+  "contract_version": "fkl/1",
+  "observed_rules": [
+    {
+      "rule_id": "rule-standard-manager-review", "concept_ids": ["concept-purchase-approval"], "title": "Purchases of 1,000,000 JPY or more need manager approval",
+      "condition": {"field": "request.net_amount_jpy", "op": "gte", "value": 1000000, "unit": "JPY"}, "actor_ref": "role-manager",
+      "outcome": {"kind": "review_required"}, "exceptions": [], "scope": {"process": ["STANDARD"]}, "status": "VALIDATED", "authority": "OBSERVED",
+      "provenance": [{"kind": "source_evidence", "artifact_id": "doc-procurement-policy", "revision_id": "rev-1", "evidence_ref": "procurement-policy.md#2.1"}],
+      "source_bindings": [
+        {"artifact_id": "cfg-approval", "revision_id": "rev-1", "evidence_ref": "approval.yaml#routing_rules.standard_manager_threshold_jpy"},
+        {"artifact_id": "doc-procurement-policy", "revision_id": "rev-1", "evidence_ref": "procurement-policy.md#2.1"}],
+      "implementation_status": "verified"
+    },
+    {
+      "rule_id": "rule-capex-finance-config", "concept_ids": ["concept-purchase-approval", "concept-capex"], "title": "CAPEX of 2,000,000 JPY or more goes to Finance (configuration and code)",
+      "condition": {"all": [{"field": "request.category", "op": "eq", "value": "CAPEX"}, {"field": "request.net_amount_jpy", "op": "gte", "value": 2000000, "unit": "JPY"}]},
+      "actor_ref": "role-finance", "outcome": {"kind": "review_required"}, "exceptions": [], "scope": {"process": ["STANDARD", "EMERGENCY"]},
+      "status": "VALIDATED", "authority": "OBSERVED",
+      "provenance": [{"kind": "source_evidence", "artifact_id": "cfg-approval", "revision_id": "rev-1", "evidence_ref": "approval.yaml#routing_rules.capex_finance_threshold_jpy"}],
+      "source_bindings": [
+        {"artifact_id": "cfg-approval", "revision_id": "rev-1", "evidence_ref": "approval.yaml#routing_rules.capex_finance_threshold_jpy"},
+        {"artifact_id": "code-routing", "revision_id": "rev-1", "evidence_ref": "routing.py#capex_finance_threshold_jpy"}],
+      "implementation_status": "verified"
+    },
+    {
+      "rule_id": "rule-capex-finance-policy", "concept_ids": ["concept-purchase-approval", "concept-capex"], "title": "CAPEX of 5,000,000 JPY or more goes to Finance Controller (policy and manager guide)",
+      "condition": {"all": [{"field": "request.category", "op": "eq", "value": "CAPEX"}, {"field": "request.net_amount_jpy", "op": "gte", "value": 5000000, "unit": "JPY"}]},
+      "actor_ref": "role-finance", "outcome": {"kind": "review_required"}, "exceptions": [], "scope": {"process": ["STANDARD"]},
+      "status": "VALIDATED", "authority": "OBSERVED",
+      "provenance": [{"kind": "source_evidence", "artifact_id": "doc-procurement-policy", "revision_id": "rev-1", "evidence_ref": "procurement-policy.md#2.2"}],
+      "source_bindings": [
+        {"artifact_id": "doc-procurement-policy", "revision_id": "rev-1", "evidence_ref": "procurement-policy.md#2.2"},
+        {"artifact_id": "doc-manager-guide", "revision_id": "rev-1", "evidence_ref": "manager-guide.md#what-does-not-come-to-you"}],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-high-risk-director", "concept_ids": ["concept-purchase-approval", "concept-high-risk-supplier"], "title": "Purchases from high-risk suppliers go to the Operations Director regardless of amount",
+      "condition": {"field": "supplier.risk", "op": "eq", "value": "HIGH"}, "actor_ref": "role-director", "outcome": {"kind": "review_required"},
+      "exceptions": [], "scope": {"process": ["STANDARD", "EMERGENCY"]}, "status": "VALIDATED", "authority": "OBSERVED",
+      "provenance": [{"kind": "source_evidence", "artifact_id": "doc-procurement-policy", "revision_id": "rev-1", "evidence_ref": "procurement-policy.md#2.3"}],
+      "source_bindings": [{"artifact_id": "doc-procurement-policy", "revision_id": "rev-1", "evidence_ref": "procurement-policy.md#2.3"}],
+      "implementation_status": "verified"
+    },
+    {
+      "rule_id": "rule-emergency-routing", "concept_ids": ["concept-emergency-purchase"], "title": "Emergency purchases",
+      "condition": null, "actor_ref": null, "outcome": {"kind": "unknown"}, "exceptions": [], "scope": {"process": ["EMERGENCY"]},
+      "status": "PENDING_HUMAN", "authority": "OBSERVED",
+      "provenance": [
+        {"kind": "source_evidence", "artifact_id": "doc-manager-guide", "revision_id": "rev-1", "evidence_ref": "manager-guide.md#what-does-not-come-to-you"},
+        {"kind": "source_evidence", "artifact_id": "code-emergency", "revision_id": "rev-1", "evidence_ref": "emergency.py#route_emergency"}],
+      "source_bindings": [],
+      "implementation_status": "divergent",
+      "unknown_fields": ["condition", "actor_ref"]
+    }
+  ],
+  "expected_gaps": [
+    {"gap_key": "capex-threshold-conflict", "kind": "conflicting_facts", "affected_rule_ids": ["rule-capex-finance-config", "rule-capex-finance-policy"], "priority": "critical",
+     "must_cite": ["approval.yaml#routing_rules.capex_finance_threshold_jpy", "procurement-policy.md#2.2"]},
+    {"gap_key": "emergency-approver", "kind": "missing_actor", "affected_rule_ids": ["rule-emergency-routing"], "priority": "critical",
+     "must_cite": ["manager-guide.md#what-does-not-come-to-you", "emergency.py#route_emergency"]},
+    {"gap_key": "emergency-exception", "kind": "missing_exception", "affected_rule_ids": ["rule-emergency-routing"], "priority": "normal",
+     "must_cite": ["exception-handling.md"]}
+  ],
+  "forbidden": [
+    "merging rule-capex-finance-config and rule-capex-finance-policy because both are CAPEX Finance rules",
+    "treating the 1,000,000 manager threshold and the 1,000,000 emergency routing line as one rule because the number is the same",
+    "marking rule-emergency-routing CONFIRMED before a human decision"
+  ],
+  "after_user_answers": {
+    "decision": {"decision_id": "decision-s1-capex", "kind": "choose_target", "chosen_rule_id": "rule-capex-finance-config", "quote": "Finance reviews CAPEX from 2,000,000 JPY."},
+    "expected_target_rule": {
+      "rule_id": "rule-capex-finance-target", "authority": "TARGET", "status": "CONFIRMED",
+      "provenance_must_include": "human_decision", "observed_rules_unchanged": ["rule-capex-finance-config", "rule-capex-finance-policy"],
+      "implementation_status": "partial"
+    }
+  }
+}

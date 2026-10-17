@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "title": "ImpactResult",
+  "description": "If `unknown` is non-empty, the risk may never be reported as LOW.",
+  "required": [
+    "schema_version",
+    "edges",
+    "coverage_basis",
+    "unknown"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "description": "Contract version. P8 detects a stale record by comparing this."
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "$ref": "ImpactEdge.json"
+      }
+    },
+    "coverage_basis": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What was searched, so a reader can tell recall from luck."
+    },
+    "unknown": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "risk": {
+      "enum": [
+        "LOW",
+        "MEDIUM",
+        "HIGH",
+        "UNKNOWN"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "unknown": {
+            "minItems": 1
+          }
+        },
+        "required": [
+          "unknown"
+        ]
+      },
+      "then": {
+        "properties": {
+          "risk": {
+            "enum": [
+              "MEDIUM",
+              "HIGH",
+              "UNKNOWN"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$id": "ImpactResult.json"
+}

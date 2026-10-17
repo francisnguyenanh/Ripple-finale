@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ChangeApproved.json",
+  "title": "ChangeApproved",
+  "description": "A human authorised an apply. I13's gate, as an event.",
+  "x-loop-triggering": true,
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$"
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dedup_key": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable across re-emissions of the same underlying fact. Two events with one dedup_key are one event."
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "loop_triggering": {
+      "type": "boolean",
+      "description": "P8-T01 subscribes to exactly the events where this is true. A contract test compares the two lists.",
+      "const": true
+    },
+    "event_type": {
+      "const": "ChangeApproved"
+    },
+    "payload": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "changeset_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "approval": {
+          "$ref": "../contracts/Approval.json"
+        }
+      },
+      "required": [
+        "changeset_id",
+        "approval"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "event_id",
+    "dedup_key",
+    "session_id",
+    "occurred_at",
+    "loop_triggering",
+    "event_type",
+    "payload"
+  ]
+}

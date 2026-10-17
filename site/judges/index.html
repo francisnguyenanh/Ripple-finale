@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Start here - Ripple judge guide</title><meta name="robots" content="noindex"><link rel="stylesheet" href="style.css"><script src="site.js" defer></script></head>
+<body><a class="skip" href="#main">Skip to content</a>
+<header><strong>Ripple - judge guide</strong><nav aria-label="Guide"><a href="index.html" aria-current="page">Start here</a><a href="one-role-guide.html">A. Try it yourself</a><a href="four-role-case.html">B. Recorded four-role case</a><a href="four-role-replay.html">Supporting: replay guide</a></nav><a class="btn" href="https://pitchrc---ripple-s6pcepa2cq-as.a.run.app/app-next/" target="_blank" rel="noopener noreferrer">Open Ripple <span class="ext">(opens in a new tab)</span></a></header>
+<main id="main"><h1>Ripple - judge guide</h1>
+<blockquote>
+<p><strong>Current status:</strong> Ripple is open for judges, open until <strong>2026-11-06 23:59:59 SGT</strong> (= 2026-11-07 00:59:59 JST = 2026-11-06 15:59:59 UTC). After that, or when a quota or the provider budget is used up, Ripple refuses new work with a clear message, nothing is charged, and everything stored stays readable.</p>
+</blockquote>
+<p>Ripple keeps a company's rules consistent when one of them changes. It reads the sources (configuration, workbooks, policy documents), keeps what it found with citations, and when a person asks for a change in plain words it shows <strong>what would change, what else may be affected, and what stays unresolved</strong> - before anyone applies anything. People decide; the AI suggests; the server owns rights, grounding, status and integrity.</p>
+<h2>What am I testing?</h2>
+<p>That a plain-language change request becomes a checked, grounded proposal - and that Ripple does <strong>not</strong> hide what it could not resolve. You test one rule of a procurement system: the <strong>standard manager approval threshold</strong>.</p>
+<blockquote>
+<p><strong>Starting point.</strong> This walkthrough uses a specific starting baseline. If earlier changes have been applied in this workspace, the sample values and expected results may no longer match. Check the current source revision and values before starting. For subsequent runs, follow the same workflow using the latest data.</p>
+</blockquote>
+<h2>Three ways to evaluate</h2>
+<ol class="route">
+<li><strong>Understand Harbor</strong> - the system and its 13 analysed files (below).</li>
+<li><strong>Try the one-role demo - recommended.</strong> Raise a manager threshold yourself with a judge account and stop at a proposal that waits for an approver. <a href="one-role-guide.html">Open the one-role guide</a>.</li>
+<li><strong>Run the four-role workflow - optional, not yet available.</strong> A hands-on run through review, approval and apply is planned for a separate workspace; it is offered only once that environment is set up and checked. <a href="four-role-replay.html">What it will involve</a>.</li>
+<li><strong>Read the recorded four-role case - read-only evidence</strong> of a past run, with its own rule (CAPEX) and baseline. <a href="four-role-case.html">Open the recorded case</a>.</li>
+</ol>
+
+<p>You can also read the recorded case first. The two scenarios use <strong>different rules, baselines and runs</strong>; their numbers, screenshots and evidence are never mixed.</p>
+<h2>The two scenarios side by side</h2>
+<div class="cards">
+<section class="card" aria-labelledby="sc-a">
+<h3 id="sc-a">A. Try it yourself <span class="tag t-judge">Judge action</span></h3>
+<dl>
+<dt>Business objective</dt><dd>Raise the standard manager approval threshold and see the effect before anything is applied.</dd>
+<dt>Baseline → proposed</dt><dd><code>approval.yaml</code> 500,000 → <strong>800,000 JPY</strong> (proposed, <strong>not applied</strong>).</dd>
+<dt>Scope and unresolved</dt><dd>Scope <code>approval.yaml</code>. Other sources that state a manager threshold stay open.</dd>
+<dt>Measured (simulation)</dt><dd>35 of 240 requisitions NEEDS_MANAGER → AUTO.</dd>
+<dt>Verification</dt><dd>Exact request verified <strong>only up to the confirmed understanding</strong>; draft → proposal come from an earlier run (different wording, manual fallback).</dd>
+<dt>Acceptance</dt><dd>None. The run ends waiting for a reviewer and an approver.</dd>
+</dl>
+<p><a class="cta-link" href="one-role-guide.html">Go to the one-role guide</a></p>
+</section>
+<section class="card" aria-labelledby="sc-b">
+<h3 id="sc-b">B. Recorded four-role case (T1) <span class="tag t-live">Recorded live result</span></h3>
+<dl>
+<dt>Business objective</dt><dd>Lower the CAPEX finance review threshold in the approval configuration only.</dd>
+<dt>Baseline → applied</dt><dd><code>approval.yaml</code> 1,500,000 → <strong>1,000,000 JPY</strong> (applied by the requester, verified).</dd>
+<dt>Scope and unresolved</dt><dd><code>workflow.yaml</code>, <code>approval_matrix.xlsx</code>, <code>procurement_policy.md</code> still say 2,000,000.</dd>
+<dt>Measured (simulation)</dt><dd>15 of 240 requisitions NEEDS_MANAGER → NEEDS_FINANCE.</dd>
+<dt>Verification</dt><dd>Machine verification PASSED; the post-change question ABSTAINED; loop status PARTIAL.</dd>
+<dt>Acceptance</dt><dd><strong>Final acceptance pending</strong> (result and knowledge not accepted).</dd>
+</dl>
+<p><a class="cta-link" href="four-role-case.html">Go to the recorded case</a></p>
+</section>
+</div>
+
+<h2>How do I verify the result?</h2>
+<p>Do not compare the AI's wording: check <strong>scope, value, grounding and status</strong>. Each step in the guides says what to look for and which evidence supports it, using these labels:</p>
+<ul>
+<li><span class="tag t-judge">Judge action</span> - what you do.</li>
+<li><span class="tag t-live">Recorded live result</span> - something that was observed on the deployed system.</li>
+<li><span class="tag t-off">Offline expectation</span> - computed from the shipped sample data, not observed live.</li>
+<li><span class="tag t-nv">Not yet verified</span> - not run yet; do not rely on it.</li>
+<li><span class="tag t-lim">Limitation</span> - something Ripple does not do or does not claim.</li>
+</ul>
+<h2>The system under test: Harbor Procurement Mini</h2>
+<p>Harbor is an internal procurement reference application for a fictional office-supply company: it routes purchase requisitions to approvers, handles emergency purchases and checks invoices against purchase orders and receipts. Ripple works on a <strong>13-file subset</strong> of Harbor that was <strong>analysed in advance by a real AI model</strong> (with citations):</p>
+<ul>
+<li><strong>Code (4):</strong> <code>routing.py</code> (standard approval matrix), <code>emergency.py</code> (emergency purchases), <code>calculations.py</code> (arithmetic, tax, payment terms), <code>config_loader.py</code> (reads the configuration).</li>
+<li><strong>Configuration (2):</strong> <code>approval.yaml</code> (the thresholds the program reads), <code>workflow.yaml</code> (workflow steps; it also states thresholds, but this program does not read it).</li>
+<li><strong>Workbook (1):</strong> <code>approval_matrix.xlsx</code> (routing rules as a table).</li>
+<li><strong>Documents (6):</strong> <code>procurement_policy.md</code>, <code>finance_desk_guide.md</code>, <code>requisition_sop.md</code>, <code>emergency_purchases.md</code>, <code>invoice_matching_manual.md</code>, <code>data_dictionary.md</code>.</li>
+</ul>
+<p>Coverage is the subset above, not the whole of Harbor and not a whole company: Harbor's own records, forms and tests are not part of it. The route simulation runs Harbor's own program over its 240 public sample requisitions; it does not read <code>workflow.yaml</code>, the documents or the workbook.</p>
+<figure><svg viewBox="0 0 720 330" role="img" aria-labelledby="sm-t sm-d" class="flow"><title id="sm-t">Sources of the Harbor subset and how they relate</title><desc id="sm-d">Solid arrows: the program reads the value (checked in the code). Dashed lines: a file states a similar threshold in text; this is a statement to compare, not a dependency.</desc><line x1="220" y1="43" x2="260" y2="143" stroke="#9ca3af" stroke-width="2" stroke-dasharray="6 4"/><line x1="220" y1="109" x2="260" y2="143" stroke="#9ca3af" stroke-width="2" stroke-dasharray="6 4"/><line x1="220" y1="175" x2="260" y2="143" stroke="#9ca3af" stroke-width="2" stroke-dasharray="6 4"/><line x1="220" y1="241" x2="260" y2="143" stroke="#9ca3af" stroke-width="2" stroke-dasharray="6 4"/><line x1="450" y1="143" x2="500" y2="43" stroke="#047857" stroke-width="2"/><line x1="450" y1="143" x2="500" y2="123" stroke="#047857" stroke-width="2"/><line x1="450" y1="143" x2="500" y2="203" stroke="#047857" stroke-width="2"/><rect x="20" y="20" width="200" height="46" rx="6" fill="#fef3c7" stroke="#6b7280"/><text x="120.0" y="39" text-anchor="middle" font-size="13" font-weight="600" fill="#111">workflow.yaml</text><text x="120.0" y="56" text-anchor="middle" font-size="10.5" fill="#111">manager 1,000,000 / CAPEX 2,000,000</text><rect x="20" y="86" width="200" height="46" rx="6" fill="#fef3c7" stroke="#6b7280"/><text x="120.0" y="105" text-anchor="middle" font-size="13" font-weight="600" fill="#111">approval_matrix.xlsx</text><text x="120.0" y="122" text-anchor="middle" font-size="10.5" fill="#111">routing rows (around 500,000)</text><rect x="20" y="152" width="200" height="46" rx="6" fill="#fef3c7" stroke="#6b7280"/><text x="120.0" y="171" text-anchor="middle" font-size="13" font-weight="600" fill="#111">procurement_policy.md</text><text x="120.0" y="188" text-anchor="middle" font-size="10.5" fill="#111">manager 1,000,000 / CAPEX 2,000,000</text><rect x="20" y="218" width="200" height="46" rx="6" fill="#fef3c7" stroke="#6b7280"/><text x="120.0" y="237" text-anchor="middle" font-size="13" font-weight="600" fill="#111">finance_desk_guide.md</text><text x="120.0" y="254" text-anchor="middle" font-size="10.5" fill="#111">Finance review from 2,000,000</text><rect x="260" y="120" width="190" height="46" rx="6" fill="#dbeafe" stroke="#6b7280"/><text x="355.0" y="139" text-anchor="middle" font-size="13" font-weight="600" fill="#111">approval.yaml</text><text x="355.0" y="156" text-anchor="middle" font-size="10.5" fill="#111">thresholds the program reads</text><rect x="500" y="20" width="200" height="46" rx="6" fill="#d1fae5" stroke="#6b7280"/><text x="600.0" y="39" text-anchor="middle" font-size="13" font-weight="600" fill="#111">config_loader.py</text><text x="600.0" y="56" text-anchor="middle" font-size="10.5" fill="#111">loads and validates approval.yaml</text><rect x="500" y="100" width="200" height="46" rx="6" fill="#d1fae5" stroke="#6b7280"/><text x="600.0" y="119" text-anchor="middle" font-size="13" font-weight="600" fill="#111">routing.py</text><text x="600.0" y="136" text-anchor="middle" font-size="10.5" fill="#111">standard routing (reads both)</text><rect x="500" y="180" width="200" height="46" rx="6" fill="#d1fae5" stroke="#6b7280"/><text x="600.0" y="199" text-anchor="middle" font-size="13" font-weight="600" fill="#111">emergency.py</text><text x="600.0" y="216" text-anchor="middle" font-size="10.5" fill="#111">reads CAPEX; manager limit hard-coded</text><text x="20" y="290" font-size="12" fill="#111">Dashed: states a threshold in text (not read by the program; may be affected, not proven dependent).</text><text x="20" y="310" font-size="12" fill="#111">Solid: the program reads the value (checked in the code). The other 6 subset files are not drawn.</text></svg><figcaption>Sources of the 13-file subset that matter for the manager and CAPEX thresholds.</figcaption></figure>
+<p><strong>How to read the picture:</strong> solid arrows are relations that can be checked in the code (the program reads the value). Dashed lines mean a file <em>states</em> a similar threshold in text; that is a statement to compare, <strong>not</strong> a dependency - Ripple shows it as "may be affected / unresolved" instead of assuming it moves with the configuration.</p>
+<h2>Limits you should know</h2>
+<ul>
+<li>The AI can ask for clarification or <strong>abstain</strong>; that is a correct outcome, not an error.</li>
+<li>A judge account can read and prepare, but cannot import sources, run extraction or re-extraction, review, approve or apply. Raw source quotes are hidden for this role by design.</li>
+<li>People sharing one judge account share its chats, My work, history and AI quota. Everyone in the workspace can read the workspace's stored jobs and history.</li>
+<li>Each conversation allows at most 6 AI turns and each judge account at most 12 AI jobs per day. These are ceilings, not promises: the AI budget is shared by everyone, so when it (or the evaluation window, or the processing capacity set aside for it) is used up, Ripple refuses new work at once with a clear message and nothing is charged.</li>
+<li>The first AI step after a quiet period can take about a minute because the processing worker starts on demand.</li>
+<li>Availability of the AI steps is limited to the evaluation window: open until <strong>2026-11-06 23:59:59 SGT</strong> (= 2026-11-07 00:59:59 JST = 2026-11-06 15:59:59 UTC). After that, or when a quota or the provider budget is used up, Ripple refuses new work with a clear message, nothing is charged, and everything stored stays readable.</li>
+</ul>
+<h2>Supporting references</h2>
+<p><a href="four-role-replay.html">Four-role workflow (not yet available) and how to follow the recorded case</a> · repository documents under <code>docs/judges/</code> (the source of these pages) · this site is read-only documentation and calls no Ripple API.</p></main>
+<footer><p>Read-only documentation. It calls no Ripple API and no AI. Source: <code>docs/judges/*.md</code> in the repository. This site does not replace the working prototype. Screenshots of this site are QA images of the guide, not product-run evidence.</p></footer></body></html>

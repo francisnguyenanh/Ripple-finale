@@ -1,0 +1,221 @@
+# Final knowledge loop — contract `fkl/1`
+
+Status: contract specification. The pure validator and the fixtures exist; the stores, routes, jobs and screens that use them do not yet. Implementing code: `core/change_intelligence/v2/business_knowledge.py`. Tests: `tests/contract/test_final_knowledge_contract.py`. Public fixtures: `tests/fixtures/final_knowledge_loop/`.
+
+The contract describes what Ripple stores and exchanges for the loop *input → knowledge → gaps → user answers → questions → business change → draft → approval → new knowledge*. It extends the existing v2 types (`RuleCandidate`, `Rule`, `KnowledgeRevision`, `HumanDecision`, findings, jobs, decisions) and does not replace them. Every route, table and job named below as *proposed* is not final until the task that builds it has searched the callers and recorded the choice.
+
+## 1. Principles
+
+1. **Observed and target are different things.** `OBSERVED` knowledge comes from imported source bytes and always cites `source_evidence`. `TARGET` knowledge is what a person decided the business rule should be and always cites a `human_decision`. A target never edits or replaces an observed rule, and an observed rule never becomes a target by being re-read.
+2. **Nothing confirms itself.** A `CONFIRMED` rule or edge needs a human decision (edges: provenance refs). AI inference alone, source text alone and generated documents never confirm anything. A generated document is not accepted as provenance (`forbidden_provenance`).
+3. **Unknown stays unknown.** A missing condition or actor is `null` and listed in `unknown_fields`; it raises a gap. Nothing fills it with a default.
+4. **Finite grammar.** Conditions are data, never code (section 3). Anything outside the grammar is refused with `unsupported_expression`.
+5. **The server decides who and where.** Tenant, workspace, actor and permissions come from the authenticated session. A client or model value for them is ignored.
+6. **One snapshot per request.** A request pins one snapshot (section 5). A pin that has moved is refused (`stale_snapshot`); two heads are never mixed.
+
+## 2. Shapes
+
+All examples are synthetic. The authoritative field lists are the validators; unknown keys are rejected, never ignored.
+
+### 2.1 `business_rule`
+
+```json
+{
+  "contract_version": "fkl/1",
+  "rule_id": "rule-capex-finance-target",
+  "concept_ids": ["concept-purchase-approval", "concept-capex"],
+  "title": "CAPEX of 2,000,000 JPY or more is reviewed by Finance",
+  "condition": {"all": [
+    {"field": "request.category", "op": "eq", "value": "CAPEX"},
+    {"field": "request.net_amount_jpy", "op": "gte", "value": 2000000, "unit": "JPY"}]},
+  "actor_ref": "role-finance",
+  "outcome": {"kind": "review_required"},
+  "exceptions": [{"exception_id": "exc-1", "text": "…", "condition": null}],
+  "scope": {"process": ["STANDARD", "EMERGENCY"]},
+  "status": "CONFIRMED",
+  "authority": "TARGET",
+  "provenance": [{"kind": "human_decision", "decision_id": "decision-123"}],
+  "source_bindings": [{"artifact_id": "cfg-approval", "revision_id": "rev-1", "evidence_ref": "approval.yaml#routing_rules.capex_finance_threshold_jpy"}],
+  "implementation_status": "partial",
+  "unknown_fields": []
+}
+```
+
+- `rule_id` is system-issued, stable and independent of line position. Pattern `rule-<slug>`. A model or client cannot mint one (`invented_rule_id` when checked against the pinned snapshot).
+- `status` reuses the existing rule confirmation states `DRAFT, VALIDATED, PENDING_HUMAN, CONFIRMED, REJECTED, SUPERSEDED`.
+- `provenance[]` kinds: `source_evidence` (`artifact_id`, `revision_id`, `evidence_ref`), `human_decision` (`decision_id`), `ai_inference` (`model_run_id`). `CONFIRMED` or `TARGET` ⇒ at least one `human_decision`; `OBSERVED` ⇒ at least one `source_evidence`.
+- `implementation_status`: `not_required | pending | partial | verified | divergent | unverifiable` (how far the *sources and code* match the rule; separate from knowledge status).
+- `source_bindings[]` pin the exact source revision for each evidence reference.
+- Merge/split of rules follows the existing `Rule.merged_from / split_from / superseded_by` ancestry; ids are never reused.
+
+### 2.2 `relation`
+
+```json
+{"edge_id": "edge-5", "from": "role-finance", "to": "rule-capex-finance-target", "type": "approves", "status": "CONFIRMED", "provenance_refs": ["decision-123"]}
+```
+
+`type ∈ defines, depends_on, approves, exception_to, conflicts_with, implements`. `status` reuses the relation states `PROPOSED, VALIDATED, PENDING_HUMAN, CONFIRMED, REJECTED`. `CONFIRMED` without `provenance_refs` is refused. An edge is never a causal proof; keyword proximity does not create one.
+
+### 2.3 `gap`
+
+```json
+{"gap_id": "gap-…", "kind": "missing_actor", "question": "Who approves an emergency purchase above the fast-track limit?",
+ "affected_rule_ids": ["rule-emergency-routing"], "status": "OPEN", "evidence_refs": ["manager-guide.md#what-does-not-come-to-you"],
+ "requires_permission": "knowledge.confirm", "priority": "critical"}
+```
+
+`kind ∈ missing_actor, missing_condition, missing_outcome, missing_exception, conflicting_facts, uncertain_link, unsupported_expression`. A gap shown with `origin: model_proposal` was suggested by a model (section 14) and is a question, not a finding of fact. `status` reuses the existing finding states (`OPEN, ANSWER_PROPOSED, RESOLVED, ACCEPTED_UNKNOWN, REOPENED, …`). `gap_id_for(kind, affected_rule_ids, key)` derives a stable id, so re-running the analysis never duplicates a question. A `critical` gap cannot be closed by a silent `ACCEPTED_UNKNOWN`.
+
+### 2.4 `change_operation` and `change_set`
+
+```json
+{"op_id": "op-1", "kind": "set_actor", "rule_id": "rule-high-risk-director", "before": "role-director", "desired": "role-finance",
+ "user_quote": "Purchases from high-risk suppliers should be approved by the Finance Controller.", "evidence_refs": ["procurement-policy.md#2.3"], "status": "proposed"}
+```
+
+| `kind` | `desired` |
+|---|---|
+| `set_value` | scalar, or `{"value": <int or decimal string>, "unit": "<non-empty>"}`; a number always carries its unit/currency |
+| `set_actor` | `role-<slug>` |
+| `add_or_change_condition` | a condition expression (section 3) |
+| `set_exception` | list of `{text, condition?}`; `[]` removes all |
+| `set_scope` | object, for example `{"process": ["STANDARD"]}` |
+
+- `status`: `proposed | needs_clarification | confirmed | unsupported`. `unsupported` needs a `reason`.
+- `user_quote` is the user's own words and is mandatory. `before` is informational and may be absent for new content; old/new values are **not** required for every rule.
+- `rule_id: null` is allowed only as `needs_clarification` with two or more `candidate_rule_ids` (`ambiguous_rule` otherwise).
+- Operations such as `schedule_effective_date`, `set_effective_date`, `future_activation` are refused (`unsupported_operation`) until a task adds and verifies them.
+- A `change_set` is `{operations[], expected_snapshot, draft_hash?}` with 1 to 10 operations (`limit_exceeded` above 10; the user splits the request, nothing is dropped). Every part of a multi-part request maps to one operation, a clarification or an explicit refusal.
+
+### 2.5 `document_request` / `document_artifact`
+
+```json
+{"snapshot_id": "business-12", "mode": "business", "scope": {"concept_ids": ["concept-capex"]}, "locale": "en", "template_version": "1"}
+{"artifact_id": "doc-8", "snapshot_id": "business-12", "mode": "business", "content_hash": "sha256:<64 hex>", "template_version": "1", "freshness": "available"}
+```
+
+`mode ∈ business, technical`. `freshness ∈ not_requested, generating, available, stale, failed`. Concurrency and retention (DOC-03): identical requests share one generation job and one artifact (the job id is the artifact key); a request on an older knowledge version serves that version labelled `stale`; artifacts are immutable per knowledge version and nothing deletes them automatically in Final (removal by version age is an operator runbook action); a revoked right stops serving, it does not delete; listings are bounded (200) and say `truncated`. Limits: 100 rules and 1 MiB per artifact; above that the generator splits by topic with a manifest and never truncates silently. `artifact_key(...)` is the cache identity: tenant, workspace, snapshot, canonical scope hash (ids sorted and deduplicated), mode, locale, template, generator, schema, prompt, model and redaction scope. Authorization is **not** in the key; it is checked on every create, read and download. Both modes of one request use the same snapshot. Export (DOC-05): `GET .../documents/{id}/download` serves the viewed bytes as a file with a generated name `knowledge-<mode>-rev<N>-[scoped-]<hash12>.md` and the same `X-Content-Hash` / `X-Freshness` / `X-Snapshot-Id` headers (a stale document downloads as the version being viewed); `POST .../documents/export {modes, snapshot_id?, scope?}` returns a zip of ONE snapshot (explicit `snapshot_id` = the version being viewed, omitted = the accepted head) holding the Markdown files and `MANIFEST.json` `{schema: ripple-knowledge-bundle/1, snapshot_id, business_revision, lifecycle_state, documents[{file, artifact_id, mode, scope, content_hash, size_bytes, template_version, redaction_scope}], statement}`; missing documents are requested through the lazy path and the call answers 409 `generating` (or `failed`) with their states until all exist; fixed zip timestamps make the bundle deterministic; rights per mode are rechecked and a refusal exports and generates nothing. Reader (DOC-04): the page renders the Markdown with a renderer that never interprets HTML and links only `http(s)://` and `#` targets; the open artifact is URL state.
+
+## 3. Condition grammar
+
+```
+expr    := comparison | {"all": [expr, …]} | {"any": [expr, …]} | {"not": expr}
+comparison := {"field": "<dotted.lowercase.path>", "op": op, "value": literal [, "unit": "<text>"]}
+
+Unit of an observed amount (added 2026-10-17): when extraction leaves a monetary comparison without a unit, the unit is taken only from an evidence quote that spells the currency next to that very number; otherwise the rule keeps the value WITHOUT a unit and lists `unit:<field>` in `unknown_fields`, which raises a `missing_condition` question for the unit, excludes the rule from numeric conflict comparison, makes a typed policy decision INDETERMINATE and turns a code recommendation for that value UNCERTAIN. A number is never normalised to a currency the sources did not state.
+op      := eq | ne | gt | gte | lt | lte | in | not_in
+literal := string | integer | boolean | decimal string        (in / not_in: non-empty list of those)
+```
+
+- Ordering operators (`gt, gte, lt, lte`) need an integer or a decimal string. Booleans are not numbers. Floats are refused so no value is silently rounded in binary.
+- Depth at most 4, at most 20 comparisons. Extra keys, unknown operators, empty `all/any`, free text and anything that looks like code are refused (`unsupported_expression` / `invalid_field`).
+- `normalize_condition` orders `all/any` children and membership lists so two spellings of one condition compare equal (used to detect a no-op change). `all` and `any` are never treated as equal.
+- Expressions are never evaluated by this contract. A later task that evaluates them must stay within this grammar.
+
+## 4. Lifecycle and the separate state axes
+
+| Vocabulary in the plan | Existing state it maps to | Where |
+|---|---|---|
+| knowledge proposed / needs_confirmation / accepted / superseded / stale | `KnowledgeRevision.lifecycle_state`: `DRAFT, VALIDATED → PENDING_HUMAN → ACCEPTED → SUPERSEDED, STALE` | existing |
+| rule proposed … accepted | `Rule.confirmation_state`: `DRAFT, VALIDATED, PENDING_HUMAN, CONFIRMED, REJECTED, SUPERSEDED` | existing |
+| gap lifecycle | existing finding states | existing |
+| source sync / code sync | `implementation_status` per rule, derived per source artifact | new field on the rule read model |
+| docs | `document_artifact.freshness` | new, metadata only |
+| behavior verified | existing verification report; stays `not_tested / not_supported` until a real check ran | existing |
+| user result | existing result decision `accept / request_changes / reject` with confirmed scope | existing |
+
+No new state-machine framework is added. Knowledge acceptance, source apply and result acceptance remain three separate decisions. Text read-back never becomes `verified` behavior.
+
+## 5. Snapshot pin, idempotency, concurrency
+
+`snapshot pin = {snapshot_id, business_revision, source_revision_id, km_revision_id, decision_epoch, schema_version}`. Every change set and document request carries one. Before any write the server compares **all** parts with the current head (`check_snapshot_current`); any difference is `stale_snapshot` and writes nothing. Accepting or committing is an optimistic compare-and-set on `business_revision`; a repeated commit with the same `draft_hash` and pin returns the first result and does not add a version. Document creation is idempotent per `artifact_key`: concurrent identical requests share one job and one provider reservation.
+
+## 6. Permissions (existing roles, no new role)
+
+| Action | Permission (existing) |
+|---|---|
+| read rules, graph, answers (Business view) | `project.read` |
+| read technical evidence: quotes, locators, source revisions | `evidence.read` |
+| answer a gap / confirm knowledge / resolve a conflict | `knowledge.confirm`, `conflict.resolve` |
+| state a business change, confirm one's own request | `intent.create`, `intent.confirm_own` |
+| prepare draft and impact | `change.prepare`, `ai.use` |
+| approve the change; accept the result | `change.approve`; `change.accept_result` |
+| view / export a document | Business: `project.read`; Technical: `evidence.read`. A dedicated document permission is added only if DOC-02 shows these are not enough |
+
+Every call re-checks the current membership; a revoked right takes effect on the next request, including for cached documents. Reads and writes use separate scopes: a read scope may include counterevidence outside the write scope; only the write scope may be changed.
+
+## 7. Errors
+
+`ContractError.code` is one of: `unsupported_contract_version`, `unsupported_expression`, `invalid_field`, `ambiguous_rule`, `invented_rule_id`, `missing_provenance`, `forbidden_provenance`, `unsupported_operation`, `limit_exceeded`, `stale_snapshot`. HTTP mapping (existing helpers): validation errors → 422, `stale_snapshot` → 409, permission → 403. The product answers with the code and a plain-language sentence; it never substitutes a default meaning.
+
+## 8. Limits (configuration ceilings, not measured capacity)
+
+Operations per request 10; condition depth 4 and 20 comparisons; graph context 2 hops and 200 nodes; context pack 40 items (also bound by the token cap); document 100 rules and 1 MiB. Configurable values live in product configuration; each limit has a denial test. Import, file and concurrency limits stay as in the existing runtime until a task measures and changes them.
+
+## 9. Storage, migration, transactions (proposed; KNO-01 finalizes)
+
+- **Additive only.** New tables or JSON columns beside the existing rule, knowledge and decision tables; no destructive change.
+- **Backfill** maps each existing candidate/rule to an `OBSERVED` rule keeping its id, evidence and bindings. The existing predicate/operator/value becomes one comparison leaf only when the operator is in the grammar; otherwise `condition` is `null` and an `unsupported_expression` gap is raised. Model confidence is never turned into `CONFIRMED`.
+- **One transaction** for a knowledge commit: snapshot row, rule and edge updates, decision and audit entries, outbox event. Index and document-freshness changes follow through the existing outbox; a knowledge commit creates zero document jobs.
+- Generated documents live in blob storage outside the repository and are never re-imported as primary evidence.
+
+## 10. What this version does not cover
+
+Effective-date scheduling; executing any expression; free-form conditions; atomic multi-file apply; arbitrary formats beyond those already parsed. These are refused or listed as unsupported, never ignored.
+
+## 11. Document rendering (`fkl-doc/1`)
+
+`core/change_intelligence/v2/document_ast.py` builds a document from one stored snapshot and renders it to Markdown with the versioned templates in `config/document_templates/` (`business.v1.json`, `technical.v1.json`). Both modes use the same rule facts, so a mode never changes a rule's meaning; Business shows plain sentences and the person's own words for a decision (never ids, expressions, locators or hashes), Technical shows expressions, relations, decision ids and, with `evidence.read`, source references (otherwise a stated redaction). Missing, conflicting, withdrawn and proposal states, exceptions and open questions always appear. Text from sources, models and people is escaped, inline code and fences cannot be closed by their content, and addresses are broken so no link can be made from it. A scope of more than 100 rules is refused with `limit_exceeded`; `plan_parts` splits it by topic into parts with a manifest. Output is canonical (LF, ordered by id, one trailing newline) so the same snapshot, scope, mode and template give the same bytes and the same `sha256` content hash.
+
+## 13. Carry-over across source revisions and implementation handoff shapes
+
+**Carry-over (`core/change_intelligence/v2/business_rebase.py`, `v2_business.derive_from_head`).** When the source, knowledge or decision head moves after the latest business snapshot, or when no snapshot exists yet, `POST /v2/business/analyse` first derives a `PENDING_HUMAN` snapshot from the current head and then analyses it; nothing is accepted by itself (a person accepts it as any proposal, section 4). The derived snapshot keeps every TARGET rule, every CONFIRMED relation and every answered or acknowledged gap of the accepted knowledge; OBSERVED rules are replaced by their new version under the same stable rule id: from the extraction candidates of the current source revision when they exist, otherwise by a structured read-back (the YAML key or cell a rule's single numeric comparison is bound to is re-read; documents and code are not re-read and are reported `not_reread`). An observed rule the new sources no longer hold is kept and listed as `missing_observed`; a revoked decision never comes back. Each TARGET rule's `implementation_status` is recomputed against the OBSERVED rule of the same root (`<rule_id>` for `<rule_id>-target`) by comparing actor, normalized condition, outcome kind, exception texts and scope: all equal `verified` (source-aligned; behaviour is not tested), condition differs `divergent`, condition equal and another part differs `partial`, no observed rule `unverifiable`; when the observed rule did not change since the previous snapshot the previous status is kept. The snapshot coverage records `origin: rebase|backfill`, `observed_from`, `carried_targets`, `statuses`, `missing_observed`. Compare-and-set on the workspace version and the business revision still applies to the acceptance.
+
+**Implementation handoff shapes (not executable, never a patch).** `code_change_recommendation` (SYN-01, `GET /v2/business/changes/{id}/code`): `{ref, path, locator, language, rule_id, title, op_id, kind, status SUPPORTED|UNCERTAIN|UNRESOLVED, why, observed_logic, literals[{line, literal, text}], desired{text, pseudocode}, assumptions[], dependent_files[], risk LOW|MEDIUM|HIGH, flags[], suggested_tests[], acceptance_checks[], manual_only: true, bound{target_rule_id, business_revision, source_revision_id}, binding_status current|stale}`; the response carries `stale`, `stale_reasons`, `recommendation_hash` and `apply.supported = false`. `file_edit_proposal` (SYN-03) is the CHG-03 `proposal_edit {key_path, expected_current, proposed, unit}` under the CHG-04 `file_writes` decision bound to `edits_hash`; it maps one-to-one to the typed edit `{path, locator = key_path, expected_current, proposed}` of the existing apply path. `completion_axes` (CHG-05, SYN-04): `{knowledge_result, source_sync, code_sync, behavioral_verification}` plus `user_result` when result acceptance exists; the enums are those of section 4.
+
+**Source apply of a committed change (SYN-03).** `GET /v2/business/changes/{id}/source` -> `{edits_hash, automatic_edit_available, file_writes_approved, knowledge_committed, job, manual[], modes [ai, manual], statement}`; `POST .../source/apply {mode, binding}`: `manual` returns the manual items and writes nothing; `ai` (`change.apply`, human actor, binding incl. `edits_hash`) creates ONE deterministic job `business.source_apply` (id = hash(change, edits_hash); 0 provider calls) when a current `file_writes` approval exists, the knowledge change is committed and the sources are still the pinned revision; otherwise `not_approved | knowledge_not_committed | edits_changed | draft_revised | nothing_to_apply | source_moved`. The job re-reads the artifact at the head, requires the stored scalar to equal the confirmed current value (`stale_current_value`), replaces exactly that scalar on its own line (comments, order and every other line unchanged; `ambiguous_key` / `edit_not_isolated` refuse), publishes ONE source revision through `publish_source` (CAS on the head version, approver authority rechecked -> `approver_authority_revoked`, lease fence, carry-forward of every other artifact), then records the observations and retrieval index of the new revision (`readback_failed` otherwise). Only YAML scalars of `config` files inside the write scope and outside protected paths are written; code, documents, spreadsheets and MANUAL/UNRESOLVED items are never touched (`unsupported_edit`, `outside_write_scope`, `protected_config_target`). A failed job publishes nothing and the TARGET rule keeps `implementation_status = pending`. `completion.source_sync` becomes `applied_pending_readback` after a COMPLETED job; `verified` comes only from the carry-over read-back (section 13 above) accepted by a person; behaviour is never affected. Source edits are not required for the knowledge change to count.
+
+## 14. Model-suggested gaps and free-text answer reading (KNO-06, KNO-07)
+
+**Suggested gaps and relations (`knowledge.gap_proposals`, `POST /v2/business/gaps/propose`, human actor with `knowledge.confirm` + `ai.use`).** One job per knowledge
+version and attempt (id = hash(snapshot_id, attempt); 1 provider call; `provider_disarmed` 409 up front). The model is shown up to `max_known_rules` live rules (TARGET first),
+the questions already asked and the edges already in the graph, and may suggest gaps of kind `missing_exception` (one rule) or `conflicting_facts` (two rules) and relations of
+type `depends_on | exception_to | implements`. The server (`core/change_intelligence/v2/business_proposals.py`) keeps a suggestion only if every rule id was shown, every evidence
+reference belongs to the named rules and may be read by the asker, the text is plain, the kind/rule count fit and the question is not already asked (`already_asked`); everything
+else is counted in `rejected` with a reason. Kept items live on the job result and are projected at read time into `GET /v2/business/gaps` (`gaps[].origin = model_proposal`,
+`priority normal`, plus `proposals {status, coverage{model_status, rules_shown, rules_not_shown, rejected, complete}, statement}`) and `GET /v2/business/graph` (`edges[].origin =
+model_proposal`, `status PROPOSED`, `provenance ai_inference`). A suggested gap is answered or dismissed (`accept_unknown`) through the existing preview/confirm path; the answer
+stores it in the next snapshot like any gap (decision body `gap_origin: model_proposal`). Nothing is written to the knowledge without a person; a proposed relation has no
+confirmation path in this version (read-only finding, like a structural conflict). When the snapshot moves the suggestions of the old one are no longer shown (a new version needs
+a new request); a job whose snapshot moved before it ran fails `snapshot_moved`. `NONE_FOUND` and `rules_not_shown > 0` are coverage statements, never proof that nothing is missing.
+A `missing_exception` gap is answered with `{exception: <one plain sentence>}`: the TARGET rule gains that exception (`exception_id exc-<n>-<decision>`); the same sentence again is a
+no-op, a different sentence after an answer reopens the question as with every other gap kind.
+
+**Free-text answer reading (`gap.answer_interpret`, `POST /v2/business/gaps/{gap_id}/interpret {text}` -> job, `GET .../interpret/{job_id}`; human actor with `knowledge.confirm`
++ `ai.use`).** One job per knowledge version, gap and normalised text (id = hash; 1 provider call). The model returns one reading `{status, kind, text, condition, quote, uncovered,
+message}`; the server (`core/change_intelligence/v2/business_answer_interpret.py`) keeps it only if the quote is a substring of the text, the kind fits the gap (`actor | condition |
+outcome | choose_rule_id | exception | accept_unknown`), every name/number comes from the person's words (a conflict option may be named as "5 million"), a condition uses the Final
+grammar (section 3) and only fields the shown rules already use, and the kept answer normalises through `business_answers.normalize_answer`. Sentences of the text that the quote
+does not cover, and every part the model lists as uncovered, make the result `NEEDS_CLARIFICATION` with those words shown: a partial reading is never confirmable. The result is
+`reading {status READY | NEEDS_CLARIFICATION | UNSUPPORTED, proposed_answer, quote, uncovered, message, preview}` where `preview` is the ordinary answer preview computed read-only
+at run time; the person confirms through `POST /v2/business/gaps/answer` with the proposed answer, that preview hash and their own words as the quote (the decision records the
+person's words, never the model's reading). The structured controls stay usable when the model is off or fails (`failed` with a reason; `snapshot_moved`, `gap_not_open`,
+`authority_revoked`, `schema_violation`). Real-model reading quality is OPEN (quality plan layers table).
+
+**Interview over one open question (extension AIX-K2, `POST /v2/business/gaps/{gap_id}/interview`, `GET|POST /v2/business/interviews/{session_id}[/answer|/refresh|/confirm]`; human actor with `knowledge.confirm`, `ai.use` to start and to answer).** One session per (workspace, gap, knowledge version), id = hash; table `v2_gap_interviews` (migration `ext_t03`). The server asks one question per turn, chosen deterministically from the gap kind and the previous reading (`core/change_intelligence/v2/gap_interview.py`: the kind's question first; an uncovered part -> "exception, condition or separate rule?"; a contradiction between two readings of the same field -> "which one?"; an unsupported reading -> the question again); every question offers "I do not know". Each answer is read by the ordinary KNO-07 job (same id for the same version, gap and words; one provider call; the single-shot route and the interview share the stored reading). States: `OPEN`, `READY_TO_CONFIRM` (last reading READY and no open contradiction), `UNRESOLVED` (the person declared not knowing, or the cap of 5 answered turns), `CONFIRMED`, `STALE` (the knowledge version moved: nothing of the session is saved), `CLOSED` (the question was answered or dismissed through the controls). `confirm` sends the latest READY reading with the person's words of that turn through `preview_answer`/`confirm_answer`; the interview writes no knowledge itself, a READY reading under a contradiction or an uncovered part is not confirmable, and the structured controls stay available at every state. The transcript (`turns`, `transcript_hash`, `contradictions`) is returned to holders of `knowledge.confirm` in the workspace; audit events `GAP_INTERVIEW_*`. Questioner modes: `deterministic` (default) or `model` (`RIPPLE_INTERVIEW_QUESTIONER`): the pinned role `gap.interview` (`config/gap_interview.json`, job kind `gap.interview_question`, 1 call, created by the interview refresh) proposes the next follow-up question; the server keeps it only when plain and grounded (it names the rule, an uncovered part of the last answer, a contradicted field or the matter of the deterministic question), always appends the do-not-know offer, and otherwise asks the deterministic question labelled `deterministic_fallback` with the reason (`not_grounded`, `not_plain_text`, `model_declined`, `job_failed:…`); a disarmed provider or a budget refusal also means the deterministic question. The first question of a session is always deterministic. `open_question.questioner`, `question_pending` and audit `GAP_INTERVIEW_QUESTION` expose this. Interview quality stays OPEN (stub only).
+
+## 15. Audience variants of generated documents (extension AIX-D1, role `document.wording`)
+
+`POST /v2/business/documents/{artifact_id}/variants {audience: executive | sop | audit, locale?}` (human actor; the base document's permission and redaction scope are rechecked, plus `ai.use`), `GET .../documents/{artifact_id}/variants`, `GET .../documents/variants/{variant_id}[/content]`. One job `document.variant` per variant key = (base artifact, audience, locale, frozen config hash of `config/document_wording.json`, pinned model); the same request again returns the stored variant without a model call. The base must be AVAILABLE (409 `base_not_available` otherwise). The worker (`infra/worker/document_variant.py`) rebuilds the base AST (same mode, scope, redaction), gives the model a fact pack of rule meanings and open questions (never evidence references), and keeps a paragraph (`core/change_intelligence/v2/document_variant.py`) only if every fact id it cites is in the pack, every number in it appears in the cited facts (a narrative section may use the overview counts), every role word in it belongs to a cited fact, and the text is plain. A mandatory section of the audience without a kept paragraph, or a model `UNSUPPORTED`, makes the variant a labelled **deterministic fallback**: the base document's own bytes under the label, no model wording. Every variant renders, by the server, the open questions, a limits section (coverage of the facts by the kept wording, paragraphs left out, policy-not-law) and the canonical fact table; the audit audience shows the cited rule ids after each paragraph. Every variant records `fact_coverage.facts_hash`, the hash of the base's canonical facts: all audiences of one base are checked against the same facts. Rows `v2_document_variants` (migration `ext_t04`) are immutable; freshness follows the base (`stale` once the accepted knowledge moved; nothing is regenerated eagerly). Audit event `DOCUMENT_VARIANT_GENERATED`. Not claimed: wording quality (stub only), semantic entailment beyond the number/role/reference checks, any legal compliance reading.
+
+## 16. Semantic conflict mining (extension AIX-K1, role `knowledge.mining`)
+
+`POST /v2/business/mining {attempt?}` (human actor with `knowledge.confirm` + `ai.use`), `GET /v2/business/mining?snapshot_id?&attempt?`, `POST /v2/business/mining/hypotheses/{id}/dismiss {reason}` (`knowledge.confirm`). The server plans the comparison deterministically over the knowledge version (`core/change_intelligence/v2/business_mining.py`): live rules that share a condition field form a component, components are split into groups of at most 8 rules, at most 4 groups are compared; a rule without a condition or alone in its component, and every group beyond the cap, are listed as skipped with the reason. One job `knowledge.mining` per group (id = hash(version, group, attempt); 1 provider call; `config/knowledge_mining.json` pinned). The model returns typed hypotheses `potential_conflict | exception_overlap | ambiguity | missing_context` with the rule ids, a reason, a concrete case `{field: value}`, the question a person should answer and its unknowns. The server keeps a hypothesis only if every rule id was shown in that group, the text is plain, the pair is not already asked or decided, and the case makes every cited rule apply under the deterministic policy evaluator (section 10): a case one rule does not match is rejected (`case_not_shared`), a case the evaluator cannot decide downgrades the hypothesis to `missing_context` with the missing facts as unknowns, a `potential_conflict` between rules with the same actor and outcome is rejected (`no_disagreement`). `GET` recomputes the plan, reads the group jobs and returns hypotheses (`PROPOSED | DISMISSED`), rejected items with reasons, the coverage report (rules live/compared/skipped, groups with state, pairs total/planned/compared, `complete`) and `stale` when the latest version is not the one mined. A dismissal (`v2_mining_dismissals`, migration `ext_t05`, immutable) is pinned to the version and refused on a stale result; raising a hypothesis as a question goes through the existing structured controls. Nothing here changes the knowledge; NONE_FOUND and partial coverage are coverage statements, never proof. Audit events `KNOWLEDGE_MINING_REQUESTED`, `KNOWLEDGE_MINING_DISMISSED`. Cross-group pairs: two rules of different groups (or a rule alone in its component) that share a scope value or a concept are compared as a two-rule bridge group, ranked by what they share and capped by `max_bridge_pairs`; unplanned cross-group pairs are counted in `coverage.cross_group_pairs`; a hypothesis found by two groups is one hypothesis (content-addressed id). When the workspace slot limit is hit the request creates the group jobs in batches (`jobs_deferred`; the same request again fills the rest). Not claimed: that real conflicts are found (stub only); exhaustive mining (cross-group pairs that share nothing are not compared); effective dates and precedence (not in the rule model).
+
+## 12. Semantic retrieval adapter (`retrieval.semantic`)
+
+`infra/adapters/semantic_retrieval.py` defines an optional provider seam with three separate layers: candidate expansion (extra terms and extra candidate ids, only from the offered items), ranking (scores for offered candidates, reorders only) and evidence sufficiency (per-item `supports/partial/unrelated` and a set-level `sufficient/partial/insufficient`, annotation only). Every layer's output is validated (unknown keys, ids outside the offered set, duplicates, wrong types, out-of-range scores and oversize lists discard that layer), bounded (3 calls, 1 retry, 12,000 characters offered, 6,000 tokens, 8 s timeout, usage required), cached by query, snapshot, view, access scope, provider and configuration version, and labelled when it falls back (`disarmed`, `invalid_output`, `timeout`, `usage_unknown`, `provider_switch_off`, `no_replay_record`, cap reasons). The provider sees only item id, kind and business text of the viewer's snapshot, never source quotes, locators, hashes or evidence references. A provider cannot create evidence: items always come from the stored snapshot; versions, authority labels, counter-evidence and conflict neighbors are unchanged. The default provider is disarmed; no model-backed provider exists. A pack reports `semantic.status`, `synthetic`, per-layer reasons, calls, tokens, cache state, `sufficiency` and per-item `relevance`.
+
+Applicability of claims (added 2026-10-17 after the live pilot): when the question describes a concrete case (exactly one amount in JPY; CAPEX/OPEX, standard/emergency and supplier risk are read from the text when present; the pinned `fact_defaults` of `config/knowledge_qa.json` may stand in for a missing process and are then disclosed as an assumption), every kept claim that cites a structured rule is evaluated against that rule's scope, condition and exceptions with the policy evaluator: `applies`, `conditional` (a fact the asker could add decides it; the claim is shown with its open condition), `not_evaluated` (the claim rests on a passage or a decision) or `not_applicable` (dropped, `claim_not_applicable`). A scope that names every value the pack knows for a key is universal. No applicable claim but conditional ones -> `NEEDS_CLARIFICATION` with the facts to add; only unevaluable passages -> `PARTIAL`; a mix -> `PARTIAL`. The model's free text is replaced by the claims whenever a claim is conditional, unevaluable, assumed or dropped for applicability. The result carries `case_facts {facts, assumed, concrete}` and each claim `applicability`, `conditional_on`, `assumptions`.
+
+Budget boundary: an EXTERNAL semantic provider is called only inside a provider-backed job (`knowledge.qa`) whose admission and reservation cover the answer call plus the adapter's call cap (`planned_calls`), and only through the attempt's own call budget (each call is consumed and journaled before it is made; `call_cap_reached` otherwise, no call); usage is booked once, by the job attempt (the adapter never books). The context route and every other reader run the adapter without a budget, so an external provider answers `outside_budget_boundary` there; disarmed and synthetic replay providers cost nothing. The process-local cache counts as a miss across workers for cost purposes. A question whose search completed over the pinned snapshot (index READY or the snapshot read directly, observation search run) and found nothing is answered `ABSTAINED` with zero calls and `retrieval_state.status = no_evidence`; a judge layer that ran fully and found the evidence insufficient also ends the question without an answer call; a FAILED, STALE or half-built retrieval fails the job as `retrieval_unavailable` and is never read as "no evidence"; semantic layers that fell back are `partial`. The retrieval note that the lexical search can miss relevant rules stays on every answer.

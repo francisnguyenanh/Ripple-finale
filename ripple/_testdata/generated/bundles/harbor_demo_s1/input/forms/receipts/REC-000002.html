@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goods Receipt Voucher - REC-000002</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; margin: 40px; color: #222; }
+  .watermark { color: #cc0000; font-weight: bold; font-size: 14px; text-transform: uppercase; border: 2px dashed #cc0000; padding: 8px 16px; display: inline-block; margin-bottom: 20px; }
+  .header { display: flex; justify-content: space-between; border-bottom: 2px solid #2e7d32; padding-bottom: 12px; margin-bottom: 24px; }
+  .title { font-size: 24px; font-weight: bold; color: #2e7d32; }
+  .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+  .meta-table td { padding: 6px 12px; font-size: 14px; }
+  .meta-label { font-weight: bold; width: 25%; background: #f4f6f9; }
+  .items-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+  .items-table th { background: #2e7d32; color: #fff; text-align: left; padding: 10px 12px; font-size: 13px; }
+  .items-table td { border-bottom: 1px solid #e0e0e0; padding: 10px 12px; font-size: 13px; }
+  .text-right { text-align: right; }
+</style>
+</head>
+<body>
+  <div class="watermark">SYNTHETIC DEMO — NOT FOR PAYMENT</div>
+  <div class="header">
+    <div class="title">GOODS RECEIPT VOUCHER</div>
+    <div>Receipt Ref: <strong>REC-000002</strong></div>
+  </div>
+
+  <table class="meta-table">
+    <tr>
+      <td class="meta-label">Receipt ID</td>
+      <td>REC-000002</td>
+      <td class="meta-label">Purchase Order ID</td>
+      <td>PO-000001</td>
+    </tr>
+    <tr>
+      <td class="meta-label">Received At</td>
+      <td>2026-09-01T15:30:00</td>
+      <td class="meta-label">Received By</td>
+      <td>EMP-003</td>
+    </tr>
+    <tr>
+      <td class="meta-label">Inspection Condition</td>
+      <td><strong>DAMAGED</strong></td>
+      <td class="meta-label">Warehouse</td>
+      <td>Harbor Central Dock #1</td>
+    </tr>
+  </table>
+
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th>Item Description</th>
+        <th>Condition</th>
+        <th class="text-right">Quantity Received</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Material Lot Received under PO PO-000001</td>
+        <td>DAMAGED</td>
+        <td class="text-right">5</td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

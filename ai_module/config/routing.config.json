@@ -1,0 +1,23 @@
+{
+  "_comment": "File nay la noi CHINH de ban chon thu cong: dung backend nao (vertex/aistudio), account nao (xem config/accounts.json), model tier nao (xem config/model_catalog.json) cho tung tac vu. Sua truc tiep, khong can dong code.",
+
+  "text_generation": {
+    "backend": "vertex",
+    "account_id": "default",
+    "tier": "standard",
+    "model_override": "",
+    "temperature": 0.2,
+    "max_output_tokens": 8192
+  },
+
+  "image_generation": {
+    "backend": "vertex",
+    "account_id": "default",
+    "tier": "standard",
+    "model_override": "",
+    "image_size_override": "",
+    "mode": "online",
+    "gcs_bucket": "",
+    "aspect_ratio": "16:9"
+  }
+}

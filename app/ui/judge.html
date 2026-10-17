@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ripple · Review a policy change</title><link rel="stylesheet" href="/judge.css"><script src="/judge.js" defer></script></head>
+<body><header><strong>Ripple</strong><span>Enterprise change intelligence</span></header><main>
+<h1>See the disagreement. Decide what changes.</h1>
+<p>Compare the evidence, confirm your intent, and review the proposed edits before approving them.</p>
+<form id="login"><label>Invitation code <input id="code" type="password" autocomplete="current-password" required></label><button>Start a private session</button></form>
+<p id="status" role="status" aria-live="polite"></p>
+<section id="conflict" hidden><h2>1 · Understand the conflict</h2><p>These artifacts describe the same rule. Ripple keeps each claim visible.</p><div id="findings"></div><button id="begin">Describe a change</button></section>
+<section id="intent" hidden><h2>2 · Confirm intent and preview</h2><label>Your request<textarea id="prompt" rows="3">For all orders lower approval threshold to JPY 500000</textarea></label><button id="parse">Prepare candidate</button><pre id="candidate"></pre><button id="confirm" disabled>I confirm this intent · preview consequences</button><pre id="impact"></pre><button id="prepare" disabled>Prepare changes for review</button></section>
+<section id="review" hidden><h2>3 · Review and decide</h2><pre id="reviewText"></pre><label>Decision reason<input id="reason" placeholder="Explain why this change is appropriate" required></label><div class="actions"><button id="approve">Approve and apply these edits</button><button id="reject" class="secondary">Reject proposal</button></div></section>
+<section id="verify" hidden><h2>4 · Verify and observe external change</h2><p>Approval does not prove success. Verification reads the resulting artifacts.</p><button id="runVerify">Verify artifacts</button><pre id="verification"></pre><label>External spreadsheet threshold (JPY)<input id="externalValue" type="number" min="1" max="100000000" value="300000"></label><button id="external">Apply controlled external edit</button><pre id="drift"></pre></section>
+<button id="reset" class="secondary" hidden>Reset this session</button>
+</main><footer>Gemini proposes meaning. Deterministic checks prove consequences. You approve change.</footer></body></html>

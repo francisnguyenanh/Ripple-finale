@@ -1,0 +1,571 @@
+{
+  "note": "Distractor rules for the QRY-02 retrieval evaluation. They have nothing to do with approval authority except by shared words (purchase, approval, review, Finance). Written before any retrieval method beyond term frequency was measured.",
+  "rules": [
+    {
+      "rule_id": "rule-free-freight",
+      "concept_ids": [
+        "concept-freight"
+      ],
+      "title": "Purchases of 500,000 JPY or more receive free freight delivery",
+      "condition": {
+        "field": "order.net_goods_jpy",
+        "op": "gte",
+        "value": 500000,
+        "unit": "JPY"
+      },
+      "actor_ref": "role-logistics",
+      "outcome": {
+        "kind": "free_shipping"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-free-freight"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-free-freight"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-shipping-fee",
+      "concept_ids": [
+        "concept-freight"
+      ],
+      "title": "Orders under 500,000 JPY pay a 2,000 JPY shipping and handling charge",
+      "condition": {
+        "field": "order.net_goods_jpy",
+        "op": "lt",
+        "value": 500000,
+        "unit": "JPY"
+      },
+      "actor_ref": "role-logistics",
+      "outcome": {
+        "kind": "charge_applies"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-shipping-fee"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-shipping-fee"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-price-tolerance",
+      "concept_ids": [
+        "concept-invoice-matching"
+      ],
+      "title": "Invoice price may differ from the purchase order by 10,000 JPY or 2 percent",
+      "condition": {
+        "field": "invoice.price_difference_jpy",
+        "op": "lte",
+        "value": 10000,
+        "unit": "JPY"
+      },
+      "actor_ref": "role-accounts-payable",
+      "outcome": {
+        "kind": "match_accepted"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-price-tolerance"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-price-tolerance"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-payment-term",
+      "concept_ids": [
+        "concept-payment"
+      ],
+      "title": "Invoices are paid within 30 days of receipt",
+      "condition": {
+        "field": "invoice.age_days",
+        "op": "lte",
+        "value": 30
+      },
+      "actor_ref": "role-accounts-payable",
+      "outcome": {
+        "kind": "payment_due"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-payment-term"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-payment-term"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-blocked-supplier",
+      "concept_ids": [
+        "concept-supplier-status"
+      ],
+      "title": "Requisitions for blocked suppliers are rejected automatically",
+      "condition": {
+        "field": "supplier.status",
+        "op": "eq",
+        "value": "BLOCKED"
+      },
+      "actor_ref": "role-procurement-system",
+      "outcome": {
+        "kind": "rejected"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-blocked-supplier"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-blocked-supplier"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-maker-checker",
+      "concept_ids": [
+        "concept-segregation"
+      ],
+      "title": "A requisitioner may not approve their own requisition",
+      "condition": {
+        "not": {
+          "field": "approver.is_requester",
+          "op": "eq",
+          "value": "true"
+        }
+      },
+      "actor_ref": "role-procurement-system",
+      "outcome": {
+        "kind": "approval_refused"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-maker-checker"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-maker-checker"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-quantity-valid",
+      "concept_ids": [
+        "concept-validation"
+      ],
+      "title": "A requisition quantity must be a positive whole number",
+      "condition": {
+        "field": "request.quantity",
+        "op": "gt",
+        "value": 0
+      },
+      "actor_ref": "role-procurement-system",
+      "outcome": {
+        "kind": "rejected_if_invalid"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-quantity-valid"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-quantity-valid"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-currency-jpy",
+      "concept_ids": [
+        "concept-validation"
+      ],
+      "title": "All purchase authorizations are denominated in Japanese yen",
+      "condition": {
+        "field": "request.currency",
+        "op": "eq",
+        "value": "JPY"
+      },
+      "actor_ref": "role-procurement-system",
+      "outcome": {
+        "kind": "rejected_if_other"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-currency-jpy"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-currency-jpy"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-audit-review",
+      "concept_ids": [
+        "concept-audit"
+      ],
+      "title": "Attempts to circumvent maker-checker segregation trigger an internal audit review",
+      "condition": {
+        "field": "event.kind",
+        "op": "eq",
+        "value": "SEGREGATION_BREACH"
+      },
+      "actor_ref": "role-internal-audit",
+      "outcome": {
+        "kind": "audit_review"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-audit-review"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-audit-review"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-travel-limit",
+      "concept_ids": [
+        "concept-travel"
+      ],
+      "title": "Travel expenses above 200,000 JPY need department head sign-off",
+      "condition": {
+        "field": "expense.travel_jpy",
+        "op": "gt",
+        "value": 200000,
+        "unit": "JPY"
+      },
+      "actor_ref": "role-department-head",
+      "outcome": {
+        "kind": "review_required"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-travel-limit"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-travel-limit"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-license-renewal",
+      "concept_ids": [
+        "concept-software"
+      ],
+      "title": "Software licence renewals are reviewed by IT governance each quarter",
+      "condition": {
+        "field": "purchase.category",
+        "op": "eq",
+        "value": "SOFTWARE_LICENCE"
+      },
+      "actor_ref": "role-it-governance",
+      "outcome": {
+        "kind": "quarterly_review"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-license-renewal"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-license-renewal"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-new-supplier-onboarding",
+      "concept_ids": [
+        "concept-supplier-status"
+      ],
+      "title": "New suppliers complete onboarding checks before the first order",
+      "condition": {
+        "field": "supplier.is_new",
+        "op": "eq",
+        "value": "true"
+      },
+      "actor_ref": "role-supplier-management",
+      "outcome": {
+        "kind": "onboarding_required"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-new-supplier-onboarding"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-new-supplier-onboarding"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-budget-code",
+      "concept_ids": [
+        "concept-budget"
+      ],
+      "title": "A requisition must carry the budget code of the current quarter",
+      "condition": {
+        "field": "request.budget_quarter",
+        "op": "eq",
+        "value": "CURRENT"
+      },
+      "actor_ref": "role-finance-controller",
+      "outcome": {
+        "kind": "rejected_if_wrong"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-budget-code"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-budget-code"
+        }
+      ],
+      "implementation_status": "not_required"
+    },
+    {
+      "rule_id": "rule-receipt-match",
+      "concept_ids": [
+        "concept-invoice-matching"
+      ],
+      "title": "Goods receipts are matched to purchase orders before payment",
+      "condition": {
+        "field": "receipt.matched",
+        "op": "eq",
+        "value": "true"
+      },
+      "actor_ref": "role-warehouse",
+      "outcome": {
+        "kind": "payment_allowed"
+      },
+      "exceptions": [],
+      "scope": {
+        "process": [
+          "STANDARD"
+        ]
+      },
+      "status": "VALIDATED",
+      "authority": "OBSERVED",
+      "provenance": [
+        {
+          "kind": "source_evidence",
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-receipt-match"
+        }
+      ],
+      "source_bindings": [
+        {
+          "artifact_id": "doc-other",
+          "revision_id": "rev-1",
+          "evidence_ref": "other.md#rule-receipt-match"
+        }
+      ],
+      "implementation_status": "not_required"
+    }
+  ]
+}

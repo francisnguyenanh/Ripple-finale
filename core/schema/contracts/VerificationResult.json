@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "title": "VerificationResult",
+  "description": "I14: every successful apply produces one of these. `alignment` takes exactly the four AlignmentState values -- NO_CHANGE_REQUIRED is a ChangeDecision and belongs in the `decision` field.",
+  "required": [
+    "schema_version",
+    "changeset_id",
+    "tests",
+    "evidence_freshness",
+    "alignment",
+    "unresolved"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "description": "Contract version. P8 detects a stale record by comparing this."
+    },
+    "changeset_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tests": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "passed",
+        "failed"
+      ],
+      "properties": {
+        "passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "evidence_freshness": {
+      "enum": [
+        "fresh",
+        "stale",
+        "unknown"
+      ]
+    },
+    "alignment": {
+      "enum": [
+        "ALIGNED",
+        "DRIFT",
+        "CONFLICT",
+        "UNKNOWN"
+      ]
+    },
+    "decision": {
+      "enum": [
+        "NO_CHANGE_REQUIRED",
+        "CHANGE_REQUIRED",
+        "HUMAN_REVIEW_REQUIRED"
+      ]
+    },
+    "unresolved": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$id": "VerificationResult.json"
+}

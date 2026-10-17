@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "HumanFeedbackAdded.json",
+  "title": "HumanFeedbackAdded",
+  "description": "A person said something. It may become an Intent candidate.",
+  "x-loop-triggering": true,
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$"
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dedup_key": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable across re-emissions of the same underlying fact. Two events with one dedup_key are one event."
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "loop_triggering": {
+      "type": "boolean",
+      "description": "P8-T01 subscribes to exactly the events where this is true. A contract test compares the two lists.",
+      "const": true
+    },
+    "event_type": {
+      "const": "HumanFeedbackAdded"
+    },
+    "payload": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "comment_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "semantic_type": {
+          "enum": [
+            "observation",
+            "correction",
+            "clarification",
+            "intent",
+            "exception",
+            "approval",
+            "rejection"
+          ]
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "comment_id",
+        "semantic_type"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "event_id",
+    "dedup_key",
+    "session_id",
+    "occurred_at",
+    "loop_triggering",
+    "event_type",
+    "payload"
+  ]
+}

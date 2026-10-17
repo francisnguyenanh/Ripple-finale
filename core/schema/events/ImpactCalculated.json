@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ImpactCalculated.json",
+  "title": "ImpactCalculated",
+  "description": "A by-product of that same branch.",
+  "x-loop-triggering": false,
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$"
+    },
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dedup_key": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable across re-emissions of the same underlying fact. Two events with one dedup_key are one event."
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "loop_triggering": {
+      "type": "boolean",
+      "description": "P8-T01 subscribes to exactly the events where this is true. A contract test compares the two lists.",
+      "const": false
+    },
+    "event_type": {
+      "const": "ImpactCalculated"
+    },
+    "payload": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "shadow_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "edge_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "shadow_id",
+        "edge_count",
+        "unknown_count"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "event_id",
+    "dedup_key",
+    "session_id",
+    "occurred_at",
+    "loop_triggering",
+    "event_type",
+    "payload"
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "template_version": "1",
+  "schema": "fkl-doc/1",
+  "mode": "business",
+  "locale": "en",
+  "title": "Business knowledge",
+  "sections": [
+    "overview",
+    "rules",
+    "conflicts",
+    "unknowns",
+    "implementation",
+    "decisions"
+  ],
+  "headings": {
+    "overview": "Overview",
+    "rules": "Rules",
+    "conflicts": "Where the sources disagree",
+    "unknowns": "What is not known yet",
+    "implementation": "Files and code compared with the decided rules",
+    "decisions": "Decisions people made"
+  },
+  "labels": {
+    "rule_id": "Rule ID",
+    "status": "Status",
+    "actor": "Who acts",
+    "condition": "When it applies",
+    "outcome": "What happens",
+    "exceptions": "Exceptions",
+    "scope": "Applies to",
+    "origin": "Where this comes from",
+    "implementation": "In the files and code"
+  },
+  "words": {
+    "actor_unknown": "Not stated in the sources",
+    "condition_unknown": "Not stated in the sources",
+    "no_exceptions": "None recorded",
+    "none": "None",
+    "status": {
+      "OBSERVED/VALIDATED": "What the sources say, not confirmed by a person",
+      "OBSERVED/CONFIRMED": "What the sources say, confirmed by a person",
+      "OBSERVED/PENDING_HUMAN": "What the sources say, waiting for a person",
+      "OBSERVED/DRAFT": "What the sources say, not checked",
+      "TARGET/CONFIRMED": "Decided by a person"
+    },
+    "implementation": {
+      "not_required": "Nothing to compare (this rule describes the sources)",
+      "pending": "Not yet implemented: the files and code still show the old rule",
+      "partial": "Partly implemented",
+      "verified": "Matches what the sources show",
+      "divergent": "Differs from what the sources show",
+      "unverifiable": "Cannot be compared"
+    },
+    "authority": {
+      "OBSERVED": "What the sources say",
+      "TARGET": "Decided by a person"
+    },
+    "status_other": {
+      "CONFIRMED": "confirmed by a person",
+      "VALIDATED": "not confirmed by a person",
+      "DRAFT": "draft, not checked",
+      "PENDING_HUMAN": "waiting for a person",
+      "REJECTED": "rejected",
+      "SUPERSEDED": "withdrawn"
+    },
+    "outcome_unknown": "Not stated in the sources"
+  }
+}

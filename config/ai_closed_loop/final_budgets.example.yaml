@@ -1,0 +1,49 @@
+# Shape reference for the Final knowledge-loop AI roles. Loaded by infra/worker/budget_config.py::load_budget_config.
+# NOT a deployed configuration and NOT a spending grant: every model is the zero-price stand-in, so no call can cost anything.
+# To run a live provider, copy this file outside version control, add the real model ids and their catalogued prices
+# (model_prices must list every model a role can resolve to), and set the caps. A live run also needs the owner's explicit budget
+# approval for that action. Money keys are quoted strings.
+#
+# Roles are job kinds (the key of role_model_ids). Roles marked "planned" do not exist as jobs yet; the task that adds the job must also add the kind
+# to infra/provider_gate.py::AI_KINDS (otherwise the provider switch, the durable attempt journal and the attempt limit do not apply to it).
+# tests/contract/test_final_budget_roles.py fails when a provider-backed kind has no entry here.
+default_model_id: stand_in
+role_model_ids:
+  extraction: stand_in          # KNO-02 business rule extraction (existing job kind, richer schema)
+  analysis: stand_in            # existing
+  gap.answer: stand_in          # existing; superseded for business Q&A by knowledge.qa
+  intent.interpret: stand_in    # CHG-01 nonnumeric change intent (existing job kind)
+  impact.judge: stand_in        # CHG-02 (existing)
+  change.draft: stand_in        # CHG-03 (existing)
+  sim.analysis: stand_in        # existing
+  explain: stand_in             # existing
+  knowledge.qa: stand_in        # QRY-03 business Q&A over a context pack
+  change.understand: stand_in   # CHG-01 business change request -> validated operations
+  change.impact_deps: stand_in  # CHG-02 AI-proposed dependencies of a confirmed change (always PROPOSED)
+  change.draft_guidance: stand_in  # CHG-03 model guidance over the server-built draft of a confirmed change (downgrade-only)
+  knowledge.gap_proposals: stand_in  # KNO-06 gaps/relations a model suggests over one knowledge version (always PROPOSED, a person answers)
+  ma.specialist: stand_in  # multi-agent review board specialist (MA-R1); one model for every rubric in this build
+  gap.answer_interpret: stand_in   # KNO-07 a free-text gap answer read into the structured form (previewed, the person confirms)
+  document.variant: stand_in       # AIX-D1 job kind of the document.wording role (pin both to the same model)
+  gap.interview: stand_in          # AIX-K2 model questioner of an interview session (server-grounded, deterministic fallback)
+  gap.interview_question: stand_in # AIX-K2 job kind of the gap.interview role (pin both to the same model)
+  knowledge.mining: stand_in       # AIX-K1 conflict hypotheses over one rule group of a knowledge version (server-verified cases; a person dismisses or raises)
+  retrieval.semantic: stand_in  # planned, QRY-02 (only if a model is used for query expansion or embeddings)
+  document.wording: stand_in    # AIX-D1 audience variants of a generated document (server-checked wording, labelled fallback); the DOC-02 path itself needs no model
+model_prices:
+  stand_in:
+    input_usd_per_1k: "0.00"
+    output_usd_per_1k: "0.00"
+  replay:
+    input_usd_per_1k: "0.00"
+    output_usd_per_1k: "0.00"
+# The loader requires caps above 0. With zero-price models they are never reached; set real caps when real prices are added.
+per_job_cap_usd: "0.01"
+total_cap_usd: "0.01"
+max_input_tokens_per_call: 24000
+max_output_tokens: 12288
+max_retries: 1                  # max_provider_calls_per_job is omitted: it defaults to max_retries + 1 (the loader rejects any other value)
+max_concurrent_jobs_per_workspace: 2
+fail_closed_on_missing_usage: true
+latency_slo_p50_seconds: 30.0
+latency_slo_p95_seconds: 90.0

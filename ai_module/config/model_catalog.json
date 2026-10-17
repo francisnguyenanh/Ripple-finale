@@ -1,0 +1,85 @@
+{
+  "_comment": "Bang gia + muc do (level: 1 thap -> cao) cho model gen text/suy luan va gen anh. Gia la ESTIMATE de tham khao/du toan ngan sach, khong phai bill chinh thuc - kiem tra Cloud Billing console de biet so du that.",
+  "pricing_checked": "2026-08-15",
+  "pricing_source": "ai.google.dev/gemini-api/docs/pricing (cung rate card tren Vertex AI va Gemini Developer API)",
+
+  "text_generation": {
+    "_comment": "level thap = re/nhanh/it suy luan sau; level cao = dat/cham hon/suy luan (reasoning) manh hon. batch = ~50% gia online.",
+    "tiers": [
+      {
+        "tier": "economy",
+        "level": 1,
+        "model": "gemini-3.5-flash-lite",
+        "reasoning": "thap",
+        "speed": "rat nhanh",
+        "price_input_per_1m": 0.30,
+        "price_output_per_1m": 2.50,
+        "use_case": "task don gian, tra loi ngan, dich thuat, phan loai, tra cuu nhanh"
+      },
+      {
+        "tier": "standard",
+        "level": 2,
+        "model": "gemini-3.5-flash",
+        "alternate_models": ["gemini-3.7-flash", "gemini-3.8-flash", "gemini-2.5-flash"],
+        "reasoning": "trung binh",
+        "speed": "nhanh",
+        "price_input_per_1m": 1.50,
+        "price_output_per_1m": 9.00,
+        "use_case": "chat thong thuong, tom tat, viet noi dung - can bang chat luong/gia"
+      },
+      {
+        "tier": "reasoning",
+        "level": 3,
+        "model": "gemini-2.5-pro",
+        "fallback_model": "gemini-3.1-pro",
+        "reasoning": "cao",
+        "speed": "trung binh",
+        "price_input_per_1m": 2.00,
+        "price_output_per_1m": 12.00,
+        "context_limit_note": "gia ap dung cho prompt <= 200K token",
+        "use_case": "suy luan phuc tap, code, phan tich nhieu buoc"
+      },
+      {
+        "tier": "premium",
+        "level": 4,
+        "model": "gemini-2.5-pro",
+        "fallback_model": "gemini-3.1-pro",
+        "reasoning": "rat cao",
+        "speed": "cham hon",
+        "price_input_per_1m": 4.00,
+        "price_output_per_1m": 18.00,
+        "context_limit_note": "gia ap dung cho prompt > 200K token (long-context)",
+        "use_case": "tai lieu/context rat dai, suy luan sau nhat"
+      }
+    ],
+    "models": {
+      "gemini-3.5-flash-lite": {"tier": "economy", "supports_thinking": false, "providers": ["vertex"]},
+      "gemini-3.5-flash": {"tier": "standard", "supports_thinking": false, "providers": ["vertex"]},
+      "gemini-3.7-flash": {"tier": "standard", "supports_thinking": true, "providers": ["vertex"]},
+      "gemini-3.8-flash": {"tier": "standard", "supports_thinking": false, "providers": ["vertex"]},
+      "gemini-2.5-flash": {"tier": "standard", "supports_thinking": false, "providers": ["vertex"]},
+      "gemini-2.5-pro": {"tier": "reasoning", "supports_thinking": true, "providers": ["vertex"]},
+      "gemini-3.1-pro": {"tier": "reasoning", "supports_thinking": true, "providers": ["vertex"]}
+    },
+    "batch_discount_ratio": 0.5,
+    "cached_input_discount_note": "context caching giam ~90% gia input cho phan token duoc cache (chi ap dung Pro tiers)"
+  },
+
+  "image_generation": {
+    "_comment": "Dong bo voi generate_images.py QUALITY_TIERS/IMAGE_OUTPUT_PRICE. Sua o day thi nho sua ca generate_images.py neu can.",
+    "tiers": [
+      {"tier": "economy", "level": 1, "model": "gemini-2.5-flash-image", "image_size": "1K", "price_per_image": 0.039},
+      {"tier": "draft", "level": 2, "model": "gemini-3.1-flash-image", "image_size": "1K", "price_per_image": 0.067},
+      {"tier": "plus", "level": 3, "model": "gemini-3.1-flash-image", "image_size": "2K", "price_per_image": 0.101},
+      {"tier": "standard", "level": 4, "model": "gemini-3-pro-image", "image_size": "1K", "price_per_image": 0.134},
+      {"tier": "ultra", "level": 5, "model": "gemini-3.1-flash-image", "image_size": "4K", "price_per_image": 0.151},
+      {"tier": "high", "level": 6, "model": "gemini-3-pro-image", "image_size": "4K", "price_per_image": 0.240}
+    ],
+    "batch_discount_ratio": 0.5,
+    "input_text_price_per_1m": {
+      "gemini-3-pro-image": 2.00,
+      "gemini-3.1-flash-image": 0.50,
+      "gemini-2.5-flash-image": 0.30
+    }
+  }
+}

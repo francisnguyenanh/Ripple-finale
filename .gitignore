@@ -1,0 +1,84 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+venv/
+.venv/
+env/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets — KHONG BAO GIO commit
+_secret/
+credentials/
+credentials
+*.pem
+*.key
+service-account*.json
+.env
+.env.*
+!.env.example
+
+# Pipeline working state (sinh lai duoc tu run)
+work/
+scratch/
+*.sqlite
+*.sqlite3
+*.db
+
+# Artifacts sinh ra
+reports/
+handoff/pending/
+handoff/answers/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Claude scratch
+.claude/settings.local.json
+
+# Standalone image CLI and legacy integration instructions are not used by Ripple.
+ai_module/generate_images.py
+ai_module/AI_MODULE_IMPLEMENTATION_GUIDE.en.md
+ai_module/config/vertex.config.example.ini
+# Retired provider implementation; local copies can remain for reference.
+ai_module/kaggle_accounts.py
+ai_module/kaggle_client.py
+
+# Local verification session notes and reproducible measurement output.
+docs/verification/SESSION_STATUS.md
+docs/verification/baseline.md
+docs/verification/checkpoint_D1.md
+docs/verification/failures.md
+docs/verification/inventory.md
+docs/verification/p3_measurements.json
+docs/verification/p4_measurements.json
+
+# Historical logs, plans, evaluation corpus, and retired checkpoint code.
+/logs.json
+/Overview_docs/
+/ripple_testdata/
+/spike/
+/infra/d1/
+
+# process tooling run evidence (local index, not shared)
+.process_runs/
+node_modules/
+frontend/node_modules/

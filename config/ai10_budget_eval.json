@@ -1,0 +1,38 @@
+{
+  "per_job_cap_usd": "0.30",
+  "total_cap_usd": "185.00",
+  "max_output_tokens": 12288,
+  "max_input_tokens_per_call": 24000,
+  "max_retries": 1,
+  "max_provider_calls_per_job": 1,
+  "max_concurrent_jobs_per_workspace": 12,
+  "model_prices": {
+    "gemini-3.7-flash": {"input_usd_per_1k": "0.0015", "output_usd_per_1k": "0.0075"},
+    "gemini-3.8-flash": {"input_usd_per_1k": "0.0015", "output_usd_per_1k": "0.0075"},
+    "gemini-3.5-flash-lite": {"input_usd_per_1k": "0.0003", "output_usd_per_1k": "0.0025"}
+  },
+  "default_model_id": "gemini-3.5-flash-lite",
+  "role_model_ids": {"extraction": "gemini-3.8-flash"},
+  "request_timeout_seconds": 90,
+  "price_snapshot_date": "2026-09-30",
+  "price_snapshot_max_age_days": 30,
+  "fail_closed_on_missing_usage": true,
+  "latency_slo_p50_seconds": 30.0,
+  "latency_slo_p95_seconds": 90.0,
+  "price_source": {
+    "service": "Vertex AI (Cloud Billing services/C7E2-9256-1C43), the service the app's Vertex client is billed under",
+    "region": "global",
+    "mode": "standard online text (OnDemand, resource group AiPlatform); not flex, batch, priority or cached",
+    "effective_time": "2026-09-30",
+    "skus": {
+      "gemini-3.7-flash": {"input": "DE72-AD44-146E", "output": "2FAA-7025-9777"},
+      "gemini-3.8-flash": {"input": "2A35-AC68-14D6", "output": "90FD-DC5F-DC55"},
+      "gemini-3.5-flash-lite": {"input": "255D-4FF7-8DB3", "output": "EF3E-6ED9-3CD1"}
+    },
+    "unit": "unitPrice.nanos per token; USD per 1k tokens = nanos / 1e6 (1500 nanos input, 7500 nanos output for both models)",
+    "note": "Thinking tokens are billed as output tokens. The Gemini API service (AEFD-7695-64FA) lists 750/3750 nanos for the same model names; that is the Developer API product, not the Vertex endpoint this app calls, so it is NOT used.",
+    "recheck_at_switch": "SW38, two separate things. (1) WARNING: price_snapshot_status() reports stale/future/undated after price_snapshot_max_age_days; the held-out budget preflight (check_budget_config) fails visibly on it, before any provider call. (2) CHECK: comparing these prices with the CURRENT provider price (Cloud Billing catalog) is NOT automated and NOT available offline; a person or a task must do it at the moment the extraction role is switched to gemini-3.8-flash, then update price_snapshot_date. The 2026-09-30 snapshot has not been re-checked by this change; no price here was changed.",
+    "sw38_worst_case": "per call 24000 x 0.0015/1k + 12288 x 0.0075/1k = 0.12816 (thinking counted as output inside max_output_tokens); per job at max_retries 1 and 1 call: 0.25632 < per_job_cap 0.30 (margin 0.04368). Admission reserves at the priciest configured model; total_cap_usd is unchanged (its cap_basis already priced every call at the 3.8-class worst call).",
+    "cap_basis": "560 provider-calling jobs (F2 landed) x 2 attempts x worst call (24000 x 0.0015/1k + 12288 x 0.0075/1k = 0.12816) = 143.54; 185.00 = 143.54 + 10 percent + the T04 reserve requested by TESTER"
+  }
+}

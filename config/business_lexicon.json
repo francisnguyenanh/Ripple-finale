@@ -1,0 +1,21 @@
+{
+  "lexicon_version": "business-lexicon-v1",
+  "note": "Generic business vocabulary for bounded query expansion. Each group lists words that mean nearly the same thing in an approval or purchasing context. It holds no company, product or rule names. Changing it changes retrieval behavior: the pack reports its sha256 and the evaluation in tests/final_loop/test_qry02_retrieval.py must be rerun.",
+  "groups": [
+    ["approve", "approval", "approver", "authorize", "authorise", "authorization", "sign-off", "signoff", "permit", "consent", "endorse", "clear"],
+    ["review", "check", "vet", "assess", "examine"],
+    ["threshold", "limit", "ceiling", "cap", "minimum", "maximum"],
+    ["yen", "jpy"],
+    ["risk", "risky", "hazardous"],
+    ["emergency", "urgent", "urgency", "stoppage", "rush"],
+    ["exception", "exempt", "exemption", "waiver", "except", "unless"],
+    ["role", "who", "whom", "whose", "person", "people", "team", "department", "actor", "approver"],
+    ["purchase", "buy", "order", "requisition", "request", "procurement", "spend", "expenditure", "acquisition"],
+    ["capex", "capital", "equipment", "asset"],
+    ["automatic", "automatically", "auto"],
+    ["rule", "policy", "regulation", "guideline"],
+    ["director", "executive"],
+    ["manager", "supervisor"]
+  ],
+  "limits": {"max_expansions_per_token": 4, "max_expanded_terms": 24, "expansion_weight": 0.5}
+}

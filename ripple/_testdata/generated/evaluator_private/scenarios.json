@@ -1,0 +1,96 @@
+{
+  "contract_version": "1.0.0",
+  "scenarios": {
+    "S0": {
+      "name": "Baseline Ingestion",
+      "description": "Initial import of baseline procurement system and documentation.",
+      "expected_findings": {
+        "conflicts": [
+          {
+            "id": "C01",
+            "type": "VALUE_CONFLICT",
+            "artifact_a": "data/approval_matrix.xlsx",
+            "artifact_b": "config/approval.yaml",
+            "detail": "Workbook manager threshold is 500,000 JPY while config and code execute 1,000,000 JPY."
+          },
+          {
+            "id": "C02",
+            "type": "SCOPE_CONFLICT",
+            "artifact_a": "docs/finance_desk_guide.md",
+            "artifact_b": "docs/procurement_policy.md",
+            "detail": "Finance guide claims all >= 2M purchases need Finance review, while formal policy restricts this strictly to CAPEX."
+          }
+        ],
+        "gaps": [
+          {
+            "id": "G01",
+            "type": "POLICY_AMBIGUITY",
+            "artifact": "docs/emergency_purchases.md",
+            "detail": "Emergency procedure is ambiguous about whether future general limit changes apply to emergency purchases."
+          },
+          {
+            "id": "G02",
+            "type": "UNSUPPORTED_EXECUTION",
+            "artifact": "docs/requisition_sop.md",
+            "detail": "2-business-day escalation is a manual document-only rule; no automated scheduler or holiday calendar exists."
+          }
+        ]
+      }
+    },
+    "S1": {
+      "name": "Manager Limit Reduced to 500k JPY",
+      "description": "Human decision reduces Manager approval threshold to 500,000 JPY across both Standard and Emergency processes.",
+      "request_text": "Reduce manager approval threshold to 500,000 JPY across all general and emergency purchases.",
+      "approved_overrides": {
+        "standard_manager_threshold_jpy": 500000,
+        "emergency_manager_threshold_jpy": 500000,
+        "emergency_inherits_standard": true
+      },
+      "expected_actions": {
+        "config_updated": "config/approval.yaml (standard_manager_threshold_jpy = 500,000)",
+        "code_updated": "app/emergency.py (emergency threshold parameterized or set to 500,000)",
+        "excel_action": "NO_OP (data/approval_matrix.xlsx is already 500,000 JPY)",
+        "freight_action": "NO_OP (Freight threshold remains strictly 500,000 JPY)",
+        "unresolved_conflicts": ["C02", "G02"]
+      }
+    },
+    "S2": {
+      "name": "Manager Limit Set to 750k JPY",
+      "description": "Subsequent human decision increases Manager approval threshold to 750,000 JPY.",
+      "request_text": "Adjust the manager approval threshold to 750,000 JPY.",
+      "approved_overrides": {
+        "standard_manager_threshold_jpy": 750000,
+        "emergency_manager_threshold_jpy": 750000
+      },
+      "expected_actions": {
+        "config_updated": "config/approval.yaml (standard_manager_threshold_jpy = 750,000)",
+        "excel_updated": "data/approval_matrix.xlsx (Cell B4 set to 750,000 JPY)",
+        "freight_action": "NO_OP (Freight threshold remains strictly 500,000 JPY)"
+      }
+    },
+    "S3": {
+      "name": "Source Content Restoration",
+      "description": "Reverting source repository files back to S0 baseline bytes.",
+      "request_text": "Restore source files to initial baseline state.",
+      "expected_actions": {
+        "system_behavior": "Ripple records forward revision event preserving historical human decisions; does not erase historical knowledge."
+      }
+    },
+    "S4": {
+      "name": "External Excel Drift to 650k JPY",
+      "description": "External user or department updates approval_matrix.xlsx manager row to 650,000 JPY while system is on S1 (500k).",
+      "expected_findings": {
+        "new_conflict": "New value conflict detected: Excel states 650,000 JPY while operative config is 500,000 JPY."
+      }
+    },
+    "S5": {
+      "name": "Finance Desk Guide Alignment",
+      "description": "Human decision clarifies and approves correcting finance desk guide to CAPEX-only.",
+      "request_text": "Update Finance Desk Guide to clarify that Finance sign-off applies strictly to CAPEX purchases of 2M JPY or higher.",
+      "expected_actions": {
+        "docs_updated": "docs/finance_desk_guide.md amended to specify CAPEX only.",
+        "resolved_conflicts": ["C02"]
+      }
+    }
+  }
+}

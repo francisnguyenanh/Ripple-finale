@@ -1,0 +1,13 @@
+# Runtime of the judge service (tier 2). The Dockerfile installs exactly this.
+# Pinned to the versions the full suite passed with (P10-T04, 2026-09-25).
+fastapi==0.138.0
+starlette==1.3.1
+uvicorn==0.49.0
+requests==2.33.1
+google-auth==2.49.2
+google-cloud-storage==2.19.0
+psycopg2-binary==2.9.12
+PyYAML==6.0.3
+openpyxl==3.1.5
+google-genai==2.9.0
+jsonschema==4.26.0

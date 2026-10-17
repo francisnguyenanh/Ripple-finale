@@ -1,0 +1,9 @@
+employee_id,display_name,department,roles
+EMP-001,Taro Tanaka,Procurement,BUYER
+EMP-002,Hanako Sato,Operations,"BUYER,MANAGER"
+EMP-003,Kenji Suzuki,Logistics,BUYER
+EMP-004,Yuka Takahashi,Finance,FINANCE
+EMP-005,Ichiro Watanabe,Executive,DIRECTOR
+EMP-006,Naomi Ito,Procurement,BUYER
+EMP-007,Shigeru Kobayashi,Operations,MANAGER
+EMP-008,Emi Yamamoto,Finance,FINANCE

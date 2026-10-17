@@ -1,0 +1,10 @@
+currency: JPY
+matching_rules:
+  payment_term_days: 30
+  price_tolerance_fixed_jpy: 10000
+  price_tolerance_percent: 2
+routing_rules:
+  capex_finance_threshold_jpy: 2000000
+  high_risk_route: NEEDS_DIRECTOR
+  standard_manager_threshold_jpy: 500000
+version: 1.0.0

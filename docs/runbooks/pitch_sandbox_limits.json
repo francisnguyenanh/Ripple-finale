@@ -1,0 +1,9 @@
+{
+  "_comment": "ONE source for the sandbox limits used by the local rehearsal, the tests and the candidate deployment (RIPPLE_SANDBOX_CONFIG = {workspaces: {<workspace>: these + seed_revision_id}}). Change here, nowhere else. max_jobs_per_lease counts EVERY job of the workspace since the lease started (system-created ones too: the re-extraction wave after an apply). max_provider_jobs_per_lease counts jobs that call a model (extraction/gap.answer/change.draft/analysis/impact.judge), re-extraction included; one full loop = 10.",
+  "lease_minutes": 45,
+  "max_jobs_per_lease": 40,
+  "max_provider_jobs_per_lease": 12,
+  "pump_max_jobs": 3,
+  "pump_seconds": 60,
+  "min_remaining_usd": 0.5
+}

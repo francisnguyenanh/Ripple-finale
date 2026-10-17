@@ -1,0 +1,13 @@
+{
+  "version": "w1-reviewed-2026-09-29",
+  "oracles": [
+    {
+      "oracle_id": "reviewed-refund-window",
+      "artifact_id": "config-reviewed-oracle.yaml",
+      "kind": "yaml_value_equals",
+      "path": "refund_window_days",
+      "expected": 30,
+      "requirement_ref": "REQ-REFUND-30 (human-confirmed)"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+# Acme Industrial Components -- Procurement approval routing
+#
+# Owner:        Procurement Operations
+# Changed via:  the workflow change process (see docs/exception-handling.md)
+# Last review:  2023-02
+#
+# Read top to bottom: the FIRST matching route decides. Order is policy.
+
+version: 3
+currency: JPY
+
+approval_routes:
+
+  - id: PROCUREMENT_HIGH_RISK_SUPPLIER
+    rule_id: BR-005
+    description: A supplier on the high-risk register escalates regardless of amount.
+    condition: { field: supplier_risk, op: "==", value: high }
+    approver_role: DIRECTOR
+
+  - id: PROCUREMENT_STRATEGIC_CUSTOMER
+    rule_id: BR-002
+    description: Strategic-tier customers are exempt from procurement approval.
+    condition: { field: customer_tier, op: "==", value: strategic }
+    approver_role: NONE
+    # Added 2020-11 for the Q4 campaign. Marked temporary at the time.
+    # No revert commit exists. No SOP, policy or guide mentions it.
+
+  - id: PROCUREMENT_CAPEX
+    rule_id: BR-004
+    description: Capital expenditure is Finance's decision.
+    condition: { field: amount, op: ">=", value: 5000000 }
+    approver_role: FINANCE
+
+  - id: PROCUREMENT_STANDARD
+    rule_id: BR-001
+    description: Requests at or above the threshold require manager sign-off.
+    condition: { field: amount, op: ">=", value: 1000000 }
+    approver_role: MANAGER
+
+exceptions:
+  - id: EMERGENCY_PURCHASE
+    rule_id: BR-006
+    description: >
+      Emergency purchases follow a separate fast-track path implemented in
+      application/emergency_purchase.py. The ceiling is NOT stated here.
+    handler: emergency_purchase

@@ -1,0 +1,373 @@
+{
+  "contract_version": "1.0.0",
+  "system_name": "Harbor Procurement Mini",
+  "reference_date": "2026-09-01",
+  "currency": "JPY",
+  "enums": {
+    "ProcessType": ["STANDARD", "EMERGENCY"],
+    "CategoryType": ["OPEX", "CAPEX"],
+    "SupplierStatus": ["ACTIVE", "BLOCKED"],
+    "SupplierRisk": ["NORMAL", "HIGH"],
+    "Role": ["BUYER", "MANAGER", "FINANCE", "DIRECTOR"],
+    "RouteType": ["REJECTED", "AUTO", "NEEDS_MANAGER", "NEEDS_FINANCE", "NEEDS_DIRECTOR"],
+    "POState": ["DRAFT", "APPROVED"],
+    "ReceiptCondition": ["ACCEPTED", "DAMAGED"],
+    "InvoiceStatus": ["REJECTED", "HOLD_UNAPPROVED", "HOLD_QUANTITY", "HOLD_PRICE", "READY"]
+  },
+  "entities": {
+    "Supplier": {
+      "fields": {
+        "supplier_id": {"type": "str", "required": true, "format": "SUP-\\d{3}"},
+        "display_name": {"type": "str", "required": true},
+        "status": {"type": "str", "required": true, "enum": "SupplierStatus"},
+        "risk": {"type": "str", "required": true, "enum": "SupplierRisk"},
+        "contact_email": {"type": "str", "required": true, "format": ".*@.*\\.example"}
+      }
+    },
+    "Employee": {
+      "fields": {
+        "employee_id": {"type": "str", "required": true, "format": "EMP-\\d{3}"},
+        "display_name": {"type": "str", "required": true},
+        "department": {"type": "str", "required": true},
+        "roles": {"type": "list[str]", "required": true, "item_enum": "Role"}
+      }
+    },
+    "Requisition": {
+      "fields": {
+        "request_id": {"type": "str", "required": true, "format": "REQ-\\d{6}"},
+        "requester_id": {"type": "str", "required": true, "format": "EMP-\\d{3}"},
+        "supplier_id": {"type": "str", "required": true, "format": "SUP-\\d{3}"},
+        "process": {"type": "str", "required": true, "enum": "ProcessType"},
+        "category": {"type": "str", "required": true, "enum": "CategoryType"},
+        "net_amount_jpy": {"type": "int", "required": true, "min": 1},
+        "currency": {"type": "str", "required": true, "value": "JPY"},
+        "requested_at": {"type": "str", "required": true, "format": "YYYY-MM-DDTHH:MM:SS"},
+        "quantity": {"type": "int", "required": true, "min": 1},
+        "item_description": {"type": "str", "required": true}
+      }
+    },
+    "RouteDecision": {
+      "fields": {
+        "request_id": {"type": "str", "required": true},
+        "route": {"type": "str", "required": true, "enum": "RouteType"},
+        "reason_code": {"type": "str", "required": true},
+        "amount_used_jpy": {"type": "int", "required": true},
+        "applied_config_version": {"type": "str", "required": true}
+      }
+    },
+    "PO": {
+      "fields": {
+        "po_id": {"type": "str", "required": true, "format": "PO-\\d{6}"},
+        "request_id": {"type": "str", "required": true, "format": "REQ-\\d{6}"},
+        "supplier_id": {"type": "str", "required": true, "format": "SUP-\\d{3}"},
+        "currency": {"type": "str", "required": true, "value": "JPY"},
+        "quantity": {"type": "int", "required": true, "min": 1},
+        "goods_net_jpy": {"type": "int", "required": true, "min": 1},
+        "freight_jpy": {"type": "int", "required": true, "min": 0},
+        "tax_jpy": {"type": "int", "required": true, "min": 0},
+        "gross_jpy": {"type": "int", "required": true, "min": 1},
+        "state": {"type": "str", "required": true, "enum": "POState"},
+        "approved_by": {"type": "str", "nullable": true},
+        "approved_at": {"type": "str", "nullable": true}
+      }
+    },
+    "Receipt": {
+      "fields": {
+        "receipt_id": {"type": "str", "required": true, "format": "REC-\\d{6}"},
+        "po_id": {"type": "str", "required": true, "format": "PO-\\d{6}"},
+        "quantity_received": {"type": "int", "required": true, "min": 1},
+        "received_at": {"type": "str", "required": true, "format": "YYYY-MM-DDTHH:MM:SS"},
+        "received_by": {"type": "str", "required": true, "format": "EMP-\\d{3}"},
+        "condition": {"type": "str", "required": true, "enum": "ReceiptCondition"}
+      }
+    },
+    "Invoice": {
+      "fields": {
+        "invoice_id": {"type": "str", "required": true, "format": "INV-\\d{6}"},
+        "supplier_id": {"type": "str", "required": true, "format": "SUP-\\d{3}"},
+        "supplier_invoice_number": {"type": "str", "required": true},
+        "po_id": {"type": "str", "required": true, "format": "PO-\\d{6}"},
+        "quantity": {"type": "int", "required": true, "min": 1},
+        "goods_net_jpy": {"type": "int", "required": true, "min": 1},
+        "freight_jpy": {"type": "int", "required": true, "min": 0},
+        "tax_jpy": {"type": "int", "required": true, "min": 0},
+        "gross_jpy": {"type": "int", "required": true, "min": 1},
+        "currency": {"type": "str", "required": true, "value": "JPY"},
+        "received_date": {"type": "str", "required": true, "format": "YYYY-MM-DD"},
+        "issue_date": {"type": "str", "required": true, "format": "YYYY-MM-DD"}
+      }
+    },
+    "InvoiceDecision": {
+      "fields": {
+        "invoice_id": {"type": "str", "required": true},
+        "status": {"type": "str", "required": true, "enum": "InvoiceStatus"},
+        "reason_code": {"type": "str", "required": true},
+        "due_date": {"type": "str", "nullable": true, "format": "YYYY-MM-DD"},
+        "matched_po_id": {"type": "str", "required": true},
+        "comparison_details": {"type": "dict", "required": true}
+      }
+    },
+    "AuditEvent": {
+      "fields": {
+        "event_id": {"type": "str", "required": true, "format": "EVT-\\d{8}"},
+        "entity_type": {"type": "str", "required": true},
+        "entity_id": {"type": "str", "required": true},
+        "action": {"type": "str", "required": true},
+        "actor_id": {"type": "str", "required": true},
+        "occurred_at": {"type": "str", "required": true, "format": "YYYY-MM-DDTHH:MM:SS"},
+        "before_state": {"type": "dict", "nullable": true},
+        "after_state": {"type": "dict", "nullable": true}
+      }
+    }
+  },
+  "function_signatures": [
+    {
+      "name": "route_request",
+      "module": "app.routing",
+      "args": ["request: Requisition", "config: ApprovalConfig"],
+      "return_type": "RouteDecision",
+      "purity": "pure",
+      "description": "Evaluates standard requisition routing rules R01-R04"
+    },
+    {
+      "name": "route_emergency",
+      "module": "app.emergency",
+      "args": ["request: Requisition", "config: ApprovalConfig"],
+      "return_type": "RouteDecision",
+      "purity": "pure",
+      "description": "Evaluates emergency requisition routing rules R01, R02, R03, and hardcoded R05"
+    },
+    {
+      "name": "evaluate_invoice",
+      "module": "app.matching",
+      "args": [
+        "invoice: Invoice",
+        "po: PO",
+        "receipts: list[Receipt]",
+        "seen_keys: set[str]",
+        "config: ApprovalConfig"
+      ],
+      "return_type": "InvoiceDecision",
+      "purity": "pure",
+      "description": "Pure 3-way matching and duplicate detection without mutating seen_keys (R07-R10)"
+    },
+    {
+      "name": "approve_request",
+      "module": "app.approval",
+      "args": [
+        "request: Requisition",
+        "route: RouteDecision",
+        "actor: Employee"
+      ],
+      "return_type": "AuditEvent",
+      "purity": "pure",
+      "description": "Checks maker-checker constraints and role eligibility (R06)"
+    },
+    {
+      "name": "calculate_freight",
+      "module": "app.calculations",
+      "args": ["goods_net_jpy: int"],
+      "return_type": "int",
+      "purity": "pure",
+      "description": "Calculates freight: 0 if goods net >= 500,000 JPY else 2,000 JPY (R12)"
+    },
+    {
+      "name": "calculate_tax",
+      "module": "app.calculations",
+      "args": ["goods_net_jpy: int"],
+      "return_type": "int",
+      "purity": "pure",
+      "description": "Calculates floor(goods_net_jpy * 10 / 100) (R10)"
+    },
+    {
+      "name": "calculate_due_date",
+      "module": "app.calculations",
+      "args": ["received_date: str"],
+      "return_type": "str",
+      "purity": "pure",
+      "description": "Returns received_date + 30 calendar days (R10)"
+    }
+  ],
+  "csv_schemas": {
+    "data/suppliers.csv": {
+      "columns": ["supplier_id", "display_name", "status", "risk", "contact_email"],
+      "delimiter": ","
+    },
+    "data/employees.csv": {
+      "columns": ["employee_id", "display_name", "department", "roles"],
+      "delimiter": ","
+    }
+  },
+  "jsonl_schemas": {
+    "data/requisitions.jsonl": "Requisition",
+    "data/purchase_orders.jsonl": "PO",
+    "data/receipts.jsonl": "Receipt",
+    "data/invoices.jsonl": "Invoice",
+    "routes.jsonl": "RouteDecision",
+    "invoice_decisions.jsonl": "InvoiceDecision"
+  },
+  "workbooks": {
+    "data/approval_matrix.xlsx": {
+      "sheets": {
+        "RoutingRules": {
+          "header_row": 1,
+          "columns": ["Role", "Threshold_JPY", "Condition", "Notes"],
+          "key_cells": {
+            "B2": {"description": "Auto approval ceiling", "expected_s0_val": 499999},
+            "B4": {"description": "Manager approval threshold", "expected_s0_val": 500000, "note": "C01 conflict in S0: workbook states 500,000 while config uses 1,000,000"}
+          }
+        }
+      }
+    },
+    "data/supplier_directory.xlsx": {
+      "sheets": {
+        "Vendors": {
+          "header_row": 1,
+          "columns": ["Supplier_ID", "Vendor_Name", "Rating", "Status", "Payment_Terms"]
+        }
+      }
+    },
+    "data/procurement_summary_202609.xlsx": {
+      "sheets": {
+        "MonthlySummary": {
+          "header_row": 1,
+          "columns": ["Metric", "Value_JPY", "Count"]
+        }
+      }
+    }
+  },
+  "cli_commands": {
+    "route": {
+      "description": "Evaluate approval routing for input requisitions",
+      "arguments": {
+        "--requests": {"type": "Path", "required": true, "help": "Path to requisitions.jsonl"},
+        "--config": {"type": "Path", "required": true, "help": "Path to approval.yaml"},
+        "--output": {"type": "Path", "required": true, "help": "Destination path for routes.jsonl"}
+      }
+    },
+    "match": {
+      "description": "Perform 3-way matching on invoices against POs and receipts",
+      "arguments": {
+        "--data-dir": {"type": "Path", "required": true, "help": "Directory containing purchase_orders.jsonl, receipts.jsonl, invoices.jsonl"},
+        "--config": {"type": "Path", "required": true, "help": "Path to approval.yaml"},
+        "--output": {"type": "Path", "required": true, "help": "Destination path for invoice_decisions.jsonl"}
+      }
+    },
+    "inspect": {
+      "description": "Inspect single entity by ID across dataset",
+      "arguments": {
+        "--entity": {"type": "str", "required": true, "choices": ["po", "invoice", "requisition"]},
+        "--id": {"type": "str", "required": true, "help": "Entity identifier"},
+        "--data-dir": {"type": "Path", "required": true, "help": "Path to data directory"}
+      }
+    }
+  },
+  "config_keys": {
+    "config/approval.yaml": [
+      "version",
+      "currency",
+      "routing_rules.standard_manager_threshold_jpy",
+      "routing_rules.capex_finance_threshold_jpy",
+      "routing_rules.high_risk_route",
+      "matching_rules.price_tolerance_fixed_jpy",
+      "matching_rules.price_tolerance_percent",
+      "matching_rules.payment_term_days"
+    ],
+    "config/workflow.yaml": [
+      "workflow_name",
+      "steps",
+      "escalation_policy"
+    ]
+  },
+  "module_dependencies": {
+    "app.enums": [],
+    "app.models": ["app.enums"],
+    "app.calculations": [],
+    "app.config_loader": ["app.models"],
+    "app.routing": ["app.models", "app.enums"],
+    "app.emergency": ["app.models", "app.enums"],
+    "app.approval": ["app.models", "app.enums"],
+    "app.matching": ["app.models", "app.enums", "app.calculations"],
+    "app.data_loader": ["app.models"],
+    "app.cli": [
+      "app.models",
+      "app.config_loader",
+      "app.data_loader",
+      "app.routing",
+      "app.emergency",
+      "app.matching"
+    ]
+  },
+  "stage_file_ownership": {
+    "01_BLUEPRINT": [
+      "authoring/blueprint.md",
+      "authoring/contracts.json",
+      "authoring/build_contract.md",
+      "operator/generation_batches.md"
+    ],
+    "02_CORE_APPLICATION": [
+      "bundles/harbor_demo/input/app/__init__.py",
+      "bundles/harbor_demo/input/app/enums.py",
+      "bundles/harbor_demo/input/app/models.py",
+      "bundles/harbor_demo/input/app/calculations.py",
+      "bundles/harbor_demo/input/app/config_loader.py",
+      "bundles/harbor_demo/input/app/routing.py",
+      "bundles/harbor_demo/input/app/emergency.py",
+      "bundles/harbor_demo/input/app/approval.py",
+      "bundles/harbor_demo/input/app/matching.py",
+      "bundles/harbor_demo/input/app/data_loader.py",
+      "bundles/harbor_demo/input/app/cli.py",
+      "bundles/harbor_demo/input/config/approval.yaml",
+      "bundles/harbor_demo/input/config/workflow.yaml",
+      "bundles/harbor_demo/input/tests/__init__.py",
+      "bundles/harbor_demo/input/tests/test_routing.py",
+      "bundles/harbor_demo/input/tests/test_matching.py",
+      "bundles/harbor_demo/input/tests/test_calculations.py",
+      "bundles/harbor_demo/input/tests/test_cli.py",
+      "bundles/harbor_demo/input/requirements.txt",
+      "bundles/harbor_demo/input/README.md"
+    ],
+    "03_DATA_BUILDERS": [
+      "authoring/builders/generate_records.py",
+      "authoring/builders/case_catalog.json",
+      "evaluator_private/validation/edge_cases_24.jsonl"
+    ],
+    "04_WORKBOOKS_DOCUMENTS": [
+      "authoring/builders/build_workbooks.py",
+      "authoring/builders/render_forms.py"
+    ],
+    "05_BUSINESS_DESIGN_MANUALS": [
+      "bundles/harbor_demo/input/docs/procurement_policy.md",
+      "bundles/harbor_demo/input/docs/requisition_sop.md",
+      "bundles/harbor_demo/input/docs/invoice_matching_manual.md",
+      "bundles/harbor_demo/input/docs/finance_desk_guide.md",
+      "bundles/harbor_demo/input/docs/system_architecture.md",
+      "bundles/harbor_demo/input/docs/data_dictionary.md",
+      "bundles/harbor_demo/input/docs/cli_guide.md",
+      "bundles/harbor_demo/input/docs/emergency_purchases.md"
+    ],
+    "06_ORACLE_TESTS": [
+      "evaluator_private/oracle.py",
+      "evaluator_private/anchors.json",
+      "evaluator_private/check_leakage.py"
+    ],
+    "07_SCENARIOS_VARIANTS": [
+      "authoring/builders/mutate_scenarios.py",
+      "evaluator_private/scenarios/s0_baseline.json",
+      "evaluator_private/scenarios/s1_manager_500k.json",
+      "evaluator_private/scenarios/s2_manager_750k.json",
+      "evaluator_private/scenarios/s3_restore_s0.json",
+      "evaluator_private/scenarios/s4_excel_drift_650k.json",
+      "evaluator_private/scenarios/s5_finance_capex_only.json"
+    ],
+    "08_REVIEW_REPAIR": [
+      "authoring/verify_invariants.py",
+      "reports/s0_baseline_audit.md"
+    ],
+    "09_PACKAGE_DEMO": [
+      "authoring/build.py",
+      "operator/demo_runbook.md",
+      "operator/evidence_manifest.json"
+    ]
+  }
+}

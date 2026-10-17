@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ripple.local/contracts/ai-closed-loop-v2-api.schema.json",
+  "title": "AI Closed Loop v2 API envelopes",
+  "$defs": {
+    "readRequest": {
+      "type": "object",
+      "required": ["schema_version", "workspace_id"],
+      "properties": {
+        "schema_version": {"const": "1.0.0"},
+        "workspace_id": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "mutationRequest": {
+      "type": "object",
+      "required": ["schema_version", "workspace_id", "idempotency_key", "expected_revision", "payload"],
+      "properties": {
+        "schema_version": {"const": "1.0.0"},
+        "workspace_id": {"type": "string", "minLength": 1},
+        "idempotency_key": {"type": "string", "minLength": 1},
+        "expected_revision": {"type": "string", "minLength": 1},
+        "payload": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "synchronousResponse": {
+      "type": "object",
+      "required": ["schema_version", "workspace_id", "revision", "result"],
+      "properties": {
+        "schema_version": {"const": "1.0.0"},
+        "workspace_id": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1},
+        "result": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "jobResponse": {
+      "type": "object",
+      "required": ["schema_version", "workspace_id", "operation_id", "status"],
+      "properties": {
+        "schema_version": {"const": "1.0.0"},
+        "workspace_id": {"type": "string", "minLength": 1},
+        "operation_id": {"type": "string", "minLength": 1},
+        "status": {"enum": ["QUEUED", "RUNNING", "SUCCEEDED", "PARTIAL", "FAILED", "CANCELLED"]}
+      },
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {"enum": ["forbidden", "stale_revision", "invalid_evidence", "unresolved_gap", "unsupported_format", "unsupported_simulation", "provider_unavailable", "budget_exceeded", "runner_failed", "recovery_required", "idempotency_conflict", "invalid_request", "not_found", "knowledge_rebuilding"]},
+        "message": {"type": "string"}
+      },
+      "additionalProperties": false
+    }
+  }
+}

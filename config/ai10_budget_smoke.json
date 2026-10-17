@@ -1,0 +1,16 @@
+{
+  "per_job_cap_usd": "0.10",
+  "total_cap_usd": "2.00",
+  "max_output_tokens": 2048,
+  "max_input_tokens_per_call": 4096,
+  "max_retries": 0,
+  "max_provider_calls_per_job": 1,
+  "model_prices": {
+    "gemini-3.8-flash": {"input_usd_per_1k": "0.0015", "output_usd_per_1k": "0.0075"},
+    "gemini-3.5-flash-lite": {"input_usd_per_1k": "0.0003", "output_usd_per_1k": "0.0025"}
+  },
+  "default_model_id": "gemini-3.8-flash",
+  "fail_closed_on_missing_usage": true,
+  "latency_slo_p50_seconds": 30.0,
+  "latency_slo_p95_seconds": 90.0
+}

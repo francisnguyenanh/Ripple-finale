@@ -1,0 +1,25 @@
+{
+  "template_version": "1",
+  "schema": "fkl-doc/1",
+  "mode": "technical",
+  "locale": "en",
+  "title": "Business knowledge - technical view",
+  "sections": ["overview", "rules", "relations", "conflicts", "unknowns", "implementation", "decisions"],
+  "headings": {
+    "overview": "Snapshot",
+    "rules": "Rules",
+    "relations": "Relations",
+    "conflicts": "Conflicts",
+    "unknowns": "Open and accepted-unknown questions",
+    "implementation": "Implementation status",
+    "decisions": "Decision records"
+  },
+  "labels": {
+    "rule_id": "Rule ID", "status": "Status", "actor": "Actor", "condition": "Condition (expression)", "outcome": "Outcome", "exceptions": "Exceptions",
+    "scope": "Scope", "origin": "Provenance", "implementation": "Implementation"
+  },
+  "words": {
+    "actor_unknown": "null", "condition_unknown": "null", "no_exceptions": "none", "none": "none",
+    "redacted": "[redacted: source references need the evidence.read permission]"
+  }
+}

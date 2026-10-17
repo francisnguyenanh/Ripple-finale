@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// Ripple realtime feeds (extension FS-R1 hints, FS-C1 conversation documents). Layout: feeds/{feedId}/items/{key}, written ONLY by the Ripple backend
+// (server credentials bypass these rules). Every claim of a listener token is decided by the server (POST /v2/projection/feed-token):
+//   ripple_feeds    the feed ids this member may read (current permissions)
+//   ripple_ws       the workspace feed id, also the id of its policy document
+//   ripple_policy   the workspace membership policy version at issue
+//   ripple_until_ms expiry (issue time + TTL)
+// A read is allowed only for a listed feed, before the expiry, and while feed_policies/{ripple_ws}.policy_version still equals ripple_policy: every membership
+// grant or revoke bumps that version, so tokens issued before it stop working. A hint says only "re-fetch the API"; the API stays the source of truth.
+// Everything else is denied. Verified against the local emulator only (tests/final_loop/test_fs_emulator.py).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function policyOf(ws) {
+      return get(/databases/$(database)/documents/feed_policies/$(ws)).data.policy_version;
+    }
+    match /feeds/{feedId}/items/{key} {
+      allow get, list: if request.auth != null
+                       && request.auth.token.ripple_feeds is list
+                       && feedId in request.auth.token.ripple_feeds
+                       && request.auth.token.ripple_until_ms is int
+                       && request.time.toMillis() < request.auth.token.ripple_until_ms
+                       && request.auth.token.ripple_ws is string
+                       && exists(/databases/$(database)/documents/feed_policies/$(request.auth.token.ripple_ws))
+                       && policyOf(request.auth.token.ripple_ws) == request.auth.token.ripple_policy;
+      allow create, update, delete: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

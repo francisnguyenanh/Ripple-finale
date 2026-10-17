@@ -1,0 +1,403 @@
+{
+  "bundle_id": "harbor_demo",
+  "seed": 20260925,
+  "reference_date": "2026-09-01",
+  "file_count": 79,
+  "files": [
+    {
+      "path": "app/__init__.py",
+      "size_bytes": 83,
+      "sha256": "596773779df7034d7e94a294d3947f02249ff3c4fa8e8413d5cebf65c956b7a0"
+    },
+    {
+      "path": "app/__pycache__/__init__.cpython-314.pyc",
+      "size_bytes": 297,
+      "sha256": "124d78856d5bb92ffc82217057b34f56fd3fc518f5a3393d0d983c0fe62e6f44"
+    },
+    {
+      "path": "app/__pycache__/approval.cpython-314.pyc",
+      "size_bytes": 3733,
+      "sha256": "fc6d17d14485547cb0d56e7bbcbe83299df8d7f09fef422561e39de40cdcf24f"
+    },
+    {
+      "path": "app/__pycache__/calculations.cpython-314.pyc",
+      "size_bytes": 2968,
+      "sha256": "886a67e947730cace2abbd71a8a3ce6565ca8c907c6dfbe9db5a57db1945bbbb"
+    },
+    {
+      "path": "app/__pycache__/cli.cpython-314.pyc",
+      "size_bytes": 9434,
+      "sha256": "0bb19db4830441af65edaa1a2e5344ef2930703c59af451390421b09d1aa97ce"
+    },
+    {
+      "path": "app/__pycache__/config_loader.cpython-314.pyc",
+      "size_bytes": 3143,
+      "sha256": "c0b3771e8d203e2534150e415de89a25868b537119cffe38d72542a28a81e9d6"
+    },
+    {
+      "path": "app/__pycache__/data_loader.cpython-314.pyc",
+      "size_bytes": 10693,
+      "sha256": "d34d6b5509b61d020fa31fea276e02766c3f187884371842217c9bcf825e02af"
+    },
+    {
+      "path": "app/__pycache__/emergency.cpython-314.pyc",
+      "size_bytes": 4131,
+      "sha256": "bf29735dcb3cc2c3043c6841b018f4fa8f813eebcc71f4efe519c46f953e8ee0"
+    },
+    {
+      "path": "app/__pycache__/enums.cpython-314.pyc",
+      "size_bytes": 2637,
+      "sha256": "da08bc9034a68009077bf877d0d2b464df0db9c0139c07861faaae93de392f89"
+    },
+    {
+      "path": "app/__pycache__/matching.cpython-314.pyc",
+      "size_bytes": 5615,
+      "sha256": "c760ff1f0bc489e079fd2b65b41ab567a886a549dc7422b576b63d3d7befb078"
+    },
+    {
+      "path": "app/__pycache__/models.cpython-314.pyc",
+      "size_bytes": 7673,
+      "sha256": "c9be55bcac03469a05122076cf1f2a71b6fbf00555715a3a5665bc4ce8a11e0d"
+    },
+    {
+      "path": "app/__pycache__/routing.cpython-314.pyc",
+      "size_bytes": 4045,
+      "sha256": "0f12acb0190f02456049b89cc7b8ce18daaeca00b4bed6798d872936e0275e72"
+    },
+    {
+      "path": "app/approval.py",
+      "size_bytes": 2618,
+      "sha256": "e8c904b3313d59bbc28606617f97a960afcf328498b704f134c5aae3930792ed"
+    },
+    {
+      "path": "app/calculations.py",
+      "size_bytes": 1530,
+      "sha256": "259628d74a4c9ba4142557758a6278b346906c94f2d5507cd4541c9de2dd4c49"
+    },
+    {
+      "path": "app/cli.py",
+      "size_bytes": 5994,
+      "sha256": "32b9560f9a8b8f6e2d9e1005d68805b3d9f04655667edebd1a45a69d566c63de"
+    },
+    {
+      "path": "app/config_loader.py",
+      "size_bytes": 2077,
+      "sha256": "b16e2837db60195692f660d0003d04febfa4f4ddda215945e068476ef2f2e8a9"
+    },
+    {
+      "path": "app/data_loader.py",
+      "size_bytes": 6426,
+      "sha256": "1ef1e65922566a8121b19e79be69c404b2d845e33c77fcc313707eab715e852d"
+    },
+    {
+      "path": "app/emergency.py",
+      "size_bytes": 2552,
+      "sha256": "7b380324cc9cf723c2e6ba789e509c238c20321a7f63cb4e0893ea14139ed499"
+    },
+    {
+      "path": "app/enums.py",
+      "size_bytes": 1044,
+      "sha256": "0ebd62cd394990479dd51deaf6cca68d8509b5ec52a1c78edf5f0cc8ece2dac9"
+    },
+    {
+      "path": "app/matching.py",
+      "size_bytes": 3991,
+      "sha256": "403b921a96442e045636369441373b02b72778ff3948dc51f5fca4c60e5b131e"
+    },
+    {
+      "path": "app/models.py",
+      "size_bytes": 2591,
+      "sha256": "2e9f0642ce268dedd368b0516e6c5e5a5728486389e46ba96bc5fc917afcc681"
+    },
+    {
+      "path": "app/routing.py",
+      "size_bytes": 2437,
+      "sha256": "84328e5a44834f328a5e1eacd56d6d2d80ef381df5dd9f64844c2e66aa405b60"
+    },
+    {
+      "path": "config/approval.yaml",
+      "size_bytes": 271,
+      "sha256": "1daa028ecd1854b7c45459efcbe63a53e1856324f0ff9c3ec22fa3a3a10df7f9"
+    },
+    {
+      "path": "config/workflow.yaml",
+      "size_bytes": 592,
+      "sha256": "75529325d7e49089b214dce2f4cd15503730b639ab349215bdaff51291be57b2"
+    },
+    {
+      "path": "data/approval_matrix.xlsx",
+      "size_bytes": 6238,
+      "sha256": "99dd8672b81353b6c69833134960c8ba56625e57ae96ab55e31ac85a5a95337b"
+    },
+    {
+      "path": "data/employees.csv",
+      "size_bytes": 373,
+      "sha256": "af2fea44b201ad5db52008a1a4481fafd6d8c07b4e3eb6f06880a5fea4f5a5ff"
+    },
+    {
+      "path": "data/invoices.jsonl",
+      "size_bytes": 37117,
+      "sha256": "33e19047cd34e578a7ae94967b587481215002f6258c9123b2622aabcd24ff25"
+    },
+    {
+      "path": "data/procurement_summary_202609.xlsx",
+      "size_bytes": 5178,
+      "sha256": "bc829ac84c0223807037ecb39cd551ec49a868ba3c8e9151f5f66bb04c3e943b"
+    },
+    {
+      "path": "data/purchase_orders.jsonl",
+      "size_bytes": 33747,
+      "sha256": "80b70d45230a431532c32b5754fdb2e6b5f87547347a16f65e138b2f2451473f"
+    },
+    {
+      "path": "data/receipts.jsonl",
+      "size_bytes": 23132,
+      "sha256": "f949b53e645b6a3ef11dca26c944a152e55c94b1ad572c02a64efea4f113c229"
+    },
+    {
+      "path": "data/requisitions.jsonl",
+      "size_bytes": 66472,
+      "sha256": "22cf6c894f8b8ec025c71bdea109346e9e8b9ee9c5a3ef3faf6f84e586b457d8"
+    },
+    {
+      "path": "data/supplier_directory.xlsx",
+      "size_bytes": 5657,
+      "sha256": "583a6efc4e555ae63a5c4ad6ed891e9123b0e660cb4771b75f2bd0ead4d45fbb"
+    },
+    {
+      "path": "data/suppliers.csv",
+      "size_bytes": 1468,
+      "sha256": "8f1ab823c879a7dfaf53396602a15da9b9f4b387722386e1575d5df287d84710"
+    },
+    {
+      "path": "docs/cli_guide.md",
+      "size_bytes": 1601,
+      "sha256": "e3a7c5f0c03fdd080992d527c28a16af57dcfc701ec9c7fbb79b2f97ab8afd03"
+    },
+    {
+      "path": "docs/data_dictionary.md",
+      "size_bytes": 4991,
+      "sha256": "099062c8daa014d153f9ce0e51ff4af34946af6e631688ee7b985213ce497317"
+    },
+    {
+      "path": "docs/emergency_purchases.md",
+      "size_bytes": 1184,
+      "sha256": "c1a31fddaaa11abb2dfce205fe1bed8fa5285fb4d58a818267858a2d96dd5e5d"
+    },
+    {
+      "path": "docs/finance_desk_guide.md",
+      "size_bytes": 1273,
+      "sha256": "c4d93f3f07ead2eff1c4b769f8ef8b91346fe101b15cf5e003bfed8459dba5fa"
+    },
+    {
+      "path": "docs/invoice_matching_manual.md",
+      "size_bytes": 3305,
+      "sha256": "4af7565c1cce48f539d85c28a59d4a457f23cb450f0ee64bb538d28cd623f0bd"
+    },
+    {
+      "path": "docs/procurement_policy.md",
+      "size_bytes": 3175,
+      "sha256": "f53b619c4f32d75b096d4cf57b87ae6f4dfbe241ce62ffa2cf3fae6f03b7f389"
+    },
+    {
+      "path": "docs/requisition_sop.md",
+      "size_bytes": 2294,
+      "sha256": "4c4ecd664a0659148f39a67982f2381afcdb5e9e86fb4f311ae14c10ff0c3342"
+    },
+    {
+      "path": "docs/system_architecture.md",
+      "size_bytes": 1828,
+      "sha256": "09e76656678b38822cab9c3bf5119850b9475e2a98203404089a92463be48c95"
+    },
+    {
+      "path": "forms/invoices/INV-000001.html",
+      "size_bytes": 3120,
+      "sha256": "238d07fe483a87e816c9784833baeb55bea354a41f44f57c784697ad0a3ecfce"
+    },
+    {
+      "path": "forms/invoices/INV-000002.html",
+      "size_bytes": 3120,
+      "sha256": "a89eed7d49f89879a7d49f991f393795641dd1c00d9283bde9d6dc401b18d27a"
+    },
+    {
+      "path": "forms/invoices/INV-000003.html",
+      "size_bytes": 3120,
+      "sha256": "b80c246cd964dc58136915a77ea3eccc2f5e6f54f80690660cbf36f5274c58e7"
+    },
+    {
+      "path": "forms/invoices/INV-000004.html",
+      "size_bytes": 3120,
+      "sha256": "5d8d31f8da2b2455b2cf739ba9f62e736a22126ee7d7c4a552b874af1deba932"
+    },
+    {
+      "path": "forms/invoices/INV-000005.html",
+      "size_bytes": 3120,
+      "sha256": "b480583bb15d9173e0e532cb785218ae0dc0d15af0ddc8f174fb7a77120897ba"
+    },
+    {
+      "path": "forms/invoices/INV-000006.html",
+      "size_bytes": 3120,
+      "sha256": "fbd810273aa454a0f500411249f150127b06f213a9fc982105befd377f1837d8"
+    },
+    {
+      "path": "forms/invoices/INV-000007.html",
+      "size_bytes": 3120,
+      "sha256": "ca4cb0b936733214ebe66d85c07cec8af0dcaaafbbab8d16c24e6433d52ca963"
+    },
+    {
+      "path": "forms/invoices/INV-000008.html",
+      "size_bytes": 3120,
+      "sha256": "3d1f613e7b866828677cc3fe274be47a1e76b1fe77003f217cde4abed02610f3"
+    },
+    {
+      "path": "forms/invoices/INV-000009.html",
+      "size_bytes": 3120,
+      "sha256": "5235cac4e39b7970a3d99317ad4b2dd93e4326c92090cdd1574e8dd86adf71c3"
+    },
+    {
+      "path": "forms/invoices/INV-000010.html",
+      "size_bytes": 3120,
+      "sha256": "7b66afe3681027c6acbe977ac0b4a1e8c1851ff43d39815e7256b103e902ec8e"
+    },
+    {
+      "path": "forms/invoices/INV-000011.html",
+      "size_bytes": 3120,
+      "sha256": "113df6feee47357ab8f51950793a3ddb06c3a3cff1e5ac2003099c4c036f45ff"
+    },
+    {
+      "path": "forms/invoices/INV-000012.html",
+      "size_bytes": 3120,
+      "sha256": "c247e6e119fdae4f56be736e1b06bf04935c46e41f668d00381be62bbae78e9b"
+    },
+    {
+      "path": "forms/receipts/REC-000001.html",
+      "size_bytes": 2422,
+      "sha256": "90f663b83f661ac40906ad269c2b3b5edaca7c0e8f7e05659d90488308ea0bdc"
+    },
+    {
+      "path": "forms/receipts/REC-000002.html",
+      "size_bytes": 2420,
+      "sha256": "cf512791b0c84d0a38d6ed1de14c401100c602763e2dce420219c18cfcf03e69"
+    },
+    {
+      "path": "forms/receipts/REC-000003.html",
+      "size_bytes": 2422,
+      "sha256": "5781dd366d43d05f10db3815ba8655f2a30c4fb498d1cdbbfcfd6b71ea95ff35"
+    },
+    {
+      "path": "forms/receipts/REC-000004.html",
+      "size_bytes": 2420,
+      "sha256": "3d85bcc42985919b1e55be8e18df41c858cbe1417de446d557f12abfdbd66fe3"
+    },
+    {
+      "path": "forms/receipts/REC-000005.html",
+      "size_bytes": 2422,
+      "sha256": "50c58344c8a33529a306e6db54c4447230c0fd724247dfec33fac6b4b84782ec"
+    },
+    {
+      "path": "forms/receipts/REC-000006.html",
+      "size_bytes": 2422,
+      "sha256": "c84005a542e9e5804f660e95df8712e637616b0cd0e3fe49d406c79aef3808e3"
+    },
+    {
+      "path": "forms/receipts/REC-000007.html",
+      "size_bytes": 2422,
+      "sha256": "f76353a7b4a23c32886e9bea6b6a330109a3d7083fe6c66c195e48ef5421eb8a"
+    },
+    {
+      "path": "forms/receipts/REC-000008.html",
+      "size_bytes": 2422,
+      "sha256": "0a16ee20d32050502650c39864c8d727c01408464507db209e86243cc213a55a"
+    },
+    {
+      "path": "forms/receipts/REC-000009.html",
+      "size_bytes": 2422,
+      "sha256": "b1d332546fa55e6e62b1775358c5631565887d481fbf7c8d7f0b6f1192982158"
+    },
+    {
+      "path": "forms/receipts/REC-000010.html",
+      "size_bytes": 2422,
+      "sha256": "2f3ee315b42324f64d74365570eb647844adb1a5dd1e5af8a980af7edb676071"
+    },
+    {
+      "path": "forms/receipts/REC-000011.html",
+      "size_bytes": 2422,
+      "sha256": "2f91768c83955a200342d018fc8d16a594dce7545eaae5e24bf2fa1d1e170a74"
+    },
+    {
+      "path": "forms/receipts/REC-000012.html",
+      "size_bytes": 2422,
+      "sha256": "a341b1fd46a49dae5ff50c5dfa47b7803d93d06109312a3fac4c9b09fc393fa8"
+    },
+    {
+      "path": "README.md",
+      "size_bytes": 1783,
+      "sha256": "7392407b364c0adac22b2160982b0b75e08a890e1aa45cea101753d378c53e2e"
+    },
+    {
+      "path": "requirements.txt",
+      "size_bytes": 83,
+      "sha256": "1948d7b82263fb17fc901ec7cb7d0d78156695744af31675ee68264a41f6e957"
+    },
+    {
+      "path": "run_output/invoice_decisions.jsonl",
+      "size_bytes": 53207,
+      "sha256": "bb8ca3542c7a98e2f51c10e3b3ce62a1c11d439525c75a30c828b98e4934ceb9"
+    },
+    {
+      "path": "run_output/routes.jsonl",
+      "size_bytes": 36945,
+      "sha256": "c018480c4557caaadf9ee5e9fc9aaaf9669097da0b0c4bee5def544a8b499267"
+    },
+    {
+      "path": "tests/__init__.py",
+      "size_bytes": 63,
+      "sha256": "fe237cddf8a864ab322133a32884c482ea4f9f8463139287fe92504dc7e79391"
+    },
+    {
+      "path": "tests/__pycache__/__init__.cpython-314.pyc",
+      "size_bytes": 273,
+      "sha256": "2367a624d6679b1b197ba71e62598a631a36d5ca8c97b49edb86be3bb961ede5"
+    },
+    {
+      "path": "tests/__pycache__/test_calculations.cpython-314-pytest-8.3.3.pyc",
+      "size_bytes": 9642,
+      "sha256": "e3cdc1930a4fa1eb29ab1c226338e6cc4a3fcbb2b73a928b23a830b7e3a00d23"
+    },
+    {
+      "path": "tests/__pycache__/test_cli.cpython-314-pytest-8.3.3.pyc",
+      "size_bytes": 10056,
+      "sha256": "0bf4ec1c8c4b5fe2366854b6af276200efec2eee3bab2c7c73cc1eda3905d4c4"
+    },
+    {
+      "path": "tests/__pycache__/test_matching.cpython-314-pytest-8.3.3.pyc",
+      "size_bytes": 11217,
+      "sha256": "0510ad537f60f1b79c3e2c47ec12a764864d857cb4402e7759e9e45ffde57232"
+    },
+    {
+      "path": "tests/__pycache__/test_routing.cpython-314-pytest-8.3.3.pyc",
+      "size_bytes": 18200,
+      "sha256": "e673e12e41e4c6bdbc83cd0de5bde15df74835dc935dfa646e2984ab3072382d"
+    },
+    {
+      "path": "tests/test_calculations.py",
+      "size_bytes": 1629,
+      "sha256": "c57862f46278c9acb0b363be8407231e3d01b9b4d726d4f7c05c3507602dc299"
+    },
+    {
+      "path": "tests/test_cli.py",
+      "size_bytes": 4030,
+      "sha256": "61a23fd8f2e7ce4e234d2e7aaa6d7bb81b69a29bace602f1266be935e92801b7"
+    },
+    {
+      "path": "tests/test_matching.py",
+      "size_bytes": 5143,
+      "sha256": "36d4a361e03cb27d681fd723390bc920515ead2c5bcf7b53130e0bf51b005419"
+    },
+    {
+      "path": "tests/test_routing.py",
+      "size_bytes": 5213,
+      "sha256": "91da393f836cdc32fc4b41176f85e538fdaf3941ec1f60fa15b689ae97f2e362"
+    }
+  ]
+}

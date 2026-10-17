@@ -1,0 +1,152 @@
+{
+  "note": "SEALED unseen change-request set v1 (agent-authored 2026-10-17 by an independent reviewer session; pending owner review; never used for tuning)",
+  "changes": [
+    {
+      "id": "UC1",
+      "kind": "numeric",
+      "request": "Widen the fixed invoice price tolerance from 10,000 JPY to 15,000 JPY.",
+      "expected": {
+        "status": "READY",
+        "operation_kinds": [
+          "set_value"
+        ],
+        "rule_ids": [
+          "rule-price-tolerance"
+        ],
+        "desired_values": [
+          15000
+        ],
+        "rationale": "Single numeric value on rule-price-tolerance (invoice.price_difference_jpy <= 10,000); approval.yaml matching_rules.price_tolerance_fixed_jpy holds the observed value; the percent tolerance is not mentioned and must stay."
+      }
+    },
+    {
+      "id": "UC2",
+      "kind": "numeric",
+      "request": "Department head sign-off for travel expenses should start at 300,000 JPY rather than 200,000 JPY.",
+      "expected": {
+        "status": "READY",
+        "operation_kinds": [
+          "set_value"
+        ],
+        "rule_ids": [
+          "rule-travel-limit"
+        ],
+        "desired_values": [
+          300000
+        ],
+        "rationale": "Single numeric change on rule-travel-limit (expense.travel_jpy > 200,000); no other rule carries 200,000 or concerns travel."
+      }
+    },
+    {
+      "id": "UC3",
+      "kind": "actor",
+      "request": "Quarterly review of software licence renewals should be done by the Finance Controller instead of IT governance.",
+      "expected": {
+        "status": "READY",
+        "operation_kinds": [
+          "set_actor"
+        ],
+        "rule_ids": [
+          "rule-license-renewal"
+        ],
+        "desired_values": [
+          "role-finance-controller"
+        ],
+        "rationale": "Actor change on rule-license-renewal from role-it-governance to role-finance-controller (slug already used by rule-budget-code); no amount involved."
+      }
+    },
+    {
+      "id": "UC4",
+      "kind": "actor",
+      "request": "Standard requisitions of 1,000,000 JPY or more should be routed to the Operations Director rather than to a manager.",
+      "expected": {
+        "status": "READY",
+        "operation_kinds": [
+          "set_actor"
+        ],
+        "rule_ids": [
+          "rule-standard-manager-review"
+        ],
+        "desired_values": [
+          "role-director"
+        ],
+        "rationale": "Actor change on rule-standard-manager-review from role-manager to role-director; the 1,000,000 figure identifies the rule and must not be altered, and rule-emergency-routing (same number in emergency.py) is untouched."
+      }
+    },
+    {
+      "id": "UC5",
+      "kind": "condition",
+      "request": "Director review for HIGH-risk suppliers should only kick in when the order is 100,000 JPY or more.",
+      "expected": {
+        "status": "READY",
+        "operation_kinds": [
+          "add_or_change_condition"
+        ],
+        "rule_ids": [
+          "rule-high-risk-director"
+        ],
+        "desired_values": [
+          100000
+        ],
+        "rationale": "Adds an amount leg (request.net_amount_jpy >= 100,000) with all() to rule-high-risk-director's supplier.risk == HIGH condition; the policy currently says regardless of amount, so the observed text and emergency.py are affected and the CAPEX rules are not."
+      }
+    },
+    {
+      "id": "UC6",
+      "kind": "scope",
+      "request": "The ban on approving your own requisition must also apply to emergency requisitions.",
+      "expected": {
+        "status": "READY",
+        "operation_kinds": [
+          "set_scope"
+        ],
+        "rule_ids": [
+          "rule-maker-checker"
+        ],
+        "desired_values": [
+          "STANDARD",
+          "EMERGENCY"
+        ],
+        "rationale": "Scope widening on rule-maker-checker from STANDARD to STANDARD plus EMERGENCY; no value or actor changes."
+      }
+    },
+    {
+      "id": "UC7",
+      "kind": "multi_part",
+      "request": "Pay invoices within 45 days instead of 30, make the automatic rejection of blocked suppliers apply to emergency requisitions too, and have the Operations Director rather than Finance review CAPEX of 2,000,000 JPY or more.",
+      "expected": {
+        "status": "READY",
+        "operation_kinds": [
+          "set_value",
+          "set_scope",
+          "set_actor"
+        ],
+        "rule_ids": [
+          "rule-payment-term",
+          "rule-blocked-supplier",
+          "rule-capex-finance-config"
+        ],
+        "desired_values": [
+          45,
+          "EMERGENCY",
+          "role-director"
+        ],
+        "rationale": "Three independent parts: set_value 45 on rule-payment-term, set_scope adding EMERGENCY on rule-blocked-supplier, set_actor role-director on rule-capex-finance-config (the 2,000,000 figure selects the config/decided rule, not rule-capex-finance-policy); all three must be accounted for."
+      }
+    },
+    {
+      "id": "UC8",
+      "kind": "unsupported",
+      "request": "Bump the approval limit up by half a million.",
+      "expected": {
+        "status": "CLARIFY",
+        "operation_kinds": [],
+        "rule_ids": [],
+        "desired_values": [
+          500000
+        ],
+        "rationale": "No rule is named and several rules carry an amount (manager 1,000,000, CAPEX 2,000,000 and 5,000,000, travel 200,000, freight 500,000); the relative increase cannot be resolved to one rule and value without asking which limit is meant."
+      }
+    }
+  ]
+}

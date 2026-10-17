@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "title": "Approval",
+  "description": "I12: a state transition WITH an audit record. `proposal_version` is what stops an approval of v1 from silently authorising v2.",
+  "required": [
+    "schema_version",
+    "actor",
+    "timestamp",
+    "changeset_id",
+    "proposal_version",
+    "decision",
+    "reason"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "description": "Contract version. P8 detects a stale record by comparing this."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 1
+    },
+    "changeset_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "proposal_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "decision": {
+      "enum": [
+        "APPROVED",
+        "REJECTED"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$id": "Approval.json"
+}

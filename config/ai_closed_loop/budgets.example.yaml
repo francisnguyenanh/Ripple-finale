@@ -1,0 +1,67 @@
+# Example config for infra/worker/budget_config.py::load_budget_config .
+# Contract: docs/contracts/AI_CLOSED_LOOP_BUDGETS.md
+#
+# This is a SHAPE REFERENCE, checked into the repo. It is never a deployed config: copy it,
+# rename it, and fill in real values outside version control (or point
+# RIPPLE_BUDGET_CONFIG_PATH at your own copy). It contains no real API key or per-workspace
+# override.
+#
+# Money keys MUST be quoted strings (Decimal on load), never bare YAML numeric scalars --
+# `per_job_cap_usd: 1.00` (unquoted) is REJECTED by the loader with BudgetConfigError; it
+# must be written as `per_job_cap_usd: "1.00"`.
+
+# Project-owner decision (docs/product/ai_closed_loop_support.md §0.3), demo profile H:
+per_job_cap_usd: "1.00"
+total_cap_usd: "50.00"
+
+# ADR-005 §2.9 "no budget default" -- the worker refuses to start without this.
+max_output_tokens: 2048
+
+# VALIDATION round 1 (COORDINATOR NOTE 2 #2): the input-side per-call ceiling. A prompt whose
+# estimated token count exceeds this is refused (budget_exceeded) before any provider call --
+# see contract §7.1a. Distinct from max_output_tokens: a large source document can need a large
+# input ceiling even with a small output ceiling.
+max_input_tokens_per_call: 8192
+
+# Must equal the retry_limit actually passed to core.agent.provider.complete_structured
+# by the worker's call site (spike default: 1). Cross-checked at worker startup, not by
+# this loader alone -- see contract §3/§5.
+max_retries: 1
+
+# Optional (NOT critical -- omit this key and it defaults to max_retries + 1). If present,
+# must equal max_retries + 1 or the loader raises BudgetConfigError (contract §3/§5's
+# consistency rule, COORDINATOR NOTE 2 #6). Shown here for clarity; most configs omit it.
+# max_provider_calls_per_job: 2
+
+# Per-model USD price, per 1,000 tokens. Every model_id the worker can actually resolve to
+# at runtime MUST have an entry here, or cost accounting raises KeyError for that call
+# (contract §7.2) -- this is deliberate: an unpriced model must fail loudly, not silently
+# cost $0.
+model_prices:
+  stand_in:
+    input_usd_per_1k: "0.00"
+    output_usd_per_1k: "0.00"
+  replay:
+    input_usd_per_1k: "0.00"
+    output_usd_per_1k: "0.00"
+  # Example real entry -- replace with the actual priced, concrete model id your live
+  # provider adapter resolves to (never a router label like "routed"; contract §7.2):
+  gemini-2.5-flash:
+    input_usd_per_1k: "0.000075"
+    output_usd_per_1k: "0.0003"
+
+default_model_id: stand_in
+
+# Decision (contract §7.3): fail closed. When a provider call reports no token usage
+# (the exact L1 gap: model_id=routed, no usage), cost is estimated at max_input_tokens_per_call
+# worth of input tokens plus max_output_tokens worth of output tokens, rather than treated as
+# free.
+fail_closed_on_missing_usage: true
+
+# docs/evaluation/ai_closed_loop_metrics.md §3.12. H (demo profile) targets are ACTIVE below.
+# P (pilot) targets are commented out for reference -- a P deployment uncomments the two P
+# lines and removes/comments the two H lines instead.
+latency_slo_p50_seconds: 30.0    # H target
+latency_slo_p95_seconds: 90.0    # H target
+# latency_slo_p50_seconds: 60.0  # P target
+# latency_slo_p95_seconds: 180.0 # P target

@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "title": "ChangeSet",
+  "description": "A coordinated unit of change, replayable. Without `base_snapshot` it cannot be replayed at all.",
+  "required": [
+    "schema_version",
+    "changeset_id",
+    "trigger",
+    "intent",
+    "base_snapshot",
+    "affected_nodes",
+    "affected_artifacts",
+    "evidence",
+    "simulation_result",
+    "actions",
+    "risk",
+    "approval",
+    "verification"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "description": "Contract version. P8 detects a stale record by comparing this."
+    },
+    "changeset_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "trigger": {
+      "type": "string",
+      "minLength": 1
+    },
+    "intent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "base_snapshot": {
+      "type": "string",
+      "minLength": 1
+    },
+    "state": {
+      "enum": [
+        "PROPOSED",
+        "REVIEW",
+        "APPROVED",
+        "APPLYING",
+        "APPLIED",
+        "VERIFIED",
+        "REJECTED"
+      ]
+    },
+    "affected_nodes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "affected_artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "Evidence.json"
+      }
+    },
+    "simulation_result": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "$ref": "ActionProposal.json"
+      }
+    },
+    "risk": {
+      "enum": [
+        "LOW",
+        "MEDIUM",
+        "HIGH",
+        "UNKNOWN"
+      ]
+    },
+    "approval": {
+      "oneOf": [
+        {
+          "$ref": "Approval.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "verification": {
+      "oneOf": [
+        {
+          "$ref": "VerificationResult.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "$id": "ChangeSet.json"
+}

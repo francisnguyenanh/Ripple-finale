@@ -1,0 +1,12 @@
+# Public repository: credentials and local environments stay on this machine.
+.env
+.env.*
+.venv_gcp/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Vertex authentication uses Application Default Credentials.
+credentials/
+*service-account*.json
+api_keys.json

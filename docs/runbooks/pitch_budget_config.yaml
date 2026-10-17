@@ -1,0 +1,46 @@
+# Budget configuration template for the evaluation deployment (approved 2026-10-05). Mounted only on the evaluation web
+# revision and its worker job; the live provider cap is set in the cloud configuration, not in this file.
+# total_cap_usd 12.82 is per (tenant, project): ledger pitch-p1 is separate and starts at 0. Roles: extraction + change.draft on
+# gemini-3.8-flash (Vertex GLOBAL, 1.50/7.50 USD per 1M tokens); everything else (gap.answer query) on default flash-lite.
+# Worst-case reservation per attempt: 24000 x 0.0015/1k + 12288 x 0.0075/1k = 0.12816 (flash); per job 2 attempts = 0.25632 < 0.30.
+# Draft of the configuration that is stored as a secret version and pinned to the serving revision and the worker job.
+# Not a secret (no credentials, no keys). Prices: ai10_price_catalog_snapshot.json
+# (Vertex AI, global, standard online text, effective 2026-09-30) -- model_prices lists
+# ONLY the real models; there is no stand_in/replay price entry on purpose.
+#
+# Model switch (project decision): the EXTRACTION role runs gemini-3.8-flash; every
+# other role (gap.answer, impact.judge, ...) keeps default_model_id. Synced with config/ai10_budget_eval.json:
+# ceilings 24000 in / 12288 out (thinking counted as output), 1 call per job, 1 retry, 90 s request timeout.
+# Worst call 24000 x 0.0015/1k + 12288 x 0.0075/1k = 0.12816; per job (1 call x 2 attempts) 0.25632 < 0.30.
+# The 2026-09-30 prices MUST be re-checked at switch time (price_snapshot_status() flags staleness).
+# total_cap_usd of the earlier production config is 1.50 (about 5 worst-case extraction jobs): raising it is a project-owner decision.
+# per_job_cap_usd 0.30 was approved on 2026-10-05; the cumulative limits and the ledger are unchanged (no reset).
+default_model_id: gemini-3.5-flash-lite
+role_model_ids:
+  extraction: gemini-3.8-flash
+  change.draft: gemini-3.8-flash
+  intent.interpret: gemini-3.8-flash
+  gap.answer: gemini-3.8-flash
+  impact.judge: gemini-3.8-flash
+  # configured, NOT wired to any job yet: only for wording an already verified result (no extraction, no judgement)
+  intent.explain: gemini-3.5-flash-lite
+model_prices:
+  gemini-3.5-flash-lite:
+    input_usd_per_1k: "0.0003"
+    output_usd_per_1k: "0.0025"
+  gemini-3.8-flash:
+    input_usd_per_1k: "0.0015"
+    output_usd_per_1k: "0.0075"
+price_snapshot_date: "2026-09-30"
+price_snapshot_max_age_days: 30
+request_timeout_seconds: 90
+per_job_cap_usd: "0.30"
+total_cap_usd: "12.82"
+max_input_tokens_per_call: 24000
+max_output_tokens: 12288
+max_retries: 1
+max_provider_calls_per_job: 1
+max_concurrent_jobs_per_workspace: 2
+fail_closed_on_missing_usage: true
+latency_slo_p50_seconds: 30
+latency_slo_p95_seconds: 90

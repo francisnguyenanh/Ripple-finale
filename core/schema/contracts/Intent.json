@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "title": "Intent",
+  "description": "What an actor says SHOULD be true. I10: first-class, versioned, never overwritten. `scope` is the field most often forgotten and the one that bounds impact.",
+  "required": [
+    "schema_version",
+    "intent_id",
+    "actor",
+    "target",
+    "requested_change",
+    "rationale",
+    "scope",
+    "evidence",
+    "confidence",
+    "status",
+    "version"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$",
+      "description": "Contract version. P8 detects a stale record by comparing this."
+    },
+    "intent_id": {
+      "type": "string",
+      "pattern": "^INTENT-\\d+$"
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1
+    },
+    "requested_change": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rationale": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scope": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_families"
+      ],
+      "properties": {
+        "artifact_families": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "software",
+              "workflow",
+              "docs",
+              "spreadsheet",
+              "tests",
+              "history"
+            ]
+          }
+        },
+        "operational_domain": {
+          "type": "string"
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "Evidence.json"
+      }
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "status": {
+      "enum": [
+        "DRAFT",
+        "VALIDATED",
+        "APPROVED",
+        "APPLIED",
+        "REJECTED",
+        "SUPERSEDED"
+      ]
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "supersedes": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "$id": "Intent.json"
+}

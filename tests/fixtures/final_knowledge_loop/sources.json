@@ -1,0 +1,33 @@
+{
+  "note": "Public synthetic-ish inputs already in the repository (Harbor fixture app + reference_system docs). sha256 pins detect drift of the inputs the expectations were written against (line endings normalised). Expectations in the other files were written by the test author from these sources, not produced by runtime code or a model.",
+  "sources": [
+    {
+      "path": "fixtures/harbor_public/config/approval.yaml",
+      "sha256": "1daa028ecd1854b7c45459efcbe63a53e1856324f0ff9c3ec22fa3a3a10df7f9"
+    },
+    {
+      "path": "fixtures/harbor_public/app/routing.py",
+      "sha256": "84328e5a44834f328a5e1eacd56d6d2d80ef381df5dd9f64844c2e66aa405b60"
+    },
+    {
+      "path": "fixtures/harbor_public/app/emergency.py",
+      "sha256": "7b380324cc9cf723c2e6ba789e509c238c20321a7f63cb4e0893ea14139ed499"
+    },
+    {
+      "path": "fixtures/harbor_public/app/approval.py",
+      "sha256": "e8c904b3313d59bbc28606617f97a960afcf328498b704f134c5aae3930792ed"
+    },
+    {
+      "path": "reference_system/docs/procurement-policy.md",
+      "sha256": "57eacd7c51e2bbac6079c7fb26259d5a1e02552e26b19a1bd59618a284404214"
+    },
+    {
+      "path": "reference_system/docs/manager-guide.md",
+      "sha256": "f83dbe1b4fba00dd7850e51e4ca6ed71a92055a36ad2c09dd3ca27770b735157"
+    },
+    {
+      "path": "reference_system/docs/exception-handling.md",
+      "sha256": "2605b10c5130e1312e7decfc672383380bc5685a5faa36ca3877f03272767f87"
+    }
+  ]
+}
