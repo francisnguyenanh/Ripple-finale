@@ -12,7 +12,10 @@
       "path": "README.md",
       "reason": "preview-specific statements (snapshot, evidence labels, interface acceptance scope, public provenance pointer)",
       "sha256_in_export": "3e403552059986fd153d2bc03c5f0df5b375d8431b8f564ad21f0748c41bffb5",
-      "sha256_published": "e99dd6c3007cdb0c11fdfcd15f22f2cb01d90bb16f8ab83a707fb164fbbbfd56"
+      "sha256_published": "42867761cc118b8aeef210c0457f99b54459b6f489a9ede61d3ad3f6b23f5828",
+      "sha256_published_preview_2": "e99dd6c3007cdb0c11fdfcd15f22f2cb01d90bb16f8ab83a707fb164fbbbfd56",
+      "note": "sha256_published is the README at the working-copy commit; sha256_published_preview_2 is the README at tag preview-2 (earlier public record, kept).",
+      "sha256_published_scope": "README.md as committed in the public commit that tag preview-3 points to (LF bytes, identical to the Git blob)"
     }
   ],
   "added_files": [
@@ -40,5 +43,7 @@
     "note": "Self-check on one machine, not independent validation. Skipped tests are not passes.",
     "deselected_reason": "The one deselected test is marked live_llm (it would make a real provider call); pytest.ini addopts exclude it by default. It was not run."
   },
-  "manifest_scope": "SUBMISSION_MANIFEST.json describes the source export of the source commit. The public README.md was adjusted after export and has its own hash (public_changes); this file was added. The public tree therefore does NOT match the original manifest byte for byte; every other file does."
+  "manifest_scope": "SUBMISSION_MANIFEST.json describes the source export of the source commit. The public README.md was adjusted after export and has its own hash (public_changes); this file was added. The public tree therefore does NOT match the original manifest byte for byte; every other file does.",
+  "export_manifest_sha256_lf": "fd80e40508e221973af3a90b7330717e87e90b04afe15a67376edb0c382eb031",
+  "export_manifest_hash_note": "export_manifest_sha256 is the manifest file as written on disk by the export (CRLF); the public Git repository stores it with LF line endings, so downloaded bytes hash to export_manifest_sha256_lf. Same content; the manifest content is unchanged."
 }

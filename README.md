@@ -4,75 +4,54 @@
 
 **AI proposes. Deterministic systems validate. Humans decide.**
 
-> **Development preview, not a finished product.** This snapshot is not deployed, has no human acceptance, and its real-model quality has not been independently measured ([limits](#12-known-limits-security-provenance-and-licence)). Whether the team advances to a later round is the organiser's decision. Submission for the Google Cloud AI Builder Cup JAPAC 2026. Snapshot: source commit `93a2675` ([provenance](PUBLIC_PREVIEW_PROVENANCE.json)).
+> **Development preview, not a finished product.** This snapshot is not deployed, has no formal business or product acceptance of its AI and workflow outcomes (the owner has visually reviewed the desktop interface only), and its real-model quality has not been independently measured ([limits](#12-known-limits-security-provenance-and-licence)). Whether the team advances to a later round is the organiser's decision. Submission for the Google Cloud AI Builder Cup JAPAC 2026. Snapshot: source commit `93a2675` ([provenance](PUBLIC_PREVIEW_PROVENANCE.json)).
 
 ## Explore this repository
 
 | I want to... | Go to |
 |---|---|
-| Understand the idea in two minutes | [The problem](#1-the-enterprise-problem), [why Ripple is different](#2-why-ripple-is-different), [a worked example](#3-a-concrete-example-harbor) |
-| See the product flow | [End-to-end journey](#4-end-to-end-product-journey) |
+| Understand the idea (2 minutes) | [Problem](#1-the-enterprise-problem), [what is different](#2-why-ripple-is-different), [Harbor example](#3-a-concrete-example-harbor), [journey](#4-end-to-end-product-journey), [interface walkthrough](#4b-explore-the-implemented-interface) |
 | Judge the generative AI use | [Gemini implementation](#5-generative-ai-implementation) |
-| Check engineering and evidence | [Trust foundation](#6-engineering-foundation-and-trust), [capabilities and evidence](#7-current-capabilities-and-evidence), [curated evidence](docs/release/FINAL_PREVIEW_EVIDENCE.md), [claims with limits](docs/release/FINAL_CLAIMS_EVIDENCE_LIMITS.md) |
-| Run and inspect it | [Run and verify locally](#10-run-and-verify-locally) |
+| Check engineering and evidence | [Trust foundation](#6-engineering-foundation-and-trust), [capabilities](#7-current-capabilities-and-evidence), [curated evidence](docs/release/FINAL_PREVIEW_EVIDENCE.md), [claims with limits](docs/release/FINAL_CLAIMS_EVIDENCE_LIMITS.md) |
+| Run it | [Run and verify locally](#10-run-and-verify-locally) |
 | See what is next | [Roadmap](#11-roadmap-toward-final-readiness) |
 
-Reading paths: **2 minutes** = sections 1-4. **10 minutes** = add sections 5-7 and 12. **Developer verification** = sections 10 and 12 plus the [contracts](docs/contracts).
+**What to evaluate:** evidence-backed knowledge (cited, versioned, observed vs decided); uncertainty handling (open questions, disagreement and abstention are visible results); human decisions (a person's own words, never promoted AI output); exact approval by a different person; and source reconciliation, which compares an edited source with the decision but does not verify behaviour.
 
 ---
 
 ## 1. The enterprise problem
 
-A rule such as "who must approve a purchase above a threshold" is rarely written in one place. It sits in a configuration file, a spreadsheet, a policy document and code, often with slightly different values or conditions.
-
-- Sources overlap and can disagree, and nobody notices until a change is made.
-- Business owners know what a rule should mean but cannot see what systems do; engineers see the implementation but cannot decide its meaning.
-- A technical edit is not the same as an approved business decision.
-- Updating a file does not prove that behaviour changed as intended.
-
-The result is changes that are hard to review, hard to trace afterwards, and easy to approve on incomplete information.
+A rule such as "who must approve a purchase above a threshold" is rarely written in one place. It sits in a configuration file, a spreadsheet, a policy document and code, often with slightly different values. Sources can disagree without anyone noticing until a change is made. Business owners know what a rule should mean but cannot see what systems do; engineers see the implementation but cannot decide its meaning. A technical edit is not an approved business decision, and updating a file does not prove behaviour changed as intended. The result is changes that are hard to review, hard to trace and easy to approve on incomplete information.
 
 ## 2. Why Ripple is different
 
-Ripple's core insight is that "what the sources say" and "what the business has decided" are different things, and that a change moves through several states that most tools collapse into one. Ripple keeps them separate and labelled:
+Ripple keeps apart things most tools collapse into one:
 
 | Kept separate | Why it matters |
 |---|---|
-| **Observed** evidence (what sources say) vs **Target** knowledge (what people decided) | a reader can see agreement, disagreement and decided intent at the same time |
+| **Observed** evidence (what sources say) vs **Target** knowledge (what people decided) | agreement, disagreement and decided intent are visible together |
 | Proposed change vs **approved semantic difference** | approval is of an exact difference, by a person other than the requester |
 | **Knowledge** decided vs **source** updated vs **behaviour** verified vs **result** accepted | "files edited" is never reported as "behaviour proven" |
 
-Conceptual comparison (responsibilities, not a performance claim):
+Conceptually (responsibilities, not a performance claim): search/RAG finds and summarises text, Ripple adds decided-vs-observed knowledge and abstention; coding assistants edit code, Ripple checks an edit against an approved rule and only recommends for code; impact tools list dependencies, Ripple reports coverage and never turns "unknown" into "no impact"; approval workflows route requests, Ripple binds approval to an exact difference with stale-knowledge guards. These techniques are not new; the contribution is one governed loop built on three ideas:
 
-| Category | Typical focus | Ripple's added focus |
-|---|---|---|
-| Enterprise search / RAG | find and summarise text | decided vs observed knowledge, open questions, abstention when the knowledge does not answer |
-| AI coding assistants | edit code | whether the edit matches an approved business rule; code gets recommendations, never silent edits |
-| Impact analysis tools | list dependencies | impact with explicit coverage, where "unknown" is never reported as "no impact" |
-| Approval workflows | route a request | approval bound to an exact semantic difference, with stale and moved-knowledge guards |
-
-Ripple does not claim to have invented these techniques; the contribution is combining them into one governed loop. Three ideas carry the product:
-
-1. **Governed business knowledge.** Rules are versioned, cited and carry an authority label (observed or decided). Open questions and disagreements are first-class records, so the knowledge base says what it does not know instead of guessing.
-2. **Human authority separate from AI interpretation.** A model may read, ask and draft, but only a person's own words answer a question, accept knowledge or approve a change, and approval needs a different person from the requester. The system can refuse or downgrade a model output; it can never promote one.
-3. **Evidence-based, multi-axis completion.** A change is not "done" when a file is edited. Decided knowledge, source alignment, behaviour verification and business acceptance are tracked as separate states, and only the first two can be established by this product today.
+1. **Governed business knowledge.** Rules are versioned, cited and labelled; open questions and disagreements are first-class records, so the knowledge says what it does not know.
+2. **Human authority separate from AI interpretation.** A model may read, ask and draft; only a person's own words answer, accept or approve, and approval needs a different person from the requester. The system can refuse or downgrade model output, never promote it.
+3. **Evidence-based, multi-axis completion.** A change is not "done" when a file is edited. Decided knowledge, source alignment, behaviour and business acceptance are separate states; this product can establish only the first two.
 
 ## 3. A concrete example: Harbor
 
-**Harbor** is a synthetic, runnable procurement system included in [`fixtures/harbor_public`](fixtures/harbor_public) (code, configuration, data, integrity manifest). In its public configuration the standard manager approval threshold is 1,000,000 JPY ([`approval.yaml`](fixtures/harbor_public/config/approval.yaml)). An illustrative request: *"Raise the standard manager approval threshold from 1,000,000 JPY to 1,500,000 JPY."*
+**Harbor** is a synthetic, runnable procurement system in [`fixtures/harbor_public`](fixtures/harbor_public). Its public configuration sets the standard manager approval threshold to 1,000,000 JPY ([`approval.yaml`](fixtures/harbor_public/config/approval.yaml)). An illustrative request: *"Raise the standard manager approval threshold from 1,000,000 JPY to 1,500,000 JPY."*
 
-1. **Discover.** Sources are imported as immutable revisions; rules are proposed with quotes the server re-checks against the source text.
-2. **Version knowledge.** Rules, relations and open questions form a versioned snapshot; observed rules are not decided yet.
-3. **Ask and accept.** Missing actors, conditions and conflicting facts become questions; people answer in their own words and accept a version.
-4. **Understand the change.** The request becomes validated operations that quote the request and name a shown rule; anything uncovered becomes a question.
-5. **Impact and simulation.** Affected rules, files and code are listed with coverage. For a supported numeric change, Harbor's own program is run on its public sample to count requisitions whose route changes; everything else is `NOT_SIMULATED` with the reason. The count is a measurement of the sample, not a forecast, and this README quotes none.
-6. **Exact semantic diff.** A structured draft shows precisely what would change.
-7. **Different-person approval.** An approver other than the requester approves that exact difference; if the knowledge moved, the decision is refused.
-8. **Commit.** The change becomes Target knowledge with its history.
-9. **Source follow-through.** For a YAML scalar of a configuration file, an approved automatic edit is written and read back; other sources (documents, workbooks, code) stay manual, and code only receives recommendations.
-10. **Reconcile.** Edits are compared with the decision (correct, partial, divergent). Other sources that still state the old value stay visible as unresolved.
+1. **Discover and version.** Sources become immutable revisions; rules are proposed with quotes the server re-checks; rules, relations and open questions form a versioned snapshot.
+2. **Ask and accept.** Missing actors, conditions and conflicts become questions; people answer in their own words and accept a version.
+3. **Understand the change.** The request becomes validated operations that quote it and name a shown rule; anything uncovered becomes a question.
+4. **Impact and simulation.** Affected rules, files and code are listed with coverage. For a supported numeric change, Harbor's own program runs on its public sample to count requisitions whose route changes; otherwise `NOT_SIMULATED` with the reason. The count measures the sample and is not a forecast; this README quotes none.
+5. **Exact difference and approval.** A structured draft shows precisely what changes; a different person approves that exact difference, and moved knowledge refuses the decision. Commit makes it Target knowledge.
+6. **Follow-through and reconciliation.** For a YAML scalar of a configuration file, an approved edit is written and read back; documents, workbooks and code stay manual (code gets recommendations only). Edits are compared with the decision (correct, partial, divergent); sources still stating the old value stay visible as unresolved.
 
-What this does **not** show: that runtime behaviour was verified (read-back is source alignment only), or that results generalise beyond Harbor.
+This does **not** show that runtime behaviour was verified (read-back is source alignment only) or that results generalise beyond Harbor.
 
 ## 4. End-to-end product journey
 
@@ -96,82 +75,83 @@ flowchart LR
   classDef det fill:#e6f4ea,stroke:#34a853
 ```
 
-The journey ends in a per-change view of nine steps, each with a state and a next actor; "knowledge decided", "source aligned" and "behaviour verified" are different states ([journey logic](core/change_intelligence/v2/business_journey.py)). In this snapshot the browser UI is the redesigned interface, merged from its separate development branch. The project owner visually accepted its **desktop** layout for this round only; that acceptance does not cover AI quality, the extensions, mobile layouts beyond the recorded browser runs, or production readiness. The Final-stage supporting services (see section 7) are mostly API-only.
+Each change ends in a nine-step view with a state and a next actor per step ([journey logic](core/change_intelligence/v2/business_journey.py)).
+
+## 4b. Explore the implemented interface
+
+The React interface (`/app-next/`; source in [`frontend/`](frontend), built bundle in [`app/ui_next/`](app/ui_next)) is reached through the local rehearsal server ([section 10](#10-run-and-verify-locally)). **A walk through the core loop, by role** (each step is exercised by the named browser test; roles are simulated accounts):
+
+1. *Administrator or knowledge owner* answers business questions on **Questions & Decisions**: preview, then confirm in their own words; an account without authority sees the page without the action ([`test_kno04_browser.py`](tests/final_loop/test_kno04_browser.py)). The same page answers questions from the knowledge, with Business and Technical readings, a stale marker and withheld source text where rights are missing ([`test_qry04_browser.py`](tests/final_loop/test_qry04_browser.py)).
+2. *Requester* states a change on **Changes**, confirms the understanding and sees what the rule means, what it touches and what stays pending ([`test_chg04_browser.py`](tests/final_loop/test_chg04_browser.py)). **Impact & Simulation** shows the measured effect for a supported numeric change; the **Harbor try-out** runs one requisition under two configuration versions.
+3. *Approver* (a different person) accepts the knowledge change and, separately, the automatic file edits; a clarification makes an earlier approval out of date; a viewer cannot decide ([`test_chg04_browser.py`](tests/final_loop/test_chg04_browser.py), [`test_harbor_journey.py`](tests/ui_next/test_harbor_journey.py): three distinct people).
+4. *Knowledge owner* commits and sees four axes (knowledge committed, source and code pending, behaviour not tested; [`test_chg05_browser.py`](tests/final_loop/test_chg05_browser.py)), then chooses whether the product writes the approved edit, shown as "applied, pending read-back" ([`test_syn03_browser.py`](tests/final_loop/test_syn03_browser.py)).
+5. Anyone with the right opens **Knowledge Documents**, generated when opened and flagged stale for an older version ([`test_doc04_browser.py`](tests/final_loop/test_doc04_browser.py)), and **History**.
+
+**Code and repository screens** (extension, local, fixture repository): the change review shows code recommendations (never a diff); after the commit a candidate patch can be built, validated on a disposable clone and approved or rejected bound to both hashes; publishing stays refused without a pull-request grant ([`test_fex_code_panel_browser.py`](tests/final_loop/test_fex_code_panel_browser.py)). **Sources** can read a declared repository, and **Support & Access** shows a read-only delivery status. The other pages are Overview, Explorer and a Business/Technical toggle (ten pages in all).
+
+| Interface evidence level | Status |
+|---|---|
+| Implemented in source | yes: [`frontend/src`](frontend/src) and the built bundle |
+| Development-snapshot browser self-checks | [`tests/ui_next`](tests/ui_next) and the browser files above: real Chromium, server and worker, stub models, simulated roles; reported passing at the integration checkpoint in the development record (not in this repository) |
+| Owner's visual review | **desktop** layout, this round only; not AI quality, extensions, mobile or production |
+| Run on this public tree | **no browser or frontend suite**; only `tests/contract tests/unit` and a server start serving `/app-next/` ([provenance](PUBLIC_PREVIEW_PROVENANCE.json)) |
+| Outstanding | small-screen acceptance (screenshot-capture runs only), some partial layout packages, formal business and product acceptance |
+
+**Frontend governance.** Rules: [`UI_DEVELOPMENT_RULES.md`](docs/design-system/UI_DEVELOPMENT_RULES.md) (tokens only from [`index.css`](frontend/src/index.css), shared components, job state, verification, approval and acceptance kept separate). `npm run check:design` ([`check-design-system.mjs`](frontend/tools/check-design-system.mjs)) fails on new violations; known exceptions are in [`design-system-policy.json`](frontend/design-system-policy.json) (six raw-select entries); [`test_a11y.py`](tests/ui_next/test_a11y.py) runs axe-core against a WCAG 2.2 AA *target*. None of this proves full consistency or accessibility compliance. No screenshots are included: none with a verifiable build and state exists here; run the rehearsal to see the interface.
 
 ## 5. Generative AI implementation
 
-Gemini is useful here because the inputs are messy language: policy prose, comments, spreadsheet labels and a person's free-text request. Bounded deterministic parsing can read fixed formats such as a YAML key, but it cannot reliably resolve paraphrase, implicit scope or a vague instruction ("keep this limited to the approval file") into a structured proposal. Gemini supplies that semantic reasoning: it proposes cited rules, finds questions the structure does not expose, and turns a request into candidate operations. Deterministic code then verifies each proposal against the sources and schemas, and people decide. Ripple uses the model where language understanding is needed, and never where a decision is.
+Gemini is useful because the inputs are messy language: policy prose, comments, spreadsheet labels and free-text requests. Bounded deterministic parsing can read fixed formats such as a YAML key, but it cannot reliably resolve paraphrase, implicit scope or a vague instruction ("keep this limited to the approval file") into a structured proposal. Gemini supplies that semantic reasoning; deterministic code then verifies every proposal and people decide.
 
-| Responsibility | Model proposes | Deterministic code checks | Human confirms | Current quality evidence |
-|---|---|---|---|---|
-| Extraction and grounding | cited rules | the quote must appear verbatim in the source; an amount without its unit stays visibly unknown | acceptance of knowledge | stub tests; one live artifact |
-| Questions and clarification | missing exceptions, conflicts, follow-up questions; a reading of free-text answers | evidence must belong to the shown rules; an uncovered part is never confirmable | the person's own words are the decision | stub tests; a small live pilot |
-| Grounded Q&A | an answer from a pinned context pack | every claim cites the pack; numbers must match; authority labels; disagreements disclosed; abstains when empty | n/a (read-only) | stub tests; pilot; one agent-written sealed set (see below) |
-| Change understanding | operations from a plain-words request | each operation quotes the request and names a shown rule | confirmation by the requester | stub tests; pilot; one agent-written sealed set |
-| Impact dependencies, draft guidance | candidate dependencies; comments on the draft | dependencies stay PROPOSED; guidance cannot widen an edit | review and approval | stub tests; one live case each |
-| Optional extensions | audience wording of documents, conflict hypotheses, interview questions, multi-agent specialists | wording facts and numbers from the facts; hypotheses confirmed by the policy evaluator | people review | stub or synthetic tests only |
+**Three core semantic responsibilities**
 
-**Controls.** Each role is pinned to a frozen prompt and schema ([`config/`](config), pins guarded by [`test_final_prompt_pins.py`](tests/contract/test_final_prompt_pins.py)); a call needs a pinned, priced role, a cost reservation before the call and an accounting entry after it ([`test_final_budget_roles.py`](tests/contract/test_final_budget_roles.py)); without a budget configuration the role is refused and nothing silently falls back to a stub. The server can reject or downgrade a model output but never promote it. The provider integration is in [`ai_module/vertex_client.py`](ai_module/vertex_client.py).
+1. **Ground.** Read prose and configuration into cited rules (the quote must appear verbatim; an amount without its unit stays visibly unknown) and answer questions only from accepted knowledge, citing it or abstaining (numbers must match, disagreements disclosed).
+2. **Clarify.** Find questions the structure does not expose (missing exceptions, conflicts in meaning) and read a free-text answer into the structured form; evidence must belong to the shown rules, an uncovered part is never confirmable, and the person's own words are the decision.
+3. **Understand change.** Turn a plain-words request into candidate operations, dependencies and draft guidance; each operation quotes the request and names a shown rule, dependencies stay PROPOSED, guidance cannot widen an edit, and a person reviews.
 
-**Five different kinds of evidence, kept apart:**
+Optional extensions (audience wording, conflict hypotheses, interview questions, multi-agent specialists) follow the same rules and have stub or synthetic tests only.
 
-1. *Implemented roles and integrations*: present in the code and contracts.
-2. *Deterministic validation*: tested without any model.
-3. *Synthetic-stub integration tests*: stubs pass through the production callers, validators, budget boundary and persistence; they prove the pipeline, not Gemini's quality.
-4. *Bounded live-model pilot (self-check)*: every role ran end to end on a real model under a hard cost cap; this shows the integration works, not how good it is. Observations are listed below, unchanged.
-5. *Independent real-model quality evaluation*: **not yet performed**; a protocol exists, no result does. Results will be added to [`docs/release/FINAL_PREVIEW_EVIDENCE.md`](docs/release/FINAL_PREVIEW_EVIDENCE.md) and the [quality plan](docs/evaluation/FINAL_AI_QUALITY_PLAN.md) without changing this structure.
+**Controls.** Each role is pinned to a frozen prompt and schema ([`config/`](config), [`test_final_prompt_pins.py`](tests/contract/test_final_prompt_pins.py)); a call needs a pinned, priced role, a reservation before the call and an accounting entry after it ([`test_final_budget_roles.py`](tests/contract/test_final_budget_roles.py)); without a budget configuration the role is refused, with no silent stub fallback. The provider integration is [`ai_module/vertex_client.py`](ai_module/vertex_client.py).
 
-**AI capability implemented does not mean AI quality independently validated.**
+**Five kinds of evidence, kept apart.** (1) Implemented roles in code and contracts. (2) Deterministic validation tested without any model. (3) Synthetic-stub integration tests, which prove the pipeline, not Gemini's quality. (4) A bounded live pilot (self-check): every role ran end to end under a hard cost cap, which shows the integration works, not how good it is. (5) Independent real-model evaluation: **not yet performed**; a protocol exists, no result does. Results will be added to the [curated evidence](docs/release/FINAL_PREVIEW_EVIDENCE.md) and the [quality plan](docs/evaluation/FINAL_AI_QUALITY_PLAN.md) without restructuring this section. **Capability implemented does not mean quality independently validated.**
 
-**Live pilot and diagnostic observations (self-check, unchanged).** 28 calls on Gemini 3.5 Flash-Lite and one paired case on Gemini 3.8 Flash, under a hard cost cap of 2 USD, of which 0.17475295 USD had been recorded at the snapshot. Two sealed sets written by the project's own agent were scored mechanically: questions 10/14, then 8/14 after a server fix; change requests 6/8. These sets are small and **not independent**. Further diagnostic runs on a held-out set (also non-independent) were used only to classify failures and add server-side guards; they are listed in the [curated evidence](docs/release/FINAL_PREVIEW_EVIDENCE.md). They are diagnostics: the model-quality gate remains **OPEN**. Observed: missing required citations with the lighter model, unreliability on three-part requests, varying abstention wording. An earlier snapshot's held-out evaluation (2026-10-02) did not reach its targets ([record](docs/evaluation/HELD_OUT_EVALUATION.md)); it is kept as history and was not repeated on this snapshot.
+**Pilot and diagnostic observations (self-check, unchanged).** 28 calls on Gemini 3.5 Flash-Lite and one paired case on Gemini 3.8 Flash, under a hard cost cap of 2 USD, of which 0.17475295 USD had been recorded at the snapshot. Two sealed sets written by the project's own agent were scored mechanically: questions 10/14, then 8/14 after a server fix; change requests 6/8. They are small and **not independent**. Further diagnostic runs on a held-out set (also non-independent) only classified failures and added server-side guards ([curated evidence](docs/release/FINAL_PREVIEW_EVIDENCE.md)); the model-quality gate remains **OPEN**. Observed: missing required citations with the lighter model, unreliability on three-part requests, varying abstention wording. An earlier snapshot's held-out evaluation (2026-10-02) did not reach its targets ([record](docs/evaluation/HELD_OUT_EVALUATION.md)); it is history and was not repeated on this snapshot.
 
 ## 6. Engineering foundation and trust
 
 | Mechanism | Risk it addresses |
 |---|---|
-| Immutable source revisions; cited, versioned knowledge | silent edits to evidence; unverifiable claims |
-| Observed/Target separation | a model's reading being mistaken for a business decision |
+| Immutable source revisions; cited, versioned knowledge; Observed/Target separation | silent edits to evidence; a model's reading mistaken for a decision |
 | Role and permission boundaries ([`test_ai2_t02_permission.py`](tests/security/test_ai2_t02_permission.py)) | a client choosing its own rights; leaking raw evidence |
-| Exact-hash approval by a distinct person | approving something different from what was reviewed |
-| Deterministic validators of model output | invented citations, numbers or scope |
-| Compare-and-set and idempotent durable writes | lost updates and double effects |
-| PostgreSQL outbox, leases, fencing, recovery ([runbook](docs/runbooks/FINAL_RECOVERY.md)) | duplicate delivery, lost leases, killed workers |
-| Audit events and a self-verifying audit package | untraceable decisions |
+| Exact-hash approval by a distinct person; deterministic validators of model output | approving something other than what was reviewed; invented citations, numbers or scope |
+| Compare-and-set, idempotent writes, PostgreSQL outbox, leases, fencing ([runbook](docs/runbooks/FINAL_RECOVERY.md)) | lost updates, double effects, duplicate delivery, killed workers |
+| Audit events; self-verifying audit package | untraceable decisions |
 | Budget reservation, pinned roles, fail-closed AI | runaway or unaccounted spend |
 
-Boundaries to keep in mind: SHA-256 hashes detect a changed byte and are **not** digital signatures; the candidate-code sandbox is advisory by default and its optional container runtime shares the host kernel, so it is **not** a boundary for hostile code; reliability is shown by local injection and process-kill tests, not by production operation.
+SHA-256 hashes detect a changed byte and are **not** digital signatures. The candidate-code sandbox is advisory by default; its optional container runtime shares the host kernel and is **not** a boundary for hostile code. Reliability is shown by local injection and process-kill tests, not production operation.
 
 ## 7. Current capabilities and evidence
 
-Labels: **Local** = implemented and verified with stub models on a disposable database; **Mock/emulator** = verified against a mock transport or local emulator; **Pilot** = also run once or a few times on a real model (self-check); **API** = no UI in this snapshot. Evidence is test code in this repository; snapshots and run records are in [`FINAL_PREVIEW_EVIDENCE.md`](docs/release/FINAL_PREVIEW_EVIDENCE.md).
+**Local** = verified with stub models on a disposable database; **Mock/emulator** = mock transport or local emulator; **Pilot** = also run on a real model (self-check); **API** = no screen in this snapshot. Evidence is test code here; snapshots and runs are in [`FINAL_PREVIEW_EVIDENCE.md`](docs/release/FINAL_PREVIEW_EVIDENCE.md).
 
-**Core loop**
-
-| Capability | Status | Tests (examples) | Important limit |
+| Core capability | Status | Tests (examples) | Important limit |
 |---|---|---|---|
-| Versioned knowledge, observed/target, relations, gaps | Local, Pilot (extraction) | [`test_kno01_business_store.py`](tests/final_loop/test_kno01_business_store.py), [`test_kno03_graph_gaps.py`](tests/final_loop/test_kno03_graph_gaps.py) | extraction quality unmeasured; supported formats are limited ([section 12](#12-known-limits-security-provenance-and-licence)) |
-| Answers, free-text reading, acceptance with history | Local, Pilot | [`test_kno04_answers.py`](tests/final_loop/test_kno04_answers.py), [`test_kno07_answer_interpret.py`](tests/final_loop/test_kno07_answer_interpret.py), [`test_kno05_accept.py`](tests/final_loop/test_kno05_accept.py) | reading quality unmeasured |
-| Grounded Q&A with abstention | Local, Pilot | [`test_qry03_qa.py`](tests/final_loop/test_qry03_qa.py), [`test_qry01_context.py`](tests/final_loop/test_qry01_context.py) | retrieval is lexical by default and measured as limited (10/12 development, 4/8 validation) |
-| Change request, impact, Harbor measurement | Local, Pilot | [`test_chg01_change_request.py`](tests/final_loop/test_chg01_change_request.py), [`test_chg02_impact.py`](tests/final_loop/test_chg02_impact.py), [`test_chg02_simulation.py`](tests/final_loop/test_chg02_simulation.py) | public Harbor sample only; five integer keys; never a forecast |
-| Draft, review, distinct-person approval, commit | Local | [`test_chg03_draft.py`](tests/final_loop/test_chg03_draft.py), [`test_chg04_review.py`](tests/final_loop/test_chg04_review.py), [`test_chg05_commit.py`](tests/final_loop/test_chg05_commit.py) | approvals are self-checks, not business acceptance |
-| Source follow-through, reconciliation, journey | Local | [`test_syn03_source_apply.py`](tests/final_loop/test_syn03_source_apply.py), [`test_syn02_reconcile.py`](tests/final_loop/test_syn02_reconcile.py), [`test_syn04_journey.py`](tests/final_loop/test_syn04_journey.py) | YAML scalars only; behaviour never verified |
-| Documents (Business, Technical), exact export | Local | [`test_doc02_documents.py`](tests/final_loop/test_doc02_documents.py), [`test_doc05_export.py`](tests/final_loop/test_doc05_export.py) | deterministic templates, English |
-| Reliability: concurrency, killed worker, upgrade chain | Local | [`test_rel02_reliability.py`](tests/final_loop/test_rel02_reliability.py), [`test_rel02_process_kill.py`](tests/final_loop/test_rel02_process_kill.py), [`test_rel02_upgrade_chain.py`](tests/final_loop/test_rel02_upgrade_chain.py) | local injection, not production |
+| Versioned knowledge, observed/target, relations, gaps | Local, Pilot | [`test_kno01_business_store.py`](tests/final_loop/test_kno01_business_store.py), [`test_kno03_graph_gaps.py`](tests/final_loop/test_kno03_graph_gaps.py) | extraction quality unmeasured; limited formats |
+| Answers, free-text reading, acceptance | Local, Pilot | [`test_kno04_answers.py`](tests/final_loop/test_kno04_answers.py), [`test_kno07_answer_interpret.py`](tests/final_loop/test_kno07_answer_interpret.py) | reading quality unmeasured |
+| Grounded Q&A with abstention | Local, Pilot | [`test_qry03_qa.py`](tests/final_loop/test_qry03_qa.py), [`test_qry01_context.py`](tests/final_loop/test_qry01_context.py) | lexical retrieval by default, measured as limited (10/12 development, 4/8 validation) |
+| Change request, impact, Harbor measurement | Local, Pilot | [`test_chg01_change_request.py`](tests/final_loop/test_chg01_change_request.py), [`test_chg02_simulation.py`](tests/final_loop/test_chg02_simulation.py) | Harbor sample only; five integer keys; never a forecast |
+| Draft, review, distinct-person approval, commit | Local | [`test_chg04_review.py`](tests/final_loop/test_chg04_review.py), [`test_chg05_commit.py`](tests/final_loop/test_chg05_commit.py) | approvals are self-checks, not business acceptance |
+| Source follow-through, reconciliation, journey | Local | [`test_syn03_source_apply.py`](tests/final_loop/test_syn03_source_apply.py), [`test_syn02_reconcile.py`](tests/final_loop/test_syn02_reconcile.py) | YAML scalars only; behaviour never verified |
+| Documents, exact export | Local | [`test_doc02_documents.py`](tests/final_loop/test_doc02_documents.py) | deterministic templates, English |
+| Reliability: concurrency, killed worker, upgrades | Local | [`test_rel02_reliability.py`](tests/final_loop/test_rel02_reliability.py), [`test_rel02_process_kill.py`](tests/final_loop/test_rel02_process_kill.py) | local injection, not production |
 
-**Optional extensions (secondary; not required for core-product readiness).** All are Local or Mock/emulator verified with synthetic data and none has real-model quality evidence; full rows and limits are in the [claims document](docs/release/FINAL_CLAIMS_EVIDENCE_LIMITS.md).
+**Optional extensions** (not required for core-product readiness; Local or Mock/emulator, synthetic data, no real-model quality evidence; full rows in the [claims document](docs/release/FINAL_CLAIMS_EVIDENCE_LIMITS.md)): policy decisions, audit package, CI drift check and ROI replay (Local, API; [`test_mon_policy_audit.py`](tests/final_loop/test_mon_policy_audit.py)); candidate code patch, Git connector and pull-request path (Local, with screens on a fixture repository; pull request on a mock transport; one read-only check on a private test repository; no product-created pull request on a real repository, never a merge; [`test_fex_git_remote.py`](tests/final_loop/test_fex_git_remote.py)); multi-agent workflows, interview, audience variants and conflict mining (Local, API, synthetic specialists; [`test_ma_review_board.py`](tests/final_loop/test_ma_review_board.py)); Firebase hybrid satellite (Mock; Firestore sink on a local emulator; no cloud resource; [`test_fs_emulator.py`](tests/final_loop/test_fs_emulator.py)).
 
-| Extension | Status | Test (example) | Main limit |
-|---|---|---|---|
-| Policy decisions, audit package, business CI drift check, ROI replay | Local, API | [`test_mon_policy_audit.py`](tests/final_loop/test_mon_policy_audit.py) | hashes are not signatures; fixture or synthetic data only |
-| Candidate code patch, Git connector, pull-request path (screens: code recommendations, candidate build/validate/approve on a fixture repository, repository read, read-only delivery status) | Local, UI on a fixture repository; Mock (pull request); read-only check on one private test repository | [`test_fex_git_remote.py`](tests/final_loop/test_fex_git_remote.py), [`test_fex_code_panel_browser.py`](tests/final_loop/test_fex_code_panel_browser.py) | no product-created pull request on a real repository; never a merge |
-| Multi-agent workflows, interview, audience variants, conflict mining | Local (synthetic specialists), API | [`test_ma_review_board.py`](tests/final_loop/test_ma_review_board.py) | quality unmeasured; agreement is never evidence |
-| Firebase hybrid satellite | Mock; local emulator for the Firestore sink | [`test_fs_emulator.py`](tests/final_loop/test_fs_emulator.py) | no cloud resource, real sign-in or latency measurement |
-
-Every claim with its limit: [`FINAL_CLAIMS_EVIDENCE_LIMITS.md`](docs/release/FINAL_CLAIMS_EVIDENCE_LIMITS.md). **Test totals** recorded in earlier snapshots (for example 1,238 passed, 3 skipped, 1 deselected for an earlier export) are historical evidence, not a result for this export. A rehearsal of this preview tree (source commit `93a2675`, before the README adjustment) ran `pytest tests/contract tests/unit -q` in a fresh virtual environment with no database and no provider: 1,268 passed, 3 skipped, 1 deselected, on one machine; the rehearsal server also started on a throwaway PostgreSQL and served `/app-next/` with its assets. The record is in [`PUBLIC_PREVIEW_PROVENANCE.json`](PUBLIC_PREVIEW_PROVENANCE.json). The same count was recorded for the earlier preview export (`a6fdb72`); the two runs are one result type on different snapshots, not additive. Database-backed, browser and frontend suites were not part of these runs.
+**Test totals.** Totals from earlier snapshots (for example 1,238 passed, 3 skipped, 1 deselected for an earlier export) are historical, not results for this export. A rehearsal of this preview tree (source `93a2675`, before the README adjustment) ran `pytest tests/contract tests/unit -q` in a fresh virtual environment with no database and no provider: 1,268 passed, 3 skipped, 1 deselected, on one machine, and the rehearsal server started and served `/app-next/` ([record](PUBLIC_PREVIEW_PROVENANCE.json)). Database-backed, browser and frontend suites were not part of it; the earlier export `a6fdb72` recorded the same count on a different snapshot (not additive).
 
 ## 8. Business value and potential
 
-The intended benefits, **not measured outcomes**: less manual effort finding scattered rules; a clearer boundary between business decisions and technical edits; more traceable approvals; visibility of what is still unimplemented or unresolved; less ambiguity during review; knowledge that can be reused by later changes. No savings, productivity gain, return on investment or adoption has been measured. Harbor is synthetic, and generalisation beyond it is a design claim that is not validated.
+Intended benefits, **not measured outcomes**: less manual effort finding scattered rules, a clearer line between business decisions and technical edits, more traceable approvals, visibility of what is unresolved or unimplemented, less ambiguity in review, and reusable knowledge across changes. No savings, productivity gain, return on investment or adoption has been measured. Harbor is synthetic; generalisation beyond it is a design claim, not validated.
 
 ## 9. Architecture and tech stack
 
@@ -189,17 +169,14 @@ flowchart LR
   DB -.->|"optional extension"| FS["Firestore sink<br/>local emulator only"]
 ```
 
-Python 3.11+, FastAPI, PostgreSQL with SQL migrations, a React/TypeScript/Vite interface (built bundle included), pytest and Playwright, Gemini through Vertex AI as the optional provider, Docker for a throwaway database. Dashed paths are optional extensions; the Firestore path is emulator-only and nothing here is deployed to a cloud.
+Python 3.11+, FastAPI, PostgreSQL with SQL migrations, a React/TypeScript/Vite interface (built bundle included), pytest and Playwright, Gemini through Vertex AI as the optional provider, Docker for a throwaway database. Dashed paths are optional extensions; the Firestore path is emulator-only and nothing is deployed to a cloud.
 
 | Path | Responsibility |
 |---|---|
-| [`core/change_intelligence/v2/`](core/change_intelligence/v2) | pure business logic: knowledge, graph, answers, retrieval, Q&A validation, change, impact, draft, journey, documents |
-| [`infra/`](infra), `infra/worker/` | API routes, roles, store and migrations; worker, jobs, budget accounting |
-| [`config/`](config) | frozen prompts and schemas per AI role; budget examples with zero-price stand-ins |
-| [`frontend/`](frontend), `app/ui_next/` | UI source and built bundle |
-| [`fixtures/harbor_public`](fixtures/harbor_public) | the Harbor sample |
-| [`docs/`](docs) | [contracts](docs/contracts), [quality plan](docs/evaluation/FINAL_AI_QUALITY_PLAN.md), [runbook](docs/runbooks/FINAL_RECOVERY.md), release records; [map](docs/README.md) |
-| [`tests/`](tests), [`tools/`](tools) | suites by purpose; local rehearsal server |
+| [`core/change_intelligence/v2/`](core/change_intelligence/v2) | pure business logic: knowledge, graph, answers, retrieval, validation, change, impact, draft, journey, documents |
+| [`infra/`](infra), `infra/worker/` | API routes, roles, store, migrations; worker, jobs, budget accounting |
+| [`config/`](config), [`fixtures/harbor_public`](fixtures/harbor_public) | frozen prompts and schemas per role, budget examples (zero-price stand-ins); the Harbor sample |
+| [`frontend/`](frontend), [`tests/`](tests), [`tools/`](tools), [`docs/`](docs) | interface source; suites by purpose and the local rehearsal server; [contracts](docs/contracts), [quality plan](docs/evaluation/FINAL_AI_QUALITY_PLAN.md), [map](docs/README.md) |
 
 ## 10. Run and verify locally
 
@@ -217,9 +194,9 @@ After about 30-60 seconds the console prints `http://127.0.0.1:8765/app-next/` a
 
 **Safety and cleanup.** `run_local` drops and re-creates a database named `rehearsal` on the PostgreSQL it is pointed at (default `127.0.0.1:55831`), refuses non-loopback hosts and database names not ending in `rehearsal`, and keeps blobs in memory. Never point it at a database you care about. Stop with Ctrl+C, then `docker rm -f ripple-pg`.
 
-**What runs, and what is simulated.** Deterministic parts run for real: knowledge versions, questions, controls, acceptance, graph, documents, impact, Harbor measurement, review, approval, commit, source edit, journey. All model output is **simulated by code**, not by a model. The Final AI roles answer with a declining simulation (abstain, clarify, unsure or unsupported, labelled as simulated), with one exception: a request written as "... from `<old value>` to `<new value>` ..." that matches exactly one rule is read by rules into a numeric change so the loop can be walked through. The seeded knowledge has no structured actors or conditions, so answer those first on the Questions page. The local demo therefore says nothing about Gemini's real behaviour. Changing an environment variable does not enable a real model: that needs an operator approval file, a budget configuration with real model ids and verified prices (`RIPPLE_BUDGET_CONFIG_PATH`), `RIPPLE_LIVE_LOCAL_ARM=1` and Vertex AI credentials ([`tools/judge_local/live_local.py`](tools/judge_local/live_local.py)).
+**What runs, and what is simulated.** Deterministic parts run for real: knowledge versions, questions, acceptance, graph, documents, impact, Harbor measurement, review, approval, commit, source edit, journey. All model output is **simulated by code**. The Final AI roles answer with a declining simulation (abstain, clarify, unsure or unsupported, labelled as simulated), except that a request written as "... from `<old value>` to `<new value>` ..." matching exactly one rule is read by rules into a numeric change so the loop can be walked through. The seeded knowledge has no structured actors or conditions, so answer those first on the Questions page. The demo says nothing about Gemini's real behaviour, and changing an environment variable does not enable a real model: that needs an operator approval file, a budget configuration with real model ids and verified prices (`RIPPLE_BUDGET_CONFIG_PATH`), `RIPPLE_LIVE_LOCAL_ARM=1` and Vertex AI credentials ([`live_local.py`](tools/judge_local/live_local.py)).
 
-**Tests.** Install `requirements-dev.txt`; browser tests also need `python -m pip install playwright` and `playwright install chromium`. Run suites one at a time.
+**Tests.** Browser tests also need `python -m pip install playwright` and `playwright install chromium`. Run suites one at a time.
 
 | Purpose | Command | Needs |
 |---|---|---|
@@ -227,8 +204,8 @@ After about 30-60 seconds the console prints `http://127.0.0.1:8765/app-next/` a
 | Permission sweep | `python -m pytest tests/security/test_ai2_t02_permission.py -q` | PostgreSQL in `AI2_T02_TEST_DSN` |
 | Core loop, API level | `python -m pytest tests/final_loop -q -k "not browser"` | PostgreSQL in `PITCH_BRIEF_TEST_DSN` |
 | Core loop, browser | `UI_BASE=app-next python -m pytest tests/final_loop -q -k browser` | the same plus Chromium |
-| Interface browser journeys | `UI_BASE=app-next python -m pytest tests/ui_next -q` | PostgreSQL in `PITCH_BRIEF_TEST_DSN`, Chromium |
-| UI design-system check, type check, unit tests | `cd frontend && npm ci && npm run check:design && npm run typecheck && npm test` | Node.js |
+| Interface browser journeys | `UI_BASE=app-next python -m pytest tests/ui_next -q` | the same |
+| Design check, type check, unit tests | `cd frontend && npm ci && npm run check:design && npm run typecheck && npm test` | Node.js |
 
 ```bash
 # reuse the container started above (ripple-pg); do not start a second one on port 55831
@@ -237,33 +214,33 @@ export PITCH_BRIEF_TEST_DSN="host=127.0.0.1 port=55831 dbname=pbrief user=postgr
 export AI2_T02_TEST_DSN="$PITCH_BRIEF_TEST_DSN"
 ```
 
-**Skip semantics.** Without a database DSN the database tests are skipped, without Playwright the browser tests are skipped, and without the Firestore emulator the emulator tests are skipped. **A skip is not a pass**; read the skip count in the summary. No test calls a provider. One container serves both the rehearsal server and the tests (separate databases). If port 55831 or the name `ripple-pg` is already taken, choose another host port and set `REHEARSAL_ADMIN_DSN` (rehearsal) and the DSN variables (tests) to match; check with `docker ps` first. Stop with `docker rm -f ripple-pg` when done.
+**Skip semantics.** Without a database DSN the database tests are skipped, without Playwright the browser tests are skipped, and without the Firestore emulator the emulator tests are skipped. **A skip is not a pass**; read the skip count. No test calls a provider. One container serves both the rehearsal server and the tests (separate databases); if port 55831 or the name `ripple-pg` is taken, pick another host port and set `REHEARSAL_ADMIN_DSN` and the DSN variables to match (check `docker ps` first), and remove the container when done.
 
 ## 11. Roadmap toward Final readiness
 
-These are plans, not features. Reaching them does not guarantee selection for any later round. **Priorities:** independent model-quality evaluation and human acceptance are critical gates for the core product; real integration (interface merge, staging, a real pull request) is important; the optional extensions of section 7 are not required for core-product readiness and are developed only after the critical gates.
+These are plans, not features, and reaching them does not guarantee selection for any later round. **Priorities:** independent model-quality evaluation and formal acceptance are critical gates; real integration (staging, a real pull request) is important; the optional extensions are not required for core-product readiness and come after the critical gates.
 
 | Stage | Status | Contents | Completion evidence |
 |---|---|---|---|
-| **Foundation** | Implemented | the business knowledge and governed change mechanisms of sections 3-4 and 6 | the local suites in section 7; recorded in the evidence file |
-| **Intelligence** | Implemented, quality validation pending | the Gemini roles, grounding controls, budget boundary; a bounded self-check pilot | five evidence kinds in section 5; kinds 1-4 exist, kind 5 does not |
-| **Validation** | Next gate | independent real-model evaluation on a reviewer-built set with fixed model, prompt and schema versions; human acceptance of the behaviour; scenario-based verification | a published result whatever it shows; an acceptance record; will establish measured quality on those sets, not quality in general |
-| **Integration** | Next gate | redesigned user interface (merged; browser self-checks passed on the merged tree; desktop layout visually accepted by the owner for this round; remaining planned layout work and mobile acceptance open); cloud staging; one product-created pull request on a real repository under explicit authorisation; real Firebase activation | browser suites pass on the merged tree; staging checks recorded; the pull request opened and read back, never merged by the product |
-| **Final readiness** | Target | an integrated, demonstrable system with published evidence and its remaining limits disclosed | all of the above recorded; no dates are promised here |
+| **Foundation** | Implemented | the knowledge and governed-change mechanisms of sections 3-4 and 6 | local suites in section 7 |
+| **Interface** | Merged; acceptance partial | the redesigned interface is merged into this snapshot; the owner accepted the desktop layout. **Remaining:** small-screen acceptance, partial layout packages, browser suites rerun on the tree being claimed | recorded browser run on the claimed tree |
+| **Intelligence** | Implemented, quality pending | Gemini roles, grounding controls, budget boundary, a bounded pilot | section 5: kinds 1-4 exist, kind 5 does not |
+| **Validation** | Next gate | independent real-model evaluation on a reviewer-built set with fixed model, prompt and schema versions; formal business and product acceptance; scenario-based verification | a published result whatever it shows and an acceptance record; establishes measured quality on those sets, not in general |
+| **Integration** | Next gate | cloud staging; one product-created pull request on a real repository under explicit authorisation; real Firebase activation | staging checks recorded; the pull request opened and read back, never merged by the product |
+| **Final readiness** | Target | an integrated, demonstrable system with published evidence and its remaining limits disclosed | all of the above recorded; no dates promised |
 
 ## 12. Known limits, security, provenance and licence
 
-**Real-model quality.** Not independently measured (see section 5, kind 5). The sealed sets were agent-written and small. Two diagnostic labels on one held-out set remain disputed and unchanged. An earlier snapshot's held-out evaluation did not reach its targets.
-**Human acceptance.** None has taken place; approvals in tests are self-checks.
+**Real-model quality.** Not independently measured (section 5, kind 5); sealed sets were agent-written and small; two diagnostic labels on one held-out set remain disputed and unchanged; an earlier snapshot's held-out evaluation did not reach its targets.
+**Acceptance.** No formal business or product acceptance of the AI and workflow outcomes; approvals in tests are self-checks. Interface acceptance is the owner's desktop review only (section 4b).
 **Supported use and formats.** Import of `.md`, `.yml/.yaml`, `.py`, `.xlsx` (no macros), `.csv`, `.jsonl`, English only; automatic source edits are YAML scalars of configuration files; changes effective on a date are unsupported; Harbor is the only exercised system.
-**External integration.** The pull-request path is mock-tested; the product never merges or deploys; Firebase pieces are mock or local-emulator only; no cloud resource exists for this snapshot.
-**Deployment and interface.** Not deployed. The interface is the redesigned one, merged from a separate branch: browser self-checks pass on the merged tree and the owner visually accepted its desktop layout for this round only; several planned layout changes are still partial. Screens exist for the core loop, code recommendations and candidate patches on a fixture repository, repository reading and a read-only delivery status; policy decisions, multi-agent workflows, interview, audience variants and conflict mining remain API only.
+**Integration and deployment.** Not deployed; the pull-request path is mock-tested and the product never merges or deploys; Firebase pieces are mock or emulator only; no cloud resource exists. Policy decisions, multi-agent workflows, interview, audience variants and conflict mining have no screens.
 **Behaviour and outcomes.** The product reads sources back and compares them with the decision; it never verifies behaviour or business outcomes.
-**Security boundaries.** Roles are assigned by the server; raw quotes and code recommendations need `evidence.read`, AI use needs `ai.use` and a workspace policy; external identity exchange gives one generic refusal for any invalid case and every right still comes from SQL membership; projected hints are minimal and opaque. No independent security validation has been performed. No credential, token or private dataset is in this repository, and a pattern scan of the export reported 0 findings, which is a check and not a guarantee.
+**Security.** Roles are assigned by the server; raw quotes and code recommendations need `evidence.read`, AI use needs `ai.use` and a workspace policy; external identity exchange gives one generic refusal and every right still comes from SQL membership; projected hints are minimal and opaque. No independent security validation has been performed. No credential, token or private dataset is in this repository; a pattern scan of the export reported 0 findings, a check and not a guarantee.
 
-Details: [`FINAL_CLAIMS_EVIDENCE_LIMITS.md`](docs/release/FINAL_CLAIMS_EVIDENCE_LIMITS.md), [`FINAL_RELEASE_CHECKLIST.md`](docs/release/FINAL_RELEASE_CHECKLIST.md), [contracts](docs/contracts).
+Details: [claims and limits](docs/release/FINAL_CLAIMS_EVIDENCE_LIMITS.md), [release checklist](docs/release/FINAL_RELEASE_CHECKLIST.md), [contracts](docs/contracts).
 
-**Provenance.** This tree is an export of committed content from a private development repository with a fresh Git history; [`SUBMISSION_MANIFEST.json`](SUBMISSION_MANIFEST.json) is the export manifest generated with the tree (it records the source commit, file hashes and export decisions; it is created at export time, which is why the development repository's link check cannot resolve it). This README was adjusted for the public preview after export; [`PUBLIC_PREVIEW_PROVENANCE.json`](PUBLIC_PREVIEW_PROVENANCE.json) records the source commit, the unchanged manifest hash and the hashes of the exported and published README.
+**Provenance.** This tree is an export of committed content from a private development repository with a fresh Git history. [`SUBMISSION_MANIFEST.json`](SUBMISSION_MANIFEST.json) is the export manifest generated with the tree (source commit, file hashes, export decisions); it is created at export time, so the development repository's link check cannot resolve it. This README was adjusted for the preview after export, so the tree does not match the original manifest byte for byte; [`PUBLIC_PREVIEW_PROVENANCE.json`](PUBLIC_PREVIEW_PROVENANCE.json) records the source commit, the manifest hashes (raw and line-ending-normalised) and the hashes of the exported and published README.
 
 **Licence.** Proprietary, **Competition Evaluation Only** ([`LICENSE`](LICENSE)): authorised judges and evaluators may read, clone, build, run, test and modify a local copy solely to evaluate this submission. No commercial, production, reuse or redistribution rights are granted, and a public repository is not an open-source licence. Third-party components keep their own licences ([`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), [`frontend/THIRD_PARTY_NOTICES.md`](frontend/THIRD_PARTY_NOTICES.md)).
-**Ownership and thanks.** Copyright holder: Eiki Tomobe; team details are not provided in this repository. Thanks to Google Cloud (Vertex AI) and the competition organiser, and to the open-source libraries listed in the notices.
+**Ownership and thanks.** Copyright holder: Eiki Tomobe; team details are not provided in this repository. Thanks to Google Cloud (Vertex AI), the competition organiser, and the open-source libraries listed in the notices.
