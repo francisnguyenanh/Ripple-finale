@@ -4,7 +4,7 @@
 
 **AI proposes. Deterministic systems validate. Humans decide.**
 
-> **Development preview, not a finished product.** This snapshot is not deployed, has no human acceptance, and its real-model quality has not been independently measured ([limits](#12-known-limits-security-provenance-and-licence)). Whether the team advances to a later round is the organiser's decision. Submission for the Google Cloud AI Builder Cup JAPAC 2026.
+> **Development preview, not a finished product.** This snapshot is not deployed, has no human acceptance, and its real-model quality has not been independently measured ([limits](#12-known-limits-security-provenance-and-licence)). Whether the team advances to a later round is the organiser's decision. Submission for the Google Cloud AI Builder Cup JAPAC 2026. Snapshot: source commit `93a2675` ([provenance](PUBLIC_PREVIEW_PROVENANCE.json)).
 
 ## Explore this repository
 
@@ -96,7 +96,7 @@ flowchart LR
   classDef det fill:#e6f4ea,stroke:#34a853
 ```
 
-The journey ends in a per-change view of nine steps, each with a state and a next actor; "knowledge decided", "source aligned" and "behaviour verified" are different states ([journey logic](core/change_intelligence/v2/business_journey.py)). In this snapshot the browser UI is the earlier interface and the Final-stage supporting services (see section 7) are mostly API-only.
+The journey ends in a per-change view of nine steps, each with a state and a next actor; "knowledge decided", "source aligned" and "behaviour verified" are different states ([journey logic](core/change_intelligence/v2/business_journey.py)). In this snapshot the browser UI is the redesigned interface, merged from its separate development branch. The project owner visually accepted its **desktop** layout for this round only; that acceptance does not cover AI quality, the extensions, mobile layouts beyond the recorded browser runs, or production readiness. The Final-stage supporting services (see section 7) are mostly API-only.
 
 ## 5. Generative AI implementation
 
@@ -123,7 +123,7 @@ Gemini is useful here because the inputs are messy language: policy prose, comme
 
 **AI capability implemented does not mean AI quality independently validated.**
 
-**Live pilot observations (self-check, unchanged).** 28 calls on Gemini 3.5 Flash-Lite and one paired case on Gemini 3.8 Flash, under a hard cost cap of 2 USD, of which 0.17475295 USD had been recorded at the snapshot. Two sealed sets written by the project's own agent were scored mechanically: questions 10/14, then 8/14 after a server fix; change requests 6/8. These sets are small and **not independent**. Observed: missing required citations with the lighter model, unreliability on three-part requests, varying abstention wording. An earlier snapshot's held-out evaluation (2026-10-02) did not reach its targets ([record](docs/evaluation/HELD_OUT_EVALUATION.md)); it is kept as history and was not repeated on this snapshot.
+**Live pilot and diagnostic observations (self-check, unchanged).** 28 calls on Gemini 3.5 Flash-Lite and one paired case on Gemini 3.8 Flash, under a hard cost cap of 2 USD, of which 0.17475295 USD had been recorded at the snapshot. Two sealed sets written by the project's own agent were scored mechanically: questions 10/14, then 8/14 after a server fix; change requests 6/8. These sets are small and **not independent**. Further diagnostic runs on a held-out set (also non-independent) were used only to classify failures and add server-side guards; they are listed in the [curated evidence](docs/release/FINAL_PREVIEW_EVIDENCE.md). They are diagnostics: the model-quality gate remains **OPEN**. Observed: missing required citations with the lighter model, unreliability on three-part requests, varying abstention wording. An earlier snapshot's held-out evaluation (2026-10-02) did not reach its targets ([record](docs/evaluation/HELD_OUT_EVALUATION.md)); it is kept as history and was not repeated on this snapshot.
 
 ## 6. Engineering foundation and trust
 
@@ -163,11 +163,11 @@ Labels: **Local** = implemented and verified with stub models on a disposable da
 | Extension | Status | Test (example) | Main limit |
 |---|---|---|---|
 | Policy decisions, audit package, business CI drift check, ROI replay | Local, API | [`test_mon_policy_audit.py`](tests/final_loop/test_mon_policy_audit.py) | hashes are not signatures; fixture or synthetic data only |
-| Candidate code patch, Git connector, pull-request path | Local; Mock (pull request); read-only check on one private test repository | [`test_fex_git_remote.py`](tests/final_loop/test_fex_git_remote.py) | no product-created pull request on a real repository; never a merge |
+| Candidate code patch, Git connector, pull-request path (screens: code recommendations, candidate build/validate/approve on a fixture repository, repository read, read-only delivery status) | Local, UI on a fixture repository; Mock (pull request); read-only check on one private test repository | [`test_fex_git_remote.py`](tests/final_loop/test_fex_git_remote.py), [`test_fex_code_panel_browser.py`](tests/final_loop/test_fex_code_panel_browser.py) | no product-created pull request on a real repository; never a merge |
 | Multi-agent workflows, interview, audience variants, conflict mining | Local (synthetic specialists), API | [`test_ma_review_board.py`](tests/final_loop/test_ma_review_board.py) | quality unmeasured; agreement is never evidence |
 | Firebase hybrid satellite | Mock; local emulator for the Firestore sink | [`test_fs_emulator.py`](tests/final_loop/test_fs_emulator.py) | no cloud resource, real sign-in or latency measurement |
 
-Every claim with its limit: [`FINAL_CLAIMS_EVIDENCE_LIMITS.md`](docs/release/FINAL_CLAIMS_EVIDENCE_LIMITS.md). **Test totals** recorded in earlier snapshots (for example 1,238 passed, 3 skipped, 1 deselected for an earlier export) are historical evidence, not a result for this export. A single rehearsal of the earlier published export (source commit `a6fdb72`, which differs from this tree only in `README.md`) ran `pytest tests/contract tests/unit -q` with no database and no provider: 1,268 passed, 3 skipped, 1 deselected, on one machine. It is recorded in the release notes of the `preview-1` tag, not in a file of this repository, and has not been repeated on the current tree; database and browser suites were not part of it.
+Every claim with its limit: [`FINAL_CLAIMS_EVIDENCE_LIMITS.md`](docs/release/FINAL_CLAIMS_EVIDENCE_LIMITS.md). **Test totals** recorded in earlier snapshots (for example 1,238 passed, 3 skipped, 1 deselected for an earlier export) are historical evidence, not a result for this export. A rehearsal of this preview tree (source commit `93a2675`, before the README adjustment) ran `pytest tests/contract tests/unit -q` in a fresh virtual environment with no database and no provider: 1,268 passed, 3 skipped, 1 deselected, on one machine; the rehearsal server also started on a throwaway PostgreSQL and served `/app-next/` with its assets. The record is in [`PUBLIC_PREVIEW_PROVENANCE.json`](PUBLIC_PREVIEW_PROVENANCE.json). The same count was recorded for the earlier preview export (`a6fdb72`); the two runs are one result type on different snapshots, not additive. Database-backed, browser and frontend suites were not part of these runs.
 
 ## 8. Business value and potential
 
@@ -227,7 +227,8 @@ After about 30-60 seconds the console prints `http://127.0.0.1:8765/app-next/` a
 | Permission sweep | `python -m pytest tests/security/test_ai2_t02_permission.py -q` | PostgreSQL in `AI2_T02_TEST_DSN` |
 | Core loop, API level | `python -m pytest tests/final_loop -q -k "not browser"` | PostgreSQL in `PITCH_BRIEF_TEST_DSN` |
 | Core loop, browser | `UI_BASE=app-next python -m pytest tests/final_loop -q -k browser` | the same plus Chromium |
-| UI unit tests | `cd frontend && npm test` | Node.js |
+| Interface browser journeys | `UI_BASE=app-next python -m pytest tests/ui_next -q` | PostgreSQL in `PITCH_BRIEF_TEST_DSN`, Chromium |
+| UI design-system check, type check, unit tests | `cd frontend && npm ci && npm run check:design && npm run typecheck && npm test` | Node.js |
 
 ```bash
 # reuse the container started above (ripple-pg); do not start a second one on port 55831
@@ -247,7 +248,7 @@ These are plans, not features. Reaching them does not guarantee selection for an
 | **Foundation** | Implemented | the business knowledge and governed change mechanisms of sections 3-4 and 6 | the local suites in section 7; recorded in the evidence file |
 | **Intelligence** | Implemented, quality validation pending | the Gemini roles, grounding controls, budget boundary; a bounded self-check pilot | five evidence kinds in section 5; kinds 1-4 exist, kind 5 does not |
 | **Validation** | Next gate | independent real-model evaluation on a reviewer-built set with fixed model, prompt and schema versions; human acceptance of the behaviour; scenario-based verification | a published result whatever it shows; an acceptance record; will establish measured quality on those sets, not quality in general |
-| **Integration** | Next gate | merge of the redesigned user interface; cloud staging; one product-created pull request on a real repository under explicit authorisation; real Firebase activation | browser suites pass on the merged tree; staging checks recorded; the pull request opened and read back, never merged by the product |
+| **Integration** | Next gate | redesigned user interface (merged; browser self-checks passed on the merged tree; desktop layout visually accepted by the owner for this round; remaining planned layout work and mobile acceptance open); cloud staging; one product-created pull request on a real repository under explicit authorisation; real Firebase activation | browser suites pass on the merged tree; staging checks recorded; the pull request opened and read back, never merged by the product |
 | **Final readiness** | Target | an integrated, demonstrable system with published evidence and its remaining limits disclosed | all of the above recorded; no dates are promised here |
 
 ## 12. Known limits, security, provenance and licence
@@ -256,13 +257,13 @@ These are plans, not features. Reaching them does not guarantee selection for an
 **Human acceptance.** None has taken place; approvals in tests are self-checks.
 **Supported use and formats.** Import of `.md`, `.yml/.yaml`, `.py`, `.xlsx` (no macros), `.csv`, `.jsonl`, English only; automatic source edits are YAML scalars of configuration files; changes effective on a date are unsupported; Harbor is the only exercised system.
 **External integration.** The pull-request path is mock-tested; the product never merges or deploys; Firebase pieces are mock or local-emulator only; no cloud resource exists for this snapshot.
-**Deployment and interface.** Not deployed. The interface in this snapshot is the earlier one; a redesign is developed separately and is not included.
+**Deployment and interface.** Not deployed. The interface is the redesigned one, merged from a separate branch: browser self-checks pass on the merged tree and the owner visually accepted its desktop layout for this round only; several planned layout changes are still partial. Screens exist for the core loop, code recommendations and candidate patches on a fixture repository, repository reading and a read-only delivery status; policy decisions, multi-agent workflows, interview, audience variants and conflict mining remain API only.
 **Behaviour and outcomes.** The product reads sources back and compares them with the decision; it never verifies behaviour or business outcomes.
 **Security boundaries.** Roles are assigned by the server; raw quotes and code recommendations need `evidence.read`, AI use needs `ai.use` and a workspace policy; external identity exchange gives one generic refusal for any invalid case and every right still comes from SQL membership; projected hints are minimal and opaque. No independent security validation has been performed. No credential, token or private dataset is in this repository, and a pattern scan of the export reported 0 findings, which is a check and not a guarantee.
 
 Details: [`FINAL_CLAIMS_EVIDENCE_LIMITS.md`](docs/release/FINAL_CLAIMS_EVIDENCE_LIMITS.md), [`FINAL_RELEASE_CHECKLIST.md`](docs/release/FINAL_RELEASE_CHECKLIST.md), [contracts](docs/contracts).
 
-**Provenance.** This tree is an export of committed content from a private development repository with a fresh Git history; [`SUBMISSION_MANIFEST.json`](SUBMISSION_MANIFEST.json) records the source commit, file hashes and export decisions. The README is part of the exported source.
+**Provenance.** This tree is an export of committed content from a private development repository with a fresh Git history; [`SUBMISSION_MANIFEST.json`](SUBMISSION_MANIFEST.json) is the export manifest generated with the tree (it records the source commit, file hashes and export decisions; it is created at export time, which is why the development repository's link check cannot resolve it). This README was adjusted for the public preview after export; [`PUBLIC_PREVIEW_PROVENANCE.json`](PUBLIC_PREVIEW_PROVENANCE.json) records the source commit, the unchanged manifest hash and the hashes of the exported and published README.
 
 **Licence.** Proprietary, **Competition Evaluation Only** ([`LICENSE`](LICENSE)): authorised judges and evaluators may read, clone, build, run, test and modify a local copy solely to evaluate this submission. No commercial, production, reuse or redistribution rights are granted, and a public repository is not an open-source licence. Third-party components keep their own licences ([`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), [`frontend/THIRD_PARTY_NOTICES.md`](frontend/THIRD_PARTY_NOTICES.md)).
 **Ownership and thanks.** Copyright holder: Eiki Tomobe; team details are not provided in this repository. Thanks to Google Cloud (Vertex AI) and the competition organiser, and to the open-source libraries listed in the notices.

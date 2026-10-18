@@ -141,6 +141,7 @@ export function AnalysisStage() {
   const [picked, setPicked] = React.useState<string>("");
   const [rel, setRel] = React.useState<{ jobs: number; uncovered: number; total: number } | null>(null);
   const [relTick, setRelTick] = React.useState(0);
+  const [relReadFor, setRelReadFor] = React.useState("");      // which rule the count above was read for (or the read failed for): until then the button waits
   const [inv, setInv] = React.useState<{ step: number; total: number; label: string } | null>(null);       // all hooks stay ABOVE the early return below
   const [invNote, setInvNote] = React.useState<string>("");
   const d = data;
@@ -156,9 +157,9 @@ export function AnalysisStage() {
     const read = async (): Promise<number> => {
       try {
         const cx = await api<Rec>("GET", `/v2/change/impact-context?workspace_id=${encodeURIComponent(ws)}&target_candidate_id=${encodeURIComponent(relTarget)}`);
-        if (live) setRel({ jobs: (cx.relation_job_ids ?? []).length, uncovered: (cx.uncovered_candidate_ids ?? []).length, total: (cx.candidate_ids ?? []).length });
+        if (live) { setRel({ jobs: (cx.relation_job_ids ?? []).length, uncovered: (cx.uncovered_candidate_ids ?? []).length, total: (cx.candidate_ids ?? []).length }); setRelReadFor(`${ws}|${relTarget}`); }
         return (cx.relation_job_ids ?? []).length;
-      } catch { if (live) setRel(null); return -1; }
+      } catch { if (live) { setRel(null); setRelReadFor(`${ws}|${relTarget}`); } return -1; }    // unreadable: the button works as before; the server re-checks
     };
     void (async () => {
       const first = await read();
@@ -281,7 +282,7 @@ export function AnalysisStage() {
       <JobLine name="impact" job={d.impact} />
       {mayRun && (
         <div className="flex flex-wrap gap-2">
-          <Button data-testid="action-run-relations" title={(rel?.jobs ?? 0) > 0 ? `Already computed for this revision (${rel!.jobs} job(s)): computing it again gives the same result.` : undefined} disabled={!confirmed || !target() || ambiguous || pending || (rel?.jobs ?? 0) > 0} onClick={relations}>Compute relation coverage (no AI call)</Button>
+          <Button data-testid="action-run-relations" data-read={!relTarget || relReadFor === `${ws}|${relTarget}` ? "done" : "pending"} title={(rel?.jobs ?? 0) > 0 ? `Already computed for this revision (${rel!.jobs} job(s)): computing it again gives the same result.` : undefined} disabled={!confirmed || !target() || ambiguous || pending || (rel?.jobs ?? 0) > 0 || (!!relTarget && relReadFor !== `${ws}|${relTarget}`)} onClick={relations}>Compute relation coverage (no AI call)</Button>
           <Button variant="primary" data-testid="action-run-impact" title={!confirmed ? `Confirm the request first (stage ${stageNo("request")}).` : ambiguous ? "Pick which extracted rule this change is about." : d.impact && !isTerminal(d.impact) ? "An impact analysis is already running." : undefined} disabled={!confirmed || ambiguous || (!!d.impact && !isTerminal(d.impact)) || pending} onClick={() => void impact()}>Run impact analysis</Button>
         </div>
       )}

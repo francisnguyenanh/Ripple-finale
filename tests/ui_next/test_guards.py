@@ -89,7 +89,16 @@ def test_keyboard_only_menu_skip_link_and_focus_return_on_a_small_screen(env, ch
         page, ctx = _page(pw_browser, server, (env.req, f"cred-r-{env.nonce}"), )
         page.set_viewport_size({"width": 390, "height": 844})
         select_workspace(page, env.ws)
-        # the skip link is the first Tab stop and moves focus to the main content
+        # choosing a page inside the menu closes it and puts focus back on the menu button (never on a hidden control)
+        if not tid(page, "menu-sheet").is_visible():
+            tid(page, "menu-button").click()
+        tid(page, "nav-changes").focus()
+        page.keyboard.press("Enter")
+        expect(tid(page, "menu-sheet")).to_be_hidden()
+        assert page.evaluate("document.activeElement.dataset.testid") == "menu-button"
+        # on a fresh load the skip link is the first Tab stop and moves focus to the main content
+        page.reload()
+        expect(tid(page, "menu-button")).to_be_visible()
         page.keyboard.press("Tab")
         assert page.evaluate("document.activeElement.textContent.trim()") == "Skip to content"
         page.keyboard.press("Enter")

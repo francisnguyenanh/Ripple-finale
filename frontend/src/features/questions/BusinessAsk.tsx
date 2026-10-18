@@ -55,7 +55,7 @@ function AnswerCard({ data, mode }: { data: Rec; mode: string }) {
       {a.implementation_note && <Callout tone="info" testid="qa-implementation">{a.implementation_note as string} The source files and code are changed by a person, not by this product.</Callout>}
       {a.uncertainty && <Muted testid="qa-uncertainty">Not known: {a.uncertainty as string}</Muted>}
       {((a.clarifying_questions ?? []) as string[]).length > 0 && (
-        <div data-testid="qa-clarify"><p className="text-sm font-medium">To answer this, please say:</p><ul className="list-disc pl-5 text-sm">{(a.clarifying_questions as string[]).map((t, i) => <li key={i}>{t}</li>)}</ul></div>
+        <div data-testid="qa-clarify" data-status={a.status}><p className="text-sm font-medium">{a.status === "PARTIAL" ? "The parts that depend on missing facts stay open. To complete this answer, please say:" : "To answer this, please say:"}</p><ul className="list-disc pl-5 text-sm">{(a.clarifying_questions as string[]).map((t, i) => <li key={i}>{t}</li>)}</ul></div>
       )}
       <Muted testid="qa-retrieval-note">{a.retrieval_note as string}</Muted>
       {tech && (
@@ -84,6 +84,7 @@ export function BusinessAsk({ ws }: { ws: string }) {
   const [data, setData] = React.useState<Rec | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
   const [followUp, setFollowUp] = React.useState(false);
+  const askWhy = React.useId();
   const mode = s.mode;
   React.useEffect(() => {
     if (!qid) { setData(null); return; }
@@ -97,7 +98,7 @@ export function BusinessAsk({ ws }: { ws: string }) {
         if (r.status === "running" || r.status === "waiting_for_approval") timer = setTimeout(() => void tick(), 1500);
       } catch (e) {
         if (!live) return;
-        if (e instanceof ApiError) setErr(e.status === 404 ? "This question is not available to your account." : "The answer could not be loaded.");
+        if (e instanceof ApiError) setErr(e.status === 404 || e.status === 403 ? "This question is not available to your account." : "The answer could not be loaded.");
         else throw e;
       }
     };
@@ -115,13 +116,14 @@ export function BusinessAsk({ ws }: { ws: string }) {
     <div className="grid gap-4" data-testid="business-ask">
       {canAsk ? (
         <div className="rounded-lg border border-border bg-surface p-4 grid gap-3">
-          <Field label={followUp ? "Your follow-up question" : "Ask about the business knowledge"} hint="Answers use the accepted knowledge and say what they cannot tell. Asking the same question again shows the stored answer.">
+          <Field label={followUp ? "Your follow-up question" : "Your question"} hint="Answers use the accepted knowledge and say what they cannot tell. Asking the same question again shows the stored answer.">
             <TextArea data-testid="qa-input" rows={2} maxLength={1000} value={question} onChange={(e) => setQuestion(e.target.value)} />
           </Field>
           <div className="flex flex-wrap items-center gap-4">
             <label className="flex items-center gap-2 text-sm"><input type="radio" name="qa-view" data-testid="qa-view-target" checked={view === "target"} onChange={() => setView("target")} /> Decided knowledge</label>
             <label className="flex items-center gap-2 text-sm"><input type="radio" name="qa-view" data-testid="qa-view-observed" checked={view === "observed"} onChange={() => setView("observed")} /> What the sources say</label>
-            <Button variant="primary" data-testid="qa-ask" disabled={pending || !question.trim()} onClick={() => void submit()}>Ask</Button>
+            <Button variant="primary" data-testid="qa-ask" title={!question.trim() ? "Write your question first." : pending ? "The question is being sent." : undefined} aria-describedby={!question.trim() ? askWhy : undefined} disabled={pending || !question.trim()} onClick={() => void submit()}>Ask</Button>
+            {!question.trim() && <span id={askWhy} data-testid="qa-ask-why" className="text-sm text-muted">Write your question first.</span>}
             {qid && data?.status === "done" && !followUp && <Button data-testid="qa-followup" onClick={() => setFollowUp(true)}>Ask a follow-up</Button>}
           </div>
         </div>

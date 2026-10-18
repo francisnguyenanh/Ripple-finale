@@ -19,7 +19,7 @@ from tests.ai10ui.harness import ServerThread  # noqa: E402
 from tests.pitch_brief.chain import build  # noqa: E402
 
 WAIT = 30000
-PAGES = [("Overview", "overview-cta"), ("Sources", "artifact-row"), ("Explorer", "explorer-counts"), ("Questions", "questions-note"),
+PAGES = [("Overview", "overview-cta"), ("Sources", "artifact-row"), ("Explorer", "explorer-summary"), ("Questions", "questions-note"),
          ("Changes", "chat-panel"), ("Impact & Simulation", "flow-whatif"), ("History", "history-activity"), ("Support", "support-matrix")]
 
 

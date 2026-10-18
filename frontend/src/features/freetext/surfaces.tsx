@@ -4,7 +4,7 @@ import * as React from "react";
 import { Quote } from "lucide-react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Callout, Field, Muted, Tech, TextArea, TextInput } from "@/components/bits";
+import { Callout, Field, Muted, Tech, TextArea, TextInput, Select } from "@/components/bits";
 import { humanize, newId, valueText } from "@/lib/fmt";
 import { hashFor } from "@/lib/route";
 import { useAction } from "@/lib/useAction";
@@ -179,14 +179,14 @@ function GapEdit({ u, save, pending }: { u: Understanding; save: (f: Rec) => Pro
     <div className="grid gap-3">
       <Field label="Answer"><TextArea data-testid="gr-edit-answer" rows={3} value={v.answer} onChange={(e) => setV({ ...v, answer: e.target.value })} /></Field>
       <Field label="Record it as">
-        <select data-testid="gr-edit-kind" className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value={v.kind} onChange={(e) => setV({ ...v, kind: e.target.value })}>
+        <Select data-testid="gr-edit-kind" value={v.kind} onChange={(e) => setV({ ...v, kind: e.target.value })}>
           <option value="comment">A comment (not authoritative)</option><option value="decision">A decision (needs permission to confirm)</option>
-        </select>
+        </Select>
       </Field>
       <Field label="Is this a fact or a wish?">
-        <select data-testid="gr-edit-wish" className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value={v.wf} onChange={(e) => setV({ ...v, wf: e.target.value })}>
+        <Select data-testid="gr-edit-wish" value={v.wf} onChange={(e) => setV({ ...v, wf: e.target.value })}>
           <option value="">Choose</option><option value="fact">A fact: how it works today</option><option value="wish">A wish: how I want it to work</option>
-        </select>
+        </Select>
       </Field>
       <Field label="Why (optional)"><TextInput data-testid="gr-edit-why" value={v.why} onChange={(e) => setV({ ...v, why: e.target.value })} /></Field>
       <div><Button data-testid="gr-edit-apply" disabled={pending} onClick={() => save({ answer: v.answer, kind: v.kind, wish_or_fact: v.wf || null, rationale: v.why || null })}>Check my changes</Button></div>
@@ -251,21 +251,21 @@ function QuestionEdit({ u, claims, save, pending }: { u: Understanding; claims: 
     <div className="grid gap-3">
       <Field label="Answer"><TextArea data-testid="qr-edit-answer" rows={3} value={v.answer} onChange={(e) => setV({ ...v, answer: e.target.value })} /></Field>
       <Field label="Record it as">
-        <select data-testid="qr-edit-kind" className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value={v.kind} onChange={(e) => setV({ ...v, kind: e.target.value })}>
+        <Select data-testid="qr-edit-kind" value={v.kind} onChange={(e) => setV({ ...v, kind: e.target.value })}>
           <option value="comment">A comment (not authoritative)</option><option value="decision">A decision (needs permission to confirm)</option>
-        </select>
+        </Select>
       </Field>
       {v.kind === "decision" && (
         <Field label="Which rule do you confirm?">
-          <select data-testid="qr-edit-claim" className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value={v.claim} onChange={(e) => setV({ ...v, claim: e.target.value })}>
+          <Select data-testid="qr-edit-claim" value={v.claim} onChange={(e) => setV({ ...v, claim: e.target.value })}>
             <option value="">Choose</option>{claims.map((c) => <option key={c.candidate_id as string} value={c.candidate_id as string}>{humanize(c.predicate)} = {valueText(c.value, c.unit, c.unit)}</option>)}
-          </select>
+          </Select>
         </Field>
       )}
       <Field label="Is this a fact or a wish?">
-        <select data-testid="qr-edit-wish" className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value={v.wf} onChange={(e) => setV({ ...v, wf: e.target.value })}>
+        <Select data-testid="qr-edit-wish" value={v.wf} onChange={(e) => setV({ ...v, wf: e.target.value })}>
           <option value="">Choose</option><option value="fact">A fact: how it works today</option><option value="wish">A wish: how I want it to work</option>
-        </select>
+        </Select>
       </Field>
       <Field label="Why you are confirming this (optional)"><TextInput data-testid="qr-edit-why" value={v.why} onChange={(e) => setV({ ...v, why: e.target.value })} /></Field>
       <div><Button data-testid="qr-edit-apply" disabled={pending} onClick={() => save({ answer: v.answer, kind: v.kind, claim_id: v.claim || null, wish_or_fact: v.wf || null, rationale: v.why || null })}>Check my changes</Button></div>
@@ -335,9 +335,9 @@ function FeedbackEdit({ u, save, pending }: { u: Understanding; save: (f: Rec) =
       {rs.map((r, i) => (
         <div key={i} className="grid gap-1 rounded-md border border-border p-2">
           <strong className="text-sm">{r.item}</strong>
-          <select aria-label={`Reaction for ${r.item}`} className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value={r.reaction} onChange={(e) => setRs(rs.map((x, j) => (j === i ? { ...x, reaction: e.target.value } : x)))}>
+          <Select aria-label={`Reaction for ${r.item}`} value={r.reaction} onChange={(e) => setRs(rs.map((x, j) => (j === i ? { ...x, reaction: e.target.value } : x)))}>
             {Object.entries(REACTION_WORDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
+          </Select>
           <TextInput aria-label={`Note for ${r.item}`} value={r.note} onChange={(e) => setRs(rs.map((x, j) => (j === i ? { ...x, note: e.target.value } : x)))} />
           <Button onClick={() => setRs(rs.filter((_, j) => j !== i))}>Remove this reaction</Button>
         </div>
@@ -379,8 +379,8 @@ function FeedbackAction({ ws, cid, gaps, outcome, markDone, onRecorded }: { ws: 
 // ---------------------------------------------------------------------------------------------------------------- what-if
 export function whatIfSurface(onRun: (c: string, path: string, value: number) => Promise<string | null>): Surface {
   return {
-    purpose: "whatif", prefix: "wi", heading: "What would you like to explore?",
-    intro: "Write it the way you would say it. Ripple checks it against what your sources say now, asks you if something is missing, shows what it understood, and runs the simulation only when you press Run.",
+    purpose: "whatif", prefix: "wi", heading: "Say it in your own words",
+    intro: "Write it the way you would say it. Ripple checks it against what your sources say now and asks you if something is missing.",
     placeholder: "For example: what happens if we lower the manager approval threshold to 500,000 JPY for standard orders, keeping emergency orders unchanged?", startLabel: "Send",
     preview: (u: Understanding) => {
       const f = (u.fields ?? {}) as Rec;
@@ -424,9 +424,9 @@ function WhatIfEdit({ u, save, pending }: { u: Understanding; save: (f: Rec) => 
   return (
     <div className="grid gap-3">
       <Field label="Rule">
-        <select data-testid="wi-edit-rule" className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value={rule} onChange={(e) => setRule(e.target.value)}>
+        <Select data-testid="wi-edit-rule" value={rule} onChange={(e) => setRule(e.target.value)}>
           {RULES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-        </select>
+        </Select>
       </Field>
       <Field label="Value"><TextInput data-testid="wi-edit-value" value={val} onChange={(e) => setVal(e.target.value)} /></Field>
       <div><Button data-testid="wi-edit-apply" disabled={pending} onClick={() => save({ rule_key: rule, value: val.replace(/[ ,]/g, "") === "" ? null : Number(val.replace(/[ ,]/g, "")) })}>Check my changes</Button></div>

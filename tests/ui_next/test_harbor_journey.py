@@ -102,6 +102,7 @@ def test_full_harbor_loop_in_the_new_interface_with_a_clean_business_view(env, c
         assert_business_clean(requester, "AI draft")
 
         # ---- 4. relations, impact, simulation, proposal from the draft
+        expect(tid(requester, "action-run-relations")).to_have_attribute("data-read", "done", timeout=WAIT)   # the page knows whether it was already computed
         if tid(requester, "action-run-relations").is_enabled():                 # the checks behind the draft already created it; the button is only for a first run
             tid(requester, "action-run-relations").click()
             expect(tid(requester, "status-live")).to_contain_text("relation coverage", timeout=WAIT)
@@ -166,6 +167,9 @@ def test_full_harbor_loop_in_the_new_interface_with_a_clean_business_view(env, c
         monkeypatch.setattr(extraction, "_client_for_model", lambda m: post)
         _open(requester, url)
         tid(requester, "action-apply").click()
+        # the pump only runs what exists: wait until the server has the apply job (the click's request can arrive late on a loaded machine;
+        # a pump that finds nothing returns at once, and the re-analysis then never ran: UI-UX15-01 flake, reproduced by delaying that request)
+        expect(tid(requester, "state-apply")).not_to_have_attribute("data-state", "NONE", timeout=WAIT)
         _pump(admin, env)
         _pump(admin, env)
         _open(requester, requester.url)

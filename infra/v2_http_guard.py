@@ -20,14 +20,24 @@ Extra shared windows per session for writes (`RIPPLE_RATE_WRITE_PER_MIN`, defaul
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import hashlib
+import logging
 import os
 import random
 import time
+import uuid
 
 from starlette.responses import JSONResponse
 
 _COOKIE = "ripple_v2"
+_log = logging.getLogger("ripple.http")
+# The id of the request being served (set by the request-id middleware; empty outside a request). Server-generated, random, never derived from the client.
+REQUEST_ID: contextvars.ContextVar[str] = contextvars.ContextVar("ripple_request_id", default="")
+
+
+def current_request_id() -> str:
+    return REQUEST_ID.get()
 _MAX_BUCKETS = 20000
 _buckets: dict[str, list[float]] = {}                 # key -> [tokens, last_refill]
 
@@ -209,3 +219,22 @@ def install(app) -> None:
         if "x-content-type-options" not in response.headers:
             response.headers["X-Content-Type-Options"] = "nosniff"
         return response
+
+    # Registered last, so it wraps everything above (including the 429/503 answers of the rate guard). The id lets a person quote a failed request and an
+    # operator find its log line; it is random, says nothing about the caller and grants nothing. An incoming X-Request-Id is ignored, never echoed.
+    @app.middleware("http")
+    async def _request_id(request, call_next):
+        rid = uuid.uuid4().hex
+        previous = REQUEST_ID.set(rid)
+        try:
+            try:
+                response = await call_next(request)
+            except Exception:
+                _log.exception("unhandled error request_id=%s method=%s path=%s", rid, request.method, request.url.path)
+                raise
+            response.headers["X-Request-Id"] = rid
+            if response.status_code >= 400:
+                _log.warning("request_id=%s method=%s path=%s status=%s", rid, request.method, request.url.path, response.status_code)
+            return response
+        finally:
+            REQUEST_ID.reset(previous)

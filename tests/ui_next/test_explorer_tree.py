@@ -164,6 +164,7 @@ def test_counts_are_unique_and_unknown_is_not_zero(env, ch, pw_browser):
         graph = env.admin_client().get("/v2/knowledge/graph", params={"workspace_id": env.ws}).json()
         rules = [n for n in graph["nodes"] if n["type"] == "candidate"]
         issues = [n for n in graph["nodes"] if n["type"] == "finding"]
+        tid(page, "explorer-counts-more").locator("summary").click()      # the explanation is behind a disclosure (D4)
         text = tid(page, "explorer-counts").inner_text()
         assert f"{len(rules)} rules" in text and f"{len(issues)} issue" in text and "counted once" in text, text
         # an issue that touches several rules is listed under each and is still one record

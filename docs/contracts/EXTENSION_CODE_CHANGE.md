@@ -119,6 +119,37 @@ commit (its result names `sync_job_id`). Failure reasons: `no_read_grant`, `remo
 `repo_not_declared`, `base_mismatch`, `path_outside_allowlist`, `protected_file`, `mapping_unresolved`, `patch_does_not_apply`, `model_output_invalid`, `validation_not_passed`,
 `stale_binding`, `distinct_approver`, `no_publish_grant`, `wrong_environment`, `artifact_mismatch`, `knowledge_moved`; remote: see section 6a.
 
+## 9a. Reads for the interface (additive; nothing removed or renamed)
+
+**Repositories a member may see.** `GET /v2/sources/repositories?workspace_id=` (`project.read`):
+`{schema: "ripple-repositories/1", workspace_id, configured, repositories: [{repo_id, name, source: "local"|"remote", provider|null, grants: {read, pull_request},
+ready, unavailable_reason: null|"repo_not_ready"|"remote_config_invalid", sync: {allowed, reason_code: null|"permission_missing"|"repo_not_ready"|"remote_config_invalid"|"no_read_grant"}}], statement}`.
+A repository may declare `visible_to` (role names); without it every reader of the workspace sees it. A repository outside the member's visibility is absent, and
+`POST /v2/sources/git/sync` and `POST .../code/candidate` refuse it with the same `repo_not_declared` as an undeclared one. Never a path, URL, remote repository
+name, token variable or token. `configured: false` = nothing declared (the interface shows the feature as unavailable, with that reason).
+
+**Per-action hints.** `GET /v2/business/changes/{id}/code/candidate?workspace_id=[&repo_id=]` gains `can`:
+`{for_candidate, binding: {patch_hash, validation_hash}, repo_id, actions: {create_candidate|validate|approve|reject|publish: {allowed, reason_code, reason}}, statement}`.
+The codes come from the same check functions the actions run (`check_candidate`, `check_validation`, `check_decide`, `check_publish` + the publish grant), plus
+`permission_missing`, `human_actor_required` and `no_candidate`. A hint is read with the state beside it and is **not an authorisation**: every action checks
+permission and state again and may still be refused (tested: an approval read as allowed is refused with `already_decided` after another person decided).
+
+**Stable reason codes** (the interface words exactly these; any other code gets a neutral sentence): `repo_not_declared`, `repo_not_ready`, `remote_config_invalid`,
+`no_read_grant`, `no_publish_grant`, `permission_missing`, `human_actor_required`, `not_confirmed`, `knowledge_not_committed`, `stale_binding`,
+`candidate_not_completed`, `nothing_to_validate`, `invalid_field`, `distinct_approver`, `validation_not_passed`, `knowledge_moved`, `already_decided`,
+`not_approved`, `no_candidate`.
+
+**Value sets shown by the interface.** Candidate `status`: `pending`, `failed` (job), `PROPOSED`, `NOTHING_TO_PATCH` (result). Validation `report_status`:
+`PASSED`, `FAILED`, `NOT_RUN` (no declared command; not a pass), `INFRASTRUCTURE_FAILED`. `approval`: null or the latest approve row `{decision_id, kind:
+"approve", actor_id, reason, patch_hash, validation_hash, created_at}`; a rejection is visible in `decisions[]` (`kind: "reject"`), `approval` is then null.
+`pr_intent`: null or `{branch, title, patch_hash, base_sha, target_pin, validation_hash, approved_by, status: "REFUSED", reason: "no_publish_grant"}`.
+`pull_request`: null or `{repository, branch, commit_sha, pr_number, pr_url, pr_state, merged, at, ...}` (never merged by the product). Job status from
+`GET /v2/jobs/{id}` (`execution_status`): `QUEUED`/`PENDING_APPROVAL`/`RUNNING`/`COMPLETED`/`FAILED`/`CANCELLED`, for `git.fetch` (result names
+`sync_job_id`), `git.sync` (result `sha`, `previous_sha`, files) and `code.publish`.
+
+**Request id.** Every response carries `X-Request-Id` (32 hex characters, server-generated, random; an incoming value is ignored and never echoed). Error
+responses are logged with it. It is a reference for support, never a credential; the interface shows it only when present.
+
 ## 10. What this contract does not cover
 
 Git providers other than GitHub, webhooks, required checks, CI systems, container registries, cloud environments, hostile code, non-Python toolchains, multi-repository changes, merge or deploy.

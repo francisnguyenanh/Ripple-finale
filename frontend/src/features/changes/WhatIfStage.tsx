@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Callout, Card, Field, Muted, TextInput } from "@/components/bits";
+import { Callout, Card, Field, Muted, TextInput, Select } from "@/components/bits";
 import { Button } from "@/components/ui/button";
 import { newId } from "@/lib/fmt";
 import { hashFor } from "@/lib/route";
@@ -51,9 +51,9 @@ export function WhatIfStage() {
       <summary className="cursor-pointer font-semibold text-sm">Advanced input: choose the rule and type the value yourself</summary>
       <div className="grid gap-3 mt-3">
       <Field label="Rule">
-        <select data-testid="whatif-key" className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value={sel} onChange={(e) => setSel(e.target.value)}>
+        <Select data-testid="whatif-key" value={sel} onChange={(e) => setSel(e.target.value)}>
           {WHATIF_KEYS.map(([c, k, label]) => <option key={k} value={`${c}|${k}`}>{label}</option>)}
-        </select>
+        </Select>
       </Field>
       <Field label="Proposed value"><TextInput data-testid="whatif-value" placeholder="whole number, for example 750000" value={val} onChange={(e) => setVal(e.target.value)} /></Field>
       <div>

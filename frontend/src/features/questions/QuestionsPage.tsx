@@ -4,7 +4,7 @@ import * as React from "react";
 import { CheckCircle2, ChevronDown, ChevronRight, Quote } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Denied, Callout, Card, ClaimLabel, ClaimTitle, Field, Muted, Path, StatePill, Tech, TechField, TextArea } from "@/components/bits";
+import { Denied, Callout, Card, ClaimLabel, ClaimTitle, Field, Muted, Path, StatePill, Tech, TechField, TextArea, Select } from "@/components/bits";
 import { basename, humanize, newId, ruleTitle, scopeText, valueText } from "@/lib/fmt";
 import { useAction } from "@/lib/useAction";
 import { useNotify } from "@/lib/notify";
@@ -19,6 +19,8 @@ import { BusinessGaps } from "./BusinessGaps";
 import { BusinessAsk } from "./BusinessAsk";
 import { BusinessChange } from "./BusinessChange";
 import { BusinessRules } from "./BusinessRules";
+import { SectionNav } from "@/components/SectionNav";
+import { ALL_SECTIONS, GROUP_LABEL, SECTIONS, selectedSection, visible, type SectionId } from "./sections";
 
 const q = encodeURIComponent;
 
@@ -137,7 +139,7 @@ function QueueItem({ ws, item, data, open, setOpen, onDone }: { ws: string; item
               <div className="mt-3"><PurposeChat ws={ws} surface={questionReplySurface(ws, (item.candidates ?? []) as Rec[], (item.version as number | null) ?? null, onDone)} context={{ question_id: qid }} convId={conv} onConvId={setConv} /></div>
             </details>
           )}
-          <div><Button onClick={(e) => { e.stopPropagation(); setOpen(false); headBtn.current?.focus(); }}>Hide details</Button></div>
+          <div><Button data-testid="question-hide-toggle" onClick={(e) => { e.stopPropagation(); setOpen(false); headBtn.current?.focus(); }}>Hide details</Button></div>
         </div>
       )}
     </article>
@@ -249,8 +251,8 @@ function Versions({ ws, data, onDone }: { ws: string; data: Data; onDone: () => 
           </p>
         )) : <Muted>No knowledge version has been accepted yet.</Muted>}
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Compare from"><select data-testid="km-compare-from" className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value={from} onChange={(e) => setFrom(e.target.value)}><option value="">Select a revision</option>{revs.map((r) => <option key={r.revision_id} value={r.revision_id}>{r.revision_id}</option>)}</select></Field>
-          <Field label="Compare to"><select data-testid="km-compare-to" className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value={to} onChange={(e) => setTo(e.target.value)}><option value="">Select a revision</option>{revs.map((r) => <option key={r.revision_id} value={r.revision_id}>{r.revision_id}</option>)}</select></Field>
+          <Field label="Compare from"><Select data-testid="km-compare-from" value={from} onChange={(e) => setFrom(e.target.value)}><option value="">Select a revision</option>{revs.map((r) => <option key={r.revision_id} value={r.revision_id}>{r.revision_id}</option>)}</Select></Field>
+          <Field label="Compare to"><Select data-testid="km-compare-to" value={to} onChange={(e) => setTo(e.target.value)}><option value="">Select a revision</option>{revs.map((r) => <option key={r.revision_id} value={r.revision_id}>{r.revision_id}</option>)}</Select></Field>
         </div>
         <div data-testid="km-compare-result" className="text-sm grid gap-1">
           {a && b ? (
@@ -282,6 +284,12 @@ export function QuestionsPage() {
   const [data, setData] = React.useState<Data | null>(null);
   const [err, setErr] = React.useState<ApiError | null>(null);
   const [open, setOpenSet] = React.useState<Set<string>>(new Set());
+  const [uiSection, setUiSection] = useParam("ui_section");
+  const [chg] = useParam("chg"), [bq] = useParam("q"), [finding] = useParam("finding"), [qa] = useParam("qa");
+  const canAsk = s.can("ai.use");
+  const available = SECTIONS.map((x) => x.id).filter((id) => id !== "source-ask" || canAsk) as SectionId[];
+  const sel = selectedSection(uiSection, available, { chg, q: bq, finding, qa });
+  const choose = (id: string) => setUiSection(id || ALL_SECTIONS);          // "All sections" is explicit: no value means the default section
   const sessionRefresh = s.refresh;
   const refresh = React.useCallback(async () => {
     try { setData(await load(ws)); setErr(null); void sessionRefresh(); } catch (e) { if (e instanceof ApiError) setErr(e); else throw e; }
@@ -299,25 +307,27 @@ export function QuestionsPage() {
   return (
     <>
       <PageHeader id="questions" next={data.items.length ? "Open a question, check the evidence, then confirm or answer." : "Nothing is waiting for a person right now."} />
+      <SectionNav ariaLabel="Questions sections" testid="questions-sections" prefix="qsec" groupLabels={GROUP_LABEL} selected={sel} onSelect={choose}
+        sections={SECTIONS.filter((x) => available.includes(x.id)).map((x) => ({ id: x.id, group: x.group, label: x.label, badge: x.id === "open" ? `(${data.items.length})` : x.id === "findings" ? `(${openFindings})` : undefined }))} />
       <div className="grid gap-8">
-        {s.can("ai.use") && <AskCard ws={ws} />}
-        <section aria-labelledby="q-ask-biz" className="grid gap-4">
+        {canAsk && <div hidden={!visible(sel, "source-ask")} data-testid="qsection-source-ask"><AskCard ws={ws} /></div>}
+        <section aria-labelledby="q-ask-biz" hidden={!visible(sel, "ask")} data-testid="qsection-ask" className="grid gap-4">
           <h2 id="q-ask-biz" className="text-lg font-semibold">Ask about the business knowledge</h2>
           <BusinessAsk ws={ws} />
         </section>
-        <section aria-labelledby="q-change-biz" className="grid gap-4">
+        <section aria-labelledby="q-change-biz" hidden={!visible(sel, "change")} data-testid="qsection-change" className="grid gap-4">
           <h2 id="q-change-biz" className="text-lg font-semibold">Ask for a change to a business rule</h2>
           <BusinessChange ws={ws} />
         </section>
-        <section aria-labelledby="q-rules" className="grid gap-4">
+        <section aria-labelledby="q-rules" hidden={!visible(sel, "rules")} data-testid="qsection-rules" className="grid gap-4">
           <h2 id="q-rules" className="text-lg font-semibold">Business rules</h2>
           <BusinessRules ws={ws} />
         </section>
-        <section aria-labelledby="q-biz" className="grid gap-4">
+        <section aria-labelledby="q-biz" hidden={!visible(sel, "gaps")} data-testid="qsection-gaps" className="grid gap-4">
           <h2 id="q-biz" className="text-lg font-semibold">Business questions</h2>
           <BusinessGaps ws={ws} />
         </section>
-        <section aria-labelledby="q-open" className="grid gap-4">
+        <section aria-labelledby="q-open" hidden={!visible(sel, "open")} data-testid="qsection-open" className="grid gap-4">
           <h2 id="q-open" className="text-lg font-semibold">Open questions ({data.items.length})</h2>
           {((data.hidden.history ?? 0) + (data.hidden.repeat ?? 0) + (data.hidden.resolved ?? 0)) > 0 && (
             <Muted testid="questions-hidden-note">Not listed: {data.hidden.repeat ?? 0} repeat(s) of the same problem found by another check run, {data.hidden.history ?? 0} about an earlier reading of a file that has changed since (history), {data.hidden.resolved ?? 0} already decided. The same numbers are used on the change page.</Muted>
@@ -327,7 +337,17 @@ export function QuestionsPage() {
             <QueueItem key={it.question_id} ws={ws} item={it} data={data} open={open.has(it.question_id)}
               setOpen={(v) => setOpenSet((p) => { const n = new Set(p); if (v) n.add(it.question_id); else n.delete(it.question_id); return n; })} onDone={refresh} />
           )) : (
-            <div data-testid="state-empty" className="rounded-lg border border-border bg-surface p-6 flex items-center gap-3"><CheckCircle2 aria-hidden="true" className="text-success" /><span>No question is waiting for a human in this workspace.</span></div>
+            <div data-testid="state-empty" className="rounded-lg border border-border bg-surface p-6 grid gap-3">
+              <p className="flex items-center gap-3"><CheckCircle2 aria-hidden="true" className="text-success" /><span>No question is waiting for a human in this workspace.</span></p>
+              {sel === "open" && (
+                <div className="flex flex-wrap items-center gap-2" data-testid="open-empty-next">
+                  <span className="text-sm text-muted">You can still:</span>
+                  <Button size="sm" variant="secondary" data-testid="open-empty-ask" onClick={() => choose("ask")}>Ask about the business knowledge</Button>
+                  <Button size="sm" variant="secondary" data-testid="open-empty-gaps" onClick={() => choose("gaps")}>See business questions</Button>
+                  <Button size="sm" variant="secondary" data-testid="open-empty-all" onClick={() => choose("")}>Show all sections</Button>
+                </div>
+              )}
+            </div>
           )}
           {loose.length > 0 && (
             <Card title="Claims without a question">
@@ -336,11 +356,11 @@ export function QuestionsPage() {
             </Card>
           )}
         </section>
-        <section aria-labelledby="q-find" className="grid gap-4">
+        <section aria-labelledby="q-find" hidden={!visible(sel, "findings")} data-testid="qsection-findings" className="grid gap-4">
           <h2 id="q-find" className="text-lg font-semibold">Findings and conflicts ({openFindings} open)</h2>
           <Findings ws={ws} data={data} onDone={refresh} />
         </section>
-        <section aria-labelledby="q-ver" className="grid gap-4">
+        <section aria-labelledby="q-ver" hidden={!visible(sel, "versions")} data-testid="qsection-versions" className="grid gap-4">
           <h2 id="q-ver" className="text-lg font-semibold">Knowledge versions</h2>
           <Versions ws={ws} data={data} onDone={refresh} />
         </section>

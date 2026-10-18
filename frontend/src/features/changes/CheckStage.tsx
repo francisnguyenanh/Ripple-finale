@@ -5,7 +5,7 @@
 import * as React from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Callout, Field, Muted, Tech, TextInput } from "@/components/bits";
+import { Callout, Field, Muted, Tech, TextInput, Select } from "@/components/bits";
 import { basename, parseValue } from "@/lib/fmt";
 import { useAction } from "@/lib/useAction";
 import { useNotify } from "@/lib/notify";
@@ -36,9 +36,9 @@ function ManualForm() {
       <div className="grid gap-3 mt-3">
         <Muted>Only if the suggested check is wrong or missing. The form is blank on purpose: nothing is copied from the proposal.</Muted>
         <Field label="Kind">
-          <select data-testid="field-contract-kind" className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value={kind} onChange={(e) => setKind(e.target.value)}>
+          <Select data-testid="field-contract-kind" value={kind} onChange={(e) => setKind(e.target.value)}>
             <option value="yaml_value_equals">YAML value equals</option><option value="xlsx_cell_equals">Workbook cell equals</option>
-          </select>
+          </Select>
         </Field>
         <Field label="File (path as shown in Sources)"><TextInput data-testid="field-contract-path" value={f.path} onChange={set("path")} /></Field>
         <Field label="Where in the file (key, or Sheet!Cell for a workbook)"><TextInput data-testid="field-contract-locator" value={f.locator} onChange={set("locator")} /></Field>

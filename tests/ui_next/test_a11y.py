@@ -44,12 +44,16 @@ def test_pages_have_no_axe_violations(env, ch, pw_browser, scheme, w, h):
         login(page, env.admin, f"cred-a-{env.nonce}")
         select_workspace(page, env.ws)
         found = {}
-        for view in ("Overview", "Sources", "Explorer", "Questions", "Changes", "Impact & Simulation", "History", "Support"):
+        for view in ("Overview", "Sources", "Explorer", "Questions", "Changes", "Impact & Simulation", "Harbor try-out", "History", "Knowledge Documents", "Support"):
             if w < 1024:
                 tid(page, "menu-button").click()
             goto_view(page, view)
             expect(tid(page, "page-title")).to_be_visible()
             page.wait_for_load_state("networkidle")
+            if view == "Questions":
+                tid(page, "qsec-all").click()                            # the page opens on one section (D2): scan every section, as before
+                expect(tid(page, "qsection-ask")).to_be_visible()
+                page.wait_for_load_state("networkidle")
             if view == "Explorer":
                 tid(page, "rule-toggle").first.click()                   # the tree with one rule opened (its panel is part of the scan)
                 page.wait_for_load_state("networkidle")

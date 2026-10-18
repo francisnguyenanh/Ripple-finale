@@ -34,7 +34,7 @@ def test_a_repeated_finding_is_one_row_and_a_person_with_the_right_states_where_
         adm = _page(pw_browser, server, (env.admin, f"cred-a-{env.nonce}"))
         for p in (req, adm):
             select_workspace(p, env.ws)
-            p.goto(f"{server.url}{UI_BASE}#/ws/{env.ws}/questions")
+            p.goto(f"{server.url}{UI_BASE}#/ws/{env.ws}/questions?ui_section=findings")   # where findings are listed (D2: the page alone opens on Open questions)
         row = adm.locator(f"[data-testid=finding-row][data-finding-id='{first}']")
         expect(row).to_be_visible(timeout=WAIT)
         assert adm.locator("[data-testid=finding-row]").count() == 1                    # two runs, one problem

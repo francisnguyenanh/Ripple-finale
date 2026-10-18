@@ -3,7 +3,7 @@ import { stageTitle } from "./registry";
 import { StageCard } from "./StageCard";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
-import { Callout, Field, Muted, Tech, TechField, TextInput, usePlain } from "@/components/bits";
+import { Callout, Field, Muted, Tech, TechField, TextInput, usePlain, Select } from "@/components/bits";
 import { basename, newId, parseValue } from "@/lib/fmt";
 import { useNotify } from "@/lib/notify";
 import { useSession } from "@/session";
@@ -118,15 +118,15 @@ export function ProposalStage() {
           <summary className="cursor-pointer text-sm font-medium">Advanced: prepare the proposal by hand (file, key and values)</summary>
           <div className="grid gap-3 mt-3">
           <Field label="File">
-            <select data-testid="field-proposal-artifact" className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value={art} onChange={(e) => setArt(e.target.value)}>
+            <Select data-testid="field-proposal-artifact" value={art} onChange={(e) => setArt(e.target.value)}>
               <option value="">Select the file to change</option>
               {(d.arts ?? []).map((a) => <option key={a.artifact_id} value={a.artifact_id}>{a.logical_path}</option>)}
-            </select>
+            </Select>
           </Field>
           <Field label="Kind of edit">
-            <select data-testid="field-proposal-kind" className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value={kind} onChange={(e) => setKind(e.target.value)}>
+            <Select data-testid="field-proposal-kind" value={kind} onChange={(e) => setKind(e.target.value)}>
               {KINDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+            </Select>
           </Field>
           {kind === "yaml_typed_edit" && <Field label="Key path (dotted)"><TextInput data-testid="field-proposal-path" value={f.path} onChange={set("path")} /></Field>}
           {kind === "xlsx_typed_edit" && <><Field label="Sheet name"><TextInput data-testid="field-proposal-sheet" value={f.sheet} onChange={set("sheet")} /></Field><Field label="Cell (for example B2)"><TextInput data-testid="field-proposal-cell" value={f.cell} onChange={set("cell")} /></Field></>}

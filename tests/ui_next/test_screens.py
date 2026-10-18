@@ -17,10 +17,10 @@ from tests.pitch_brief.chain import build  # noqa: E402
 SHOTS = os.environ.get("UI_NEXT_SHOTS")
 WAIT = 30000
 PAGES = [("Overview", "overview"), ("Sources", "sources"), ("Explorer", "explorer"), ("Questions", "questions"), ("Changes", "changes"),
-         ("Impact & Simulation", "impact"), ("History", "history"), ("Support", "support")]
+         ("Impact & Simulation", "impact"), ("Harbor try-out", "harbor"), ("History", "history"), ("Knowledge Documents", "documents"), ("Support", "support")]
 # what shows that a page has its real data (not its loading state)
-READY = {"overview": "overview-cta", "sources": "artifact-row", "explorer": "explorer-counts", "questions": "questions-note", "changes": "chat-turns",
-         "impact": "flow-whatif", "history": "history-activity", "support": "support-matrix"}
+READY = {"overview": "overview-cta", "sources": "artifact-row", "explorer": "explorer-summary", "questions": "questions-note", "changes": "chat-turns",
+         "impact": "flow-whatif", "harbor": "harbor-versions", "history": "history-activity", "documents": "docs-topics", "support": "support-matrix"}
 
 
 @pytest.fixture
@@ -30,9 +30,20 @@ def ch(env, monkeypatch):
 
 @pytest.mark.parametrize("w,h", [(1440, 900), (1280, 800), (1024, 768), (390, 844)])
 def test_every_page_renders_without_sideways_scroll_and_is_photographed(env, ch, pw_browser, w, h):
+    _photograph_every_page(env, pw_browser, w, h)
+
+
+# 320 CSS px = WCAG 1.4.10 reflow width; 640 CSS px at device scale 2 = a 1280 px window zoomed to 200 %; dark scheme; Technical view.
+@pytest.mark.parametrize("variant,w,h,scheme,dpr,mode", [("w320", 320, 700, "light", 1, "business"), ("zoom200", 640, 400, "light", 2, "business"),
+                                                         ("dark", 1280, 800, "dark", 1, "business"), ("technical", 1280, 800, "light", 1, "technical")])
+def test_every_page_reflows_in_dark_technical_narrow_and_zoomed_views(env, ch, pw_browser, variant, w, h, scheme, dpr, mode):
+    _photograph_every_page(env, pw_browser, w, h, scheme=scheme, dpr=dpr, mode=mode, tag=variant)
+
+
+def _photograph_every_page(env, pw_browser, w, h, scheme="light", dpr=1, mode="business", tag=None):
     server = ServerThread().start()
     try:
-        ctx = pw_browser.new_context(base_url=server.url, viewport={"width": w, "height": h})
+        ctx = pw_browser.new_context(base_url=server.url, viewport={"width": w, "height": h}, color_scheme=scheme, device_scale_factor=dpr)
         page = ctx.new_page()
         page.set_default_timeout(WAIT)
         open_app(page, server.url)
@@ -42,6 +53,8 @@ def test_every_page_renders_without_sideways_scroll_and_is_photographed(env, ch,
         if out:
             out.mkdir(parents=True, exist_ok=True)
         # a started conversation makes the Changes page show real content
+        if mode == "technical":
+            tid(page, "mode-technical").click()
         if w < 1024:
             tid(page, "menu-button").click()
         goto_view(page, "Changes")
@@ -60,9 +73,9 @@ def test_every_page_renders_without_sideways_scroll_and_is_photographed(env, ch,
             expect(tid(page, "page-title")).to_be_visible()
             expect(tid(page, READY[slug]).first).to_be_visible(timeout=WAIT)
             page.wait_for_timeout(500)
-            assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth"), f"sideways scroll on {label} at {w}"
+            assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth"), f"sideways scroll on {label} at {w} ({tag or 'default'})"
             if out:
-                page.screenshot(path=str(out / f"{slug}_{w}.png"), full_page=(w == 1280))
+                page.screenshot(path=str(out / (f"{tag}_{slug}.png" if tag else f"{slug}_{w}.png")), full_page=(w == 1280))
         ctx.close()
     finally:
         server.stop()

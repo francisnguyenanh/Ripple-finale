@@ -169,6 +169,9 @@ def test_full_judge_journey_in_the_browser_with_the_bounded_pump(env, ch, monkey
         monkeypatch.setattr(extraction, "_client_for_model", lambda m: post)
         _open(requester, url)
         tid(requester, "action-apply").click()
+        # the pump only runs what exists: wait until the server has the apply job (the click's request can arrive late on a loaded machine;
+        # a pump that finds nothing returns at once, and the re-analysis then never ran: UI-UX15-01 flake, reproduced by delaying that request)
+        expect(tid(requester, "state-apply")).not_to_have_attribute("data-state", "NONE", timeout=WAIT)
         _pump(admin, env)
         _pump(admin, env)
         _open(requester, requester.url)

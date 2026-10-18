@@ -53,10 +53,12 @@ def _shell(request, workspace_id, change_id, permission, action, *, mutating=Tru
 
 
 @router.get("/v2/business/changes/{change_id}/code/candidate")
-def read_code_candidate(request: Request, change_id: str, workspace_id: str, candidate_job_id: str | None = None):
-    return _shell(request, workspace_id, change_id, "project.read",
-                  lambda store, tenant, authority, perms: v2_code_change.state(store, tenant, workspace_id, change_id, candidate_job_id=candidate_job_id, can_read_evidence="evidence.read" in perms),
-                  mutating=False)
+def read_code_candidate(request: Request, change_id: str, workspace_id: str, candidate_job_id: str | None = None, repo_id: str | None = None):
+    def read(store, tenant, authority, perms):
+        out = v2_code_change.state(store, tenant, workspace_id, change_id, candidate_job_id=candidate_job_id, can_read_evidence="evidence.read" in perms)
+        out["can"] = v2_code_change.action_hints(store, tenant, workspace_id, change_id, authority=authority, perms=perms, state_out=out, repo_id=repo_id)   # additive hint, not a grant
+        return out
+    return _shell(request, workspace_id, change_id, "project.read", read, mutating=False)
 
 
 @router.post("/v2/business/changes/{change_id}/code/candidate")
@@ -65,8 +67,11 @@ async def create_code_candidate(request: Request, change_id: str):
     repo_id = body.get("repo_id")
     if not isinstance(repo_id, str) or not repo_id:
         return _error("repo_id required", 400)
-    return _shell(request, body.get("workspace_id"), change_id, "code.patch",
-                  lambda store, tenant, authority, perms: v2_code_change.request_candidate(store, tenant, body["workspace_id"], change_id, repo_id=repo_id, actor_id=authority["account_id"]))
+    def action(store, tenant, authority, perms):
+        if not v2_code_change.repo_visible(body["workspace_id"], repo_id, authority.get("roles")):     # a hidden repository is refused exactly like an undeclared one
+            raise v2_code_change.CodeChangeRefused("repo_not_declared", "no declared repository with that id for this workspace")
+        return v2_code_change.request_candidate(store, tenant, body["workspace_id"], change_id, repo_id=repo_id, actor_id=authority["account_id"])
+    return _shell(request, body.get("workspace_id"), change_id, "code.patch", action)
 
 
 @router.post("/v2/business/changes/{change_id}/code/candidate/validate")
@@ -145,6 +150,8 @@ async def git_sync(request: Request):
         from infra.worker.verification import ensure_job
         from infra.worker import git_remote
         try:
+            if not v2_code_change.repo_visible(workspace_id, repo_id, authority.get("roles")):         # hidden = undeclared for this member (no existence leak)
+                raise NonRetryableExecutionError("repo_not_declared", f"no declared repository {repo_id!r} for this workspace")
             repo = cc.repo_config(workspace_id, repo_id)
             if git_remote.has_remote(repo):                                                    # FEX-01: a declared remote is fetched by a job (no network call in the request)
                 if not git_remote.has_grant(repo, "read"):
@@ -164,6 +171,27 @@ async def git_sync(request: Request):
         created = ensure_job(store, tenant, workspace_id, jid, gs.KIND, {"repo_id": repo_id, "requested_by": authority["account_id"], "sha": sha})
         rec = store.job_record(tenant, workspace_id, jid)
         return JSONResponse({"job_id": jid, "kind": gs.KIND, "created": created, "sha": sha, "status": v2_code_change._state(rec)}, headers=_NO_STORE)
+    except IdentityDenied as exc:
+        return _denied(exc)
+    except PermissionDenied as exc:
+        return _error(f"permission denied: {exc}", 403)
+    except TenantScopeError as exc:
+        return _error(str(exc), 404)
+
+
+@router.get("/v2/sources/repositories")
+def list_repositories(request: Request, workspace_id: str):
+    """The declared repositories this member may see (ids, display name, local/remote, declared grants, whether a sync is possible): `project.read`.
+    Never a path, URL, remote repository name or credential; a repository outside the member's visibility is simply absent."""
+    identity, store = _identity_store(), _v2_store()
+    if identity is None or store is None:
+        return _error("v2 unavailable", 503)
+    if not (isinstance(workspace_id, str) and workspace_id.strip()):
+        return _error("workspace_id required", 400)
+    try:
+        authority = _authority(identity, request, workspace_id)
+        require(authority, "project.read")
+        return JSONResponse(v2_code_change.repositories(workspace_id, roles=authority.get("roles"), perms=permissions_for(authority.get("roles"))), headers=_NO_STORE)
     except IdentityDenied as exc:
         return _denied(exc)
     except PermissionDenied as exc:

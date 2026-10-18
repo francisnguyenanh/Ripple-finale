@@ -5,9 +5,10 @@ import * as React from "react";
 import { ArrowLeftRight, Clock, FilePlus2, FileX2, FileDiff } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Denied, Callout, Card, Field, Fingerprint, Muted, StatePill, Tech, TextArea } from "@/components/bits";
+import { Denied, Callout, Card, Field, Fingerprint, Muted, StatePill, Tech, TextArea, TextInput, Select } from "@/components/bits";
+import { actorsOf, filterEvents } from "./timelineFilter";
 import { StatusBadge } from "@/components/StatusBadge";
-import { basename, humanize, newId } from "@/lib/fmt";
+import { basename, newId } from "@/lib/fmt";
 import { useAction } from "@/lib/useAction";
 import { useNotify } from "@/lib/notify";
 import { PageHeader } from "@/pages/Page";
@@ -27,26 +28,55 @@ const ACT: Record<string, string> = {
   HITL_ANSWER_RECORDED: "wrote a comment or answer (not a decision)", "job.approved": "allowed a job to run",
   CHAT_AI_ALLOWED: "allowed the AI to reply in a conversation", CHAT_AI_REVOKED: "withdrew the AI permission", CHAT_UNDERSTANDING_CONFIRMED: "confirmed what the AI understood",
   CHAT_REOPENED: "reopened a confirmed request to change it", CHAT_REQUEST_FLAGGED: "wrote a message that tried to claim rights or skip a control (nothing was granted)",
+  CHAT_AI_ALLOWED_BY_POLICY: "let the AI reply in a conversation under the workspace AI policy", CHAT_PREVIEW_CONFIRMED: "confirmed a preview in a conversation",
+  CHAT_PREVIEW_ACTION_DONE: "recorded the action of a confirmed preview", NOTIFICATION_DISPATCHED: "sent a notification",
+  NOTIFICATION_INTENT_STALE: "dropped a notification that was no longer actionable", NOTIFICATION_TOKEN_REGISTERED: "registered a device for notifications",
+  NOTIFICATION_TOKEN_REVOKED: "removed a device from notifications",
 };
+// An event without a wording is named neutrally in the Business view; its code stays in the Technical view (never shown as prose).
+const UNNAMED = "recorded an event";
 const TRIGGER: Record<string, string> = { import: "created by an import", apply: "created by an approved change", restore: "created by a restore", refresh: "created by a refresh" };
 
-function Timeline({ events }: { events: Rec[] }) {
-  const ev = events.filter((e) => e.event_type !== "JOB_QUEUED" && e.event_type !== "membership.grant").slice(-40).reverse();
+const TIMELINE_LIMIT = 40;
+const eventLabel = (e: Rec) => ACT[e.event_type] ?? UNNAMED;
+
+function Timeline({ events, onRetry }: { events: Rec[] | null; onRetry: () => void }) {
+  // `null` = the activity list could not be read. That is never shown as "nothing has happened".
+  const [actor, setActor] = React.useState("");
+  const [text, setText] = React.useState("");
+  const all = (events ?? []).filter((e) => e.event_type !== "JOB_QUEUED" && e.event_type !== "membership.grant");
+  const windowed = all.slice(-TIMELINE_LIMIT);
+  const ev = filterEvents(windowed, { actor, text }, eventLabel).reverse();
+  const filtering = !!actor || !!text.trim();
   return (
     <Card title="What happened, and who did it" testid="history-activity">
       <Muted>Most recent first. A decision is recorded here but changes no file; only an applied change makes a new version of the files.</Muted>
-      {ev.length ? (
+      {events !== null && all.length > TIMELINE_LIMIT && <Muted testid="history-window">Showing the latest {TIMELINE_LIMIT} of the {all.length} events loaded. Older events exist but are not listed on this page; this is not a full audit search.</Muted>}
+      {events !== null && windowed.length > 8 && (
+        <div className="grid gap-2 md:grid-cols-2" data-testid="history-filter">
+          <Field label="Person" hint="Only people who appear in the events listed below."><Select data-testid="history-filter-actor" value={actor} onChange={(e) => setActor(e.target.value)}>
+            <option value="">Everyone</option>{actorsOf(windowed).map((a) => <option key={a} value={a}>{a}</option>)}</Select></Field>
+          <Field label="What happened" hint="Words of the event; nothing is requested."><TextInput data-testid="history-filter-text" value={text} onChange={(e) => setText(e.target.value)} /></Field>
+        </div>
+      )}
+      {filtering && <Muted testid="history-filter-count">Showing {ev.length} of the {windowed.length} events listed here. Filtering never searches events that were not loaded.</Muted>}
+      {events === null ? (
+        <Callout tone="warn" testid="history-unavailable" role="status">
+          <span>The activity list could not be read, so nothing is shown here. This is not the same as nothing having happened.</span>
+          <div><Button onClick={onRetry} data-testid="history-retry">Try again</Button></div>
+        </Callout>
+      ) : ev.length ? (
         <ol className="grid gap-3 border-l border-border pl-4">
           {ev.map((e, i) => (
             <li key={i} data-event={e.event_type} className="text-sm relative">
               <Clock size={12} aria-hidden="true" className="absolute -left-[1.45rem] top-1 bg-surface text-muted" />
-              <strong>{e.actor_id || "the system"}</strong> {ACT[e.event_type] ?? humanize(e.event_type).toLowerCase()}{" "}
+              <strong>{e.actor_id || "the system"}</strong> {eventLabel(e)}{" "}
               <span className="text-muted">{e.created_at ? new Date(e.created_at).toLocaleString() : ""}</span>
               <Tech><span className="block text-xs text-muted break-all">{e.event_type} {JSON.stringify(e.payload ?? {}).slice(0, 300)}</span></Tech>
             </li>
           ))}
         </ol>
-      ) : <Muted>Nothing has happened yet.</Muted>}
+      ) : filtering ? <Muted testid="history-filter-none">No listed event matches the filter.</Muted> : <Muted>Nothing has happened yet.</Muted>}
     </Card>
   );
 }
@@ -76,10 +106,10 @@ function Compare({ ws, revs }: { ws: string; revs: Rec[] }) {
   if (revs.length < 2)
     return <Card title="Compare versions" testid="history-no-compare"><Muted>There is only one version of the files so far, so there is nothing to compare yet. After a change is applied, the before and after appear here.</Muted></Card>;
   const sel = (id: string, v: string, set: (x: string) => void, testid: string) => (
-    <select id={id} data-testid={testid} className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value={v} onChange={(e) => set(e.target.value)}>
+    <Select id={id} data-testid={testid} value={v} onChange={(e) => set(e.target.value)}>
       <option value="">Select a version</option>
       {revs.map((r) => <option key={r.revision_id} value={r.revision_id}>{`Version ${r.sequence} - ${r.revision_id}`}</option>)}
-    </select>
+    </Select>
   );
   const KIND = { added: { icon: FilePlus2, text: "added" }, removed: { icon: FileX2, text: "removed" }, changed: { icon: FileDiff, text: "changed" } } as const;
   return (
@@ -179,7 +209,7 @@ function Body() {
   const ws = s.route.ws!;
   const { data, ids, refresh: flowRefresh } = useFlow();
   const [hist, setHist] = React.useState<Rec | null>(null);
-  const [activity, setActivity] = React.useState<Rec[]>([]);
+  const [activity, setActivity] = React.useState<Rec[] | null>([]);
   const [err, setErr] = React.useState<ApiError | null>(null);
   const [preview, setPreview] = React.useState<Rec | null>(null);
   const [approved, setApproved] = React.useState<Rec | null>(null);
@@ -193,11 +223,11 @@ function Body() {
   const load = React.useCallback(async () => {
     try {
       const h = await api<Rec>("GET", `/v2/history/${q(ws)}`);
-      const act = await api<{ events?: Rec[] }>("GET", `/v2/audit/${q(ws)}`).then((a) => a.events ?? []).catch(() => [] as Rec[]);
+      const act = await api<{ events?: Rec[] }>("GET", `/v2/audit/${q(ws)}`).then((a) => a.events ?? []).catch((): Rec[] | null => null);
       setHist(h); setActivity(act); setErr(null);
       const aid = approvalRef.current;      // read at completion time: an older load must not overwrite a newer one
       if (aid) {
-        const ev = act.filter((e) => e.event_type === "RESTORE_APPROVED" && e.payload?.restore_approval_id === aid).pop();
+        const ev = (act ?? []).filter((e) => e.event_type === "RESTORE_APPROVED" && e.payload?.restore_approval_id === aid).pop();
         setApproved(ev ? { id: aid, digest: ev.payload.approval_digest, target: ev.payload.target_revision_id, actor: ev.actor_id } : null);
       } else setApproved(null);
     } catch (e) { if (e instanceof ApiError) setErr(e); else throw e; }
@@ -222,7 +252,7 @@ function Body() {
   const onChanged = async () => { await load(); await flowRefresh(); await s.refresh(); };
   return (
     <div className="grid gap-4">
-      <Timeline events={activity} />
+      <Timeline events={activity} onRetry={() => void load()} />
       <section aria-labelledby="h-rev" className="grid gap-3">
         <h2 id="h-rev" className="text-lg font-semibold">Versions of the files</h2>
         {revs.length === 0 && <div data-testid="state-empty" className="rounded-lg border border-border bg-surface p-4">This workspace has no versions yet.</div>}

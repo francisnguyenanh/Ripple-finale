@@ -67,7 +67,10 @@ def test_the_reading_shows_running_then_done_and_says_when_it_is_ready(env, ch, 
         expect(box).to_contain_text("Do not click again")
         pill = tid(page, "sim-analysis-state")
         expect(pill).to_have_attribute("data-state", "RUNNING")
-        assert "animate-pulse" in (pill.get_attribute("class") or "")                    # the state itself moves/changes colour
+        assert "animate-pulse" not in (pill.get_attribute("class") or "")                # the label never fades: its contrast holds in every frame
+        dot = pill.locator("[data-running-indicator]")                                   # the state moves through a decorative dot beside the text
+        expect(dot).to_have_count(1)
+        assert dot.get_attribute("aria-hidden") == "true" and "motion-safe:animate-pulse" in (dot.get_attribute("class") or "")
         assert tid(page, "sim-analysis-request").count() == 0                            # no second paid click is offered while it runs
         drain(env)                                                                       # the worker finishes the call
         expect(tid(page, "sim-analysis")).to_have_attribute("data-state", "done", timeout=WAIT)   # the page found out by itself

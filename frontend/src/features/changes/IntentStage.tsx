@@ -2,7 +2,7 @@ import { stageTitle } from "./registry";
 import * as React from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Callout, Card, Field, Muted, StatePill, TechField, TextArea, TextInput } from "@/components/bits";
+import { Callout, Card, Field, Muted, StatePill, TechField, TextArea, TextInput, Select } from "@/components/bits";
 import { basename, intentPhrase, ruleTitle, scopeText, valueText } from "@/lib/fmt";
 import { useAction } from "@/lib/useAction";
 import { useNotify } from "@/lib/notify";
@@ -72,10 +72,10 @@ function AdvancedInput() {
         )}
         {!rc && claims.length > 0 && (
           <Field label="Start from a rule" hint="The form below is then filled in for you. You only type the new value and check the rest.">
-            <select data-testid="start-rule" className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value="" onChange={(e) => { if (e.target.value) replaceHash(location.hash + (location.hash.includes("?") ? "&" : "?") + "rule=" + encodeURIComponent(e.target.value)); }}>
+            <Select data-testid="start-rule" value="" onChange={(e) => { if (e.target.value) replaceHash(location.hash + (location.hash.includes("?") ? "&" : "?") + "rule=" + encodeURIComponent(e.target.value)); }}>
               <option value="">Choose a rule to change...</option>
               {claims.map((c) => <option key={c.candidate_id} value={c.candidate_id}>{ruleTitle(c.subject, c.predicate)} - {valueText(c.value, c.unit, c.unit)} ({basename(c.logical_path)})</option>)}
-            </select>
+            </Select>
           </Field>
         )}
         <h4 className="font-semibold">Your request (exact values are kept as typed)</h4>
@@ -93,10 +93,10 @@ function AdvancedInput() {
         <h4 className="font-semibold">Or describe the change in free text (older path)</h4>
         <Field label="Describe the change"><TextArea id="fld-intent-text" rows={3} value={text} onChange={(e) => setText(e.target.value)} /></Field>
         <Field label="Rule this change applies to">
-          <select data-testid="field-intent-target" className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value={target} onChange={(e) => setTarget(e.target.value)}>
+          <Select data-testid="field-intent-target" value={target} onChange={(e) => setTarget(e.target.value)}>
             <option value="">Select the rule to change</option>
             {claims.map((c) => <option key={c.candidate_id} value={c.candidate_id}>{c.subject} / {c.predicate}{c.value !== null && c.value !== undefined ? ` = ${c.value}` : ""}</option>)}
-          </select>
+          </Select>
         </Field>
         {claims.length === 0 && <Muted>No extracted rule exists yet. Analyse a source and confirm a rule first.</Muted>}
         <div><Button data-testid="action-parse-intent" title={s.aiOff ? "AI actions are switched off on this server" : undefined} disabled={pending || s.aiOff} onClick={parseFree}>Parse intent</Button></div>

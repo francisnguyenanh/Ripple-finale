@@ -2,7 +2,8 @@
 // JS-readable storage). The browser sets Origin itself. Mutations are never retried automatically.
 
 export class ApiError extends Error {
-  constructor(public status: number, public body: Record<string, unknown>, public network = false, public retryAfter: number | null = null) {
+  /** `requestId`: the server's X-Request-Id of the failed request, when it sent one (a reference to quote, never a credential). */
+  constructor(public status: number, public body: Record<string, unknown>, public network = false, public retryAfter: number | null = null, public requestId: string | null = null) {
     super("api");
   }
 }
@@ -43,7 +44,8 @@ export async function api<T>(
   if (!resp.ok) {
     if (resp.status === 401 && !path.startsWith("/v2/auth/") && onUnauthorized) onUnauthorized();
     const ra = parseInt(resp.headers.get("Retry-After") ?? "", 10);
-    throw new ApiError(resp.status, (data && typeof data === "object" ? data : {}) as Record<string, unknown>, false, Number.isFinite(ra) ? ra : null);
+    const rid = resp.headers.get("X-Request-Id");
+    throw new ApiError(resp.status, (data && typeof data === "object" ? data : {}) as Record<string, unknown>, false, Number.isFinite(ra) ? ra : null, rid && /^[0-9a-f]{32}$/.test(rid) ? rid : null);
   }
   return data as T;
 }

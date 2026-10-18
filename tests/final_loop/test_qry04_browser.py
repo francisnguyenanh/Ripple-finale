@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
 from uuid import uuid4
 
@@ -28,10 +29,11 @@ from tests.final_loop.test_qry03_qa import Model, claim, ids_in, obj  # noqa: E4
 from tests.pitch_brief.conftest import REAL_BUDGET_PATH, LiveWorker, drain  # noqa: E402
 
 WAIT = 40000
+PARTIAL_QUESTION = "Is this a capital purchase (CAPEX) or an operating expense?"
 EVIL_TITLE = "<b id='xss-b'>bold</b> [x](javascript:alert(1)) approval threshold"
 
 
-def sign_in(browser, server, ws_id, account, credential, page_hash="questions"):
+def sign_in(browser, server, ws_id, account, credential, page_hash="questions?ui_section=all"):   # these journeys use every section (D2: the page alone opens on Open questions)
     ctx = browser.new_context(base_url=server.url, viewport={"width": 1280, "height": 1000})
     page = ctx.new_page()
     page.set_default_timeout(WAIT)
@@ -56,6 +58,9 @@ def stub(prompt):
     if "<request>\n" in prompt:
         return model_obj(ops=[OP_VALUE])
     q = question_of(prompt)
+    if "partly" in q.lower():
+        return obj("PARTIAL", "", [claim("Standard purchases of 1,000,000 JPY or more need manager approval.", ["rule-standard-manager-review"], "observed")],
+                   questions=[PARTIAL_QUESTION])
     if "source passage" in q.lower():
         src = ids_in(prompt, "source")
         return obj("ANSWERED", "", [claim("The configuration file holds the manager threshold.", [src[0]], "observed")]) if src else obj("ABSTAINED")
@@ -130,6 +135,26 @@ def test_ask_read_both_views_reload_follow_up_and_stale_marker(ui, pw_browser):
     page.reload()
     expect(page.get_by_test_id("qa-newer")).to_be_visible(timeout=WAIT)                          # an old answer is not presented as current
     assert not page._errors, page._errors
+
+
+def test_a_partial_answer_shows_its_clarifying_questions_and_the_empty_ask_says_why_it_is_disabled(ui, pw_browser):
+    """Backend checkpoint D1: `clarifying_questions` may come with PARTIAL; the page shows them whatever the status, worded for a partial answer."""
+    env, admin, model, server = ui
+    page = sign_in(pw_browser, server, env.ws, env.admin, f"cred-a-{env.nonce}")
+    expect(page.get_by_test_id("qa-ask")).to_be_disabled(timeout=WAIT)
+    assert page.get_by_test_id("qa-ask").get_attribute("title") == "Write your question first."      # a disabled action says why
+    ask(page, "Is a 1,500,000 JPY standard purchase partly covered by the manager rule?")
+    box = page.get_by_test_id("qa-answer")
+    expect(box).to_have_attribute("data-status", "PARTIAL", timeout=WAIT)
+    expect(page.get_by_test_id("qa-status")).to_contain_text("Partly answered")
+    clarify = page.get_by_test_id("qa-clarify")
+    expect(clarify).to_have_attribute("data-status", "PARTIAL")
+    expect(clarify).to_contain_text("To complete this answer, please say:")
+    expect(clarify).to_contain_text(PARTIAL_QUESTION)
+    expect(page.get_by_test_id("qa-claim")).to_have_count(1)                                        # the answered part stays visible beside the open question
+    if os.environ.get("UI_NEXT_SHOTS"):                                                              # for a person to look at, not an oracle
+        box.screenshot(path=os.path.join(os.environ["UI_NEXT_SHOTS"], "partial_answer_with_questions.png"))
+    assert model.calls == 1 and not page._errors, page._errors
 
 
 def test_a_reader_without_evidence_rights_sees_withheld_source_claims_and_a_viewer_cannot_ask(ui, pw_browser):

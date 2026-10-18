@@ -20,6 +20,7 @@ export function ApplyStage() {
   const { ids, data, setIds, refresh } = useFlow();
   const s = useSession();
   const { create, pending } = useCreateStage();
+  const whyId = React.useId();
   const d = data;
   if (!d || ids.apply) return d ? <ApplyCard><Muted>The approved change has been sent to apply. Its result is shown below.</Muted></ApplyCard> : null;
   const approved = d.decisions.length > 0 && d.decisions[d.decisions.length - 1].action === "approve";
@@ -35,14 +36,14 @@ export function ApplyStage() {
     <ApplyCard>
       {s.can("change.apply") && (
         <div>
-          <Button variant="primary" data-testid="action-apply" title={why ?? undefined} disabled={!(approved && isDone(d.approval)) || pending}
+          <Button variant="primary" data-testid="action-apply" title={why ?? undefined} aria-describedby={whyId} disabled={!(approved && isDone(d.approval)) || pending}
             onClick={async () => {
               const id = newId("ui-apply");
               if (await create("apply", id, { approval_job_id: d.approval!.job_id, expected_approval_digest: ar.approval_digest })) { setIds({ apply: id }); await refresh(); }
             }}>Apply approved change</Button>
         </div>
       )}
-      <Muted testid="apply-why">{approved ? "The approval is recorded. Applying publishes the change to the source." : (why ?? "Apply becomes available after a human approval is recorded.")}{!s.can("change.apply") ? " You do not hold the apply permission; the requester applies it." : ""}</Muted>
+      <Muted id={whyId} testid="apply-why">{approved ? "The approval is recorded. Applying publishes the change to the source." : (why ?? "Apply becomes available after a human approval is recorded.")}{!s.can("change.apply") ? " You do not hold the apply permission; the requester applies it." : ""}</Muted>
     </ApplyCard>
   );
 }

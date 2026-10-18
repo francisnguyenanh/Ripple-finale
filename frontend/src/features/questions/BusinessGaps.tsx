@@ -5,7 +5,7 @@
 import * as React from "react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Callout, Field, Muted, StatePill, Tech, TextArea, TextInput } from "@/components/bits";
+import { Callout, Field, Muted, StatePill, Tech, TextArea, TextInput, Select } from "@/components/bits";
 import { useAction } from "@/lib/useAction";
 import { useNotify } from "@/lib/notify";
 import { useSession } from "@/session";
@@ -110,9 +110,9 @@ function GapCard({ ws, gap, onDone }: { ws: string; gap: Rec; onDone: () => Prom
             <div className="grid gap-2 sm:grid-cols-4">
               <Field label="About (field)"><TextInput value={cond.field} placeholder="request.net_amount_jpy" onChange={(e) => { setCond({ ...cond, field: e.target.value }); reset(); }} /></Field>
               <Field label="Comparison">
-                <select className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value={cond.op} onChange={(e) => { setCond({ ...cond, op: e.target.value }); reset(); }}>
+                <Select value={cond.op} onChange={(e) => { setCond({ ...cond, op: e.target.value }); reset(); }}>
                   {[["eq", "is"], ["ne", "is not"], ["gte", "at least"], ["gt", "more than"], ["lte", "at most"], ["lt", "less than"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
+                </Select>
               </Field>
               <Field label="Value"><TextInput value={cond.value} onChange={(e) => { setCond({ ...cond, value: e.target.value }); reset(); }} /></Field>
               <Field label="Unit (optional)"><TextInput value={cond.unit} onChange={(e) => { setCond({ ...cond, unit: e.target.value }); reset(); }} /></Field>

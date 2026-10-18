@@ -31,7 +31,7 @@ def sign_in(browser, server, ws_id, account, credential):
     page.get_by_role("button", name="Sign in").click()
     expect(page.get_by_test_id("session-account")).to_have_text(account, timeout=WAIT)
     page.get_by_label("Workspace").select_option(value=ws_id)
-    page.goto(f"{server.url}/app-next/#/ws/{ws_id}/questions")
+    page.goto(f"{server.url}/app-next/#/ws/{ws_id}/questions?ui_section=all")   # rules and business questions (D2: the page alone opens on Open questions)
     return page
 
 

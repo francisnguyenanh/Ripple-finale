@@ -4,10 +4,11 @@
 import * as React from "react";
 import { api, ApiError, errorText } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Callout, Card, Muted, StatePill, Tech } from "@/components/bits";
+import { Callout, Card, Field, Muted, StatePill, Tech, TextInput } from "@/components/bits";
 import { Markdown } from "@/lib/markdown";
 import { useParam } from "@/lib/param";
 import { PageHeader } from "@/pages/Page";
+import { filterTopics } from "./topicFilter";
 import { useSession } from "@/session";
 import type { Rec } from "@/features/changes/types";
 
@@ -39,6 +40,7 @@ export function DocumentsPage() {
   const [err, setErr] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [tick, setTick] = React.useState(0);
+  const [topicFilter, setTopicFilter] = React.useState("");
 
   React.useEffect(() => {                                                         // topics and the status summary: metadata only, nothing generated
     let live = true;
@@ -136,6 +138,7 @@ export function DocumentsPage() {
   const accepted = !!head.accepted_snapshot_id;
   const currentTopic = state ? topics.find((t) => (t.scope === null && !((state.scope as Rec)?.rule_ids)) || (t.scope && JSON.stringify(t.scope) === JSON.stringify(state.scope))) : null;
   const canRefresh = state?.freshness === "stale" && currentTopic;
+  const shownTopics = filterTopics(topics, topicFilter);
   return (
     <>
       <PageHeader id="documents" next={accepted ? "Pick a topic. The document is generated the first time it is opened and kept for that knowledge version." : "Accept a business knowledge version first; documents describe accepted knowledge only."} />
@@ -143,8 +146,14 @@ export function DocumentsPage() {
         <div className="grid gap-4 content-start">
           <Card title="Topics" testid="docs-topics">
             <Muted testid="docs-summary">Knowledge version {String(head.business_revision ?? "-")}. Documents: {FRESH[String(summary.freshness)] ?? String(summary.freshness ?? "-")}. Mode: {mode} (switch with the Business/Technical control).</Muted>
+            {topics.length > 6 && (
+              <Field label="Find a topic" hint={`Narrows the ${topics.length} topics listed below; nothing is requested.`}>
+                <TextInput data-testid="docs-topic-filter" value={topicFilter} onChange={(e) => setTopicFilter(e.target.value)} />
+              </Field>
+            )}
+            {shownTopics.length === 0 && <Muted testid="docs-topic-none">No topic matches "{topicFilter}". {topics.length} topics are loaded.</Muted>}
             <ul className="grid gap-1 mt-2">
-              {topics.map((t) => (
+              {shownTopics.map((t) => (
                 <li key={t.key}>
                   <Button data-testid="docs-topic" data-topic={t.key} className="w-full justify-start text-left" disabled={!accepted || busy} onClick={() => void request(t)}>
                     {t.title}{t.authority === "TARGET" ? " (decided by people)" : ""}

@@ -5,9 +5,12 @@ import * as React from "react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Callout, Field, Muted, StatePill, Tech, TextArea } from "@/components/bits";
+import { TrustStateSummary } from "@/components/decision/TrustStateSummary";
 import { useAction } from "@/lib/useAction";
 import { useSession } from "@/session";
 import type { Rec } from "@/features/changes/types";
+import { CodeCandidate, CodeRecommendations } from "./CodePanel";
+import { refusalWords } from "@/lib/refusal";
 
 const q = encodeURIComponent;
 const ACTION_WORDS: Record<string, string> = { approve: "Accepted", reject: "Rejected", request_changes: "Changes requested", clarify: "Clarified" };
@@ -113,8 +116,10 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
         {ruleChanges.map((c, i) => (
           <div key={i} data-testid="rev-rule" data-valid={String(c.valid)} className="rounded-md border border-border p-3 text-sm grid gap-1">
             <p className="font-medium">{c.title as string}</p>
-            <p><span className="text-muted">Before:</span> {c.before as string}</p>
-            <p><span className="text-muted">After:</span> {c.after as string}</p>
+            <div className="grid gap-1 md:grid-cols-2 md:gap-4">
+              <p><span className="text-muted">Before:</span> {c.before as string}</p>
+              <p><span className="text-muted">After:</span> {c.after as string}</p>
+            </div>
             {((c.changes ?? []) as string[]).map((t, j) => <p key={j} data-testid="rev-change">{t}</p>)}
             {((c.flags ?? []) as string[]).map((t, j) => <Callout key={j} tone="warn" testid="rev-flag">{t}</Callout>)}
             {!c.valid && <Callout tone="danger">{String(c.error)}</Callout>}
@@ -201,13 +206,19 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
             <Button data-testid="rev-approve-files" disabled={pending || !reason.trim() || !can.approve_file_writes} title={!can.approve_file_writes ? reasons.approve_file_writes : undefined} onClick={() => void run(() => decide("file_writes", "approve"))}>Approve the automatic file edits</Button>
           </div>
           {!can.approve_knowledge && reasons.approve_knowledge && <Muted testid="rev-why-not">{reasons.approve_knowledge}</Muted>}
+          {!can.approve_file_writes && reasons.approve_file_writes && <Muted testid="rev-why-not-files">{reasons.approve_file_writes}</Muted>}
           {kd && <Muted testid="rev-current-knowledge">Current knowledge decision: {ACTION_WORDS[kd.action as string]} by {kd.by as string}.</Muted>}
           {fd && <Muted testid="rev-current-files">Current file-edit decision: {ACTION_WORDS[fd.action as string]} by {fd.by as string}.</Muted>}
         </div>
       )}
       <div data-testid="rev-completion" data-knowledge={String((data.completion as Rec)?.knowledge_result)} className="grid gap-1 text-sm rounded-md border border-border p-3">
         <p className="font-medium">Where this change stands (four separate axes)</p>
-        <p>Knowledge: {String((data.completion as Rec)?.knowledge_result).replace(/_/g, " ")}. Source files: {String((data.completion as Rec)?.source_sync).replace(/_/g, " ")}. Code: {String((data.completion as Rec)?.code_sync).replace(/_/g, " ")}. Behaviour: {String((data.completion as Rec)?.behavioral_verification).replace(/_/g, " ")}.</p>
+        <TrustStateSummary axes={[
+          { key: "knowledge", label: "Knowledge", raw: (data.completion as Rec)?.knowledge_result },
+          { key: "source", label: "Source files", raw: (data.completion as Rec)?.source_sync },
+          { key: "code", label: "Code", raw: (data.completion as Rec)?.code_sync },
+          { key: "behaviour", label: "Behaviour", raw: (data.completion as Rec)?.behavioral_verification },
+        ]} testid="rev-axes" />
         <Muted>{String((data.completion as Rec)?.statement)}</Muted>
         {data.commit ? <Muted testid="rev-committed">Committed as business version {String((data.commit as Rec).business_revision)} by {String((data.commit as Rec).by)}.</Muted> : null}
         {s.can("knowledge.confirm") && !data.commit && (
@@ -257,6 +268,8 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
           </div>
         )}
       </div>
+      <CodeRecommendations ws={ws} cid={cid} />
+      {data.commit ? <CodeCandidate ws={ws} cid={cid} /> : <Muted testid="code-candidate-later">{refusalWords("knowledge_not_committed")}</Muted>}
       {journey && (
         <div data-testid="rev-journey" data-scope={String(journey.scope)} data-knowledge-complete={String(journey.knowledge_only_complete)} data-implemented={String(journey.fully_implemented)} className="grid gap-2 rounded-md border border-border p-3 text-sm">
           <p className="font-medium">Journey ({String(journey.scope) === "NARROW" ? "knowledge-only change" : "knowledge, files and code"})</p>

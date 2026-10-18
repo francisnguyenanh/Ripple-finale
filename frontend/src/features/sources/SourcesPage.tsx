@@ -6,7 +6,7 @@ import { FileCode2, FileSpreadsheet, FileText, Search } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/dialog";
-import { Denied, Callout, Card, Field, Muted, Name, Path, StatePill, Tech, TechField } from "@/components/bits";
+import { Denied, Callout, Card, Field, Muted, Name, Path, StatePill, Tech, TechField, TextInput } from "@/components/bits";
 import { StatusBadge } from "@/components/StatusBadge";
 import { downloadArtifact } from "@/lib/download";
 import { basename, humanize, newId } from "@/lib/fmt";
@@ -17,6 +17,8 @@ import { PageHeader } from "@/pages/Page";
 import { useSession } from "@/session";
 import { jobState, isTerminal, type Job, type Rec } from "@/features/changes/types";
 import { AnalysisButtons, FileStages, LifeSummary } from "./Lifecycle";
+import { filterFiles } from "./fileFilter";
+import { RepoSync } from "./RepoSync";
 
 const q = encodeURIComponent;
 
@@ -124,16 +126,25 @@ function EvidenceDrawer({ ws, rev, art, onClose }: { ws: string; rev: string; ar
 // ---------------------------------------------------------------- coverage
 function Coverage({ cov }: { cov: Rec | null }) {
   if (!cov) return <p data-testid="coverage-analysis" data-value="none" className="text-sm">Analysis coverage: not available for this version (no import record).</p>;
-  const skipped = (cov.skipped ?? []) as Rec[];
   return (
     <div className="grid gap-1 text-sm">
-      <p data-testid="coverage-admission" data-value={String(cov.admission_complete)}>Files admitted: {cov.admission_complete ? "all (nothing skipped)" : `incomplete (${skipped.length} file(s) skipped)`}</p>
+      <p data-testid="coverage-admission" data-value={String(cov.admission_complete)}>Files admitted: {cov.admission_complete ? "all (nothing skipped)" : `incomplete (${((cov.skipped ?? []) as Rec[]).length} file(s) skipped)`}</p>
       <p data-testid="coverage-analysis" data-value={cov.status}>Reading (parse): {cov.status}{cov.status === "complete" ? "" : cov.complete ? " - complete" : " - incomplete"}</p>
       <p data-testid="coverage-index" data-value={cov.index_status}>Search index: {cov.index_status}{cov.index_reason ? ` (${cov.index_reason})` : ""}</p>
       <p data-testid="coverage-semantic" data-value={cov.semantic_stage}>AI rule extraction: {humanize(cov.semantic_stage)}</p>
+    </div>
+  );
+}
+
+/** What must never wait behind a disclosure: skipped files and partial coverage. */
+function CoverageWarnings({ cov }: { cov: Rec | null }) {
+  if (!cov) return null;
+  const skipped = (cov.skipped ?? []) as Rec[];
+  return (
+    <>
       {skipped.length > 0 && <Muted>Skipped: {skipped.map((x) => `${basename(x.logical_path)} (${x.reason})`).join(", ")}</Muted>}
       {(!cov.complete || !cov.admission_complete) && <Callout tone="warn" testid="state-partial">Coverage is partial: not every file was admitted and analysed. Do not read absent results as "nothing found".</Callout>}
-    </div>
+    </>
   );
 }
 
@@ -148,7 +159,7 @@ function ImportPanel({ ws, onDone }: { ws: string; onDone: () => Promise<void> }
   return (
     <Card title="Import source files" testid="import-panel">
       <Muted>Files are checked first; nothing becomes current until you commit the manifest below.</Muted>
-      <Field label="Upload source files"><input ref={files} type="file" multiple className="text-sm" /></Field>
+      <Field label="Upload source files"><input ref={files} type="file" multiple className="text-sm w-full max-w-full min-w-0" /></Field>
       <div>
         <Button disabled={pending} onClick={async () => {
           const list = Array.from(files.current?.files ?? []);
@@ -222,7 +233,7 @@ function RefreshPanel({ ws, onDone }: { ws: string; onDone: () => Promise<void> 
         <li>Ripple then marks what became out of date and shows whether the files need to be analysed again.</li>
       </ol>
       <Muted>A person starts every update; Ripple does not watch a repository, and an update never approves anything. A file missing from your upload counts as deleted from the new version.</Muted>
-      <Field label="Changed source files"><input ref={files} id="refresh-files" data-testid="field-refresh-files" type="file" multiple className="text-sm" /></Field>
+      <Field label="Changed source files"><input ref={files} id="refresh-files" data-testid="field-refresh-files" type="file" multiple className="text-sm w-full max-w-full min-w-0" /></Field>
       <div>
         <Button data-testid="action-refresh-prepare" disabled={pending} onClick={async () => {
           const list = Array.from(files.current?.files ?? []);
@@ -288,6 +299,7 @@ export function SourcesPage() {
   const sessionRefresh = s.refresh;
   const { run } = useAction();
   const [starting, setStarting] = React.useState<string | null>(null);
+  const [fileFilter, setFileFilter] = React.useState("");
 
   const load = React.useCallback(async () => {
     try {
@@ -323,6 +335,8 @@ export function SourcesPage() {
 
   if (err && (err.status === 403 || err.status === 404)) return (<><PageHeader id="sources" /><Denied err={err} /></>);
   if (err) return (<><PageHeader id="sources" /><Callout tone="danger" testid={err.status === 403 || err.status === 404 ? "link-unavailable" : "state-error"}>{err.status === 403 || err.status === 404 ? "This page is not available to your account. Nothing was changed and nothing from that workspace is shown." : "The server could not complete the request."} <Button onClick={() => void load()}>Try again</Button></Callout></>);
+  const allFiles = ((view?.artifacts ?? []) as Rec[]);
+  const shownFiles = filterFiles(allFiles, fileFilter);
   const rowOf = (a: Rec): Rec | undefined => ((life?.artifacts ?? []) as Rec[]).find((r) => r.artifact_id === a.artifact_id);
   const analyze = async (a: Rec) => {
     const jobId = newId("ui-extract");
@@ -340,14 +354,37 @@ export function SourcesPage() {
         {loaded && !view && <div data-testid="state-empty" className="rounded-lg border border-border bg-surface p-6">No source has been imported into this workspace yet.</div>}
         {view && (
           <>
-            {life && <LifeSummary life={life} paths={((view.artifacts ?? []) as Rec[]).map((a) => String(a.logical_path))} />}
-            <Card title="Import and reading coverage">
-              <Muted testid="sources-note">Reading a file (parsing) is not the same as the AI extracting rules from it: each file below shows both, separately.</Muted>
-              <Tech><p className="text-sm">Revision: <code data-testid="revision-id">{view.revision_id}</code>{view.trigger ? <span className="text-muted"> ({view.trigger})</span> : null}</p></Tech>
-              <Coverage cov={view.coverage ?? null} />
-            </Card>
+            {life ? (
+              <LifeSummary life={life} paths={((view.artifacts ?? []) as Rec[]).map((a) => String(a.logical_path))} coverage={
+                <>
+                  <Muted testid="sources-note">Reading a file (parsing) is not the same as the AI extracting rules from it: each file below shows both, separately.</Muted>
+                  <Coverage cov={view.coverage ?? null} />
+                </>
+              } />
+            ) : (
+              <Card title="Import and reading coverage">
+                <Muted testid="sources-note">Reading a file (parsing) is not the same as the AI extracting rules from it: each file below shows both, separately.</Muted>
+                <Coverage cov={view.coverage ?? null} />
+              </Card>
+            )}
+            <CoverageWarnings cov={view.coverage ?? null} />
+            <Tech><p className="text-sm">Revision: <code data-testid="revision-id">{view.revision_id}</code>{view.trigger ? <span className="text-muted"> ({view.trigger})</span> : null}</p></Tech>
+            {!life && (
+              <Callout tone="warn" testid="lifecycle-unavailable" role="status">
+                <span>The state of each file (reading, AI extraction, confirmation) could not be read, so the files below are listed without their stages. This is not the same as nothing having been analysed.</span>
+                <div><Button onClick={() => void load()} data-testid="lifecycle-retry">Try again</Button></div>
+              </Callout>
+            )}
+            {allFiles.length > 8 && (
+              <div className="grid gap-1" data-testid="files-filter">
+                <Field label="Find a file" hint={`Narrows the ${allFiles.length} files of this version by name or type; nothing is requested.`}>
+                  <TextInput data-testid="files-filter-input" value={fileFilter} onChange={(e) => setFileFilter(e.target.value)} />
+                </Field>
+                <Muted testid="files-filter-count">Showing {shownFiles.length} of {allFiles.length} files.</Muted>
+              </div>
+            )}
             <div className="grid gap-3 md:grid-cols-2">
-              {((view.artifacts ?? []) as Rec[]).map((a) => (
+              {shownFiles.map((a) => (
                 <article key={a.artifact_id} data-testid="artifact-row" data-logical-path={a.logical_path} data-artifact-id={a.artifact_id} className="rounded-lg border border-border bg-surface p-4 grid gap-2 min-w-0">
                   <h3 className="font-semibold flex items-center gap-2 break-all"><KindIcon mt={a.media_type} /><Path p={a.logical_path} /></h3>
                   <Muted>{sizeText(a.byte_size)} - {KIND_WORDS[a.media_type] ?? a.media_type} - folder {String(a.logical_path).includes("/") ? <Name raw={String(a.logical_path).split("/").slice(0, -1).join("/")} /> : "(top)"}</Muted>
@@ -368,6 +405,7 @@ export function SourcesPage() {
         )}
         {s.can("source.import") && <ImportPanel ws={ws} onDone={load} />}
         {s.can("source.import") && <RefreshPanel ws={ws} onDone={load} />}
+        <RepoSync ws={ws} onSynced={load} />
       </div>
       {view && <EvidenceDrawer ws={ws} rev={view.revision_id} art={art} onClose={() => setArt(null)} />}
     </>

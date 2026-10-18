@@ -7,6 +7,7 @@ import { ruleLine, ruleTitle, valueText } from "@/lib/fmt";
 import { plain } from "@/lib/reasons";
 import { useNotify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
+import { PILL_LABEL_MAX, stateTone, TONE_CLASS } from "@/lib/stateDisplay";
 
 export function Card({ title, testid, children, className, aside, data }: { title?: React.ReactNode; testid?: string; children: React.ReactNode; className?: string; aside?: React.ReactNode; data?: Record<string, string> }) {
   const extra: Record<string, string> = {};
@@ -24,8 +25,8 @@ export function Card({ title, testid, children, className, aside, data }: { titl
   );
 }
 
-export const Muted = ({ children, testid, className }: { children: React.ReactNode; testid?: string; className?: string }) => (
-  <p data-testid={testid} className={cn("text-sm text-muted", className)}>{children}</p>
+export const Muted = ({ children, testid, className, id }: { children: React.ReactNode; testid?: string; className?: string; id?: string }) => (
+  <p id={id} data-testid={testid} className={cn("text-sm text-muted", className)}>{children}</p>
 );
 
 export function Callout({ tone = "info", children, testid, role }: { tone?: "info" | "warn" | "danger" | "wait"; children: React.ReactNode; testid?: string; role?: string }) {
@@ -34,18 +35,23 @@ export function Callout({ tone = "info", children, testid, role }: { tone?: "inf
 }
 
 /** A state: business wording in Business view, the raw state name in Technical view. data-state keeps the machine value. */
-export function StatePill({ state, label, testid, data }: { state: string; label: string; testid?: string; data?: Record<string, string> }) {
+export function StatePill({ state, label, testid, data, detail }: { state: string; label: string; testid?: string; data?: Record<string, string>; detail?: React.ReactNode }) {
   const { mode } = useSession();
-  const tone =
-    state === "COMPLETED" || state === "CONFIRMED" || state === "APPROVED" || state === "PASSED" ? "text-success"
-    : state === "FAILED" || state === "REJECTED" || state === "STALE" ? "text-danger"
-    : state === "NONE" || state === "NOT_STARTED" ? "text-muted" : "text-warning";
+  const tone = TONE_CLASS[stateTone(state)];
   const extra: Record<string, string> = {};
   for (const [k, v] of Object.entries(data ?? {})) extra[`data-${k}`] = v;
+  const text = mode === "technical" ? (label && label !== state ? `${state} - ${label}` : state) : label;
+  // A long label is an instruction, not a status: it wraps in a rounded box instead of a clipped pill.
+  const long = text.length > PILL_LABEL_MAX;
   return (
-    <span data-testid={testid} data-state={state} {...extra} className={cn("inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs font-medium", tone, state === "RUNNING" && "border-warning animate-pulse")}>
-      {mode === "technical" ? (label && label !== state ? `${state} - ${label}` : state) : label}
-    </span>
+    <>
+      <span data-testid={testid} data-state={state} {...extra} className={cn("inline-flex items-center border border-border px-2 py-0.5 text-xs font-medium", long ? "rounded-md max-w-full whitespace-normal" : "rounded-full", tone, state === "RUNNING" && "gap-1.5 border-warning")}>
+        {/* RUNNING moves through a decorative dot only: the text never fades, so its contrast holds in every frame; no motion under reduced motion. */}
+        {state === "RUNNING" && <span aria-hidden="true" data-running-indicator className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-warning motion-safe:animate-pulse" />}
+        {text}
+      </span>
+      {detail ? <span className="text-sm text-muted"> {detail}</span> : null}
+    </>
   );
 }
 
@@ -86,7 +92,7 @@ const inputCls = "border border-border rounded-sm bg-bg px-3 py-2 text-base font
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <label className="grid gap-1 text-sm font-medium">
+    <label className="grid gap-1 text-sm font-medium min-w-0">
       {label}
       {children}
       {hint && <span className="text-xs font-normal text-muted">{hint}</span>}
@@ -99,6 +105,12 @@ export const TextInput = React.forwardRef<HTMLInputElement, React.InputHTMLAttri
 });
 export const TextArea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(function TextArea(p, ref) {
   return <textarea ref={ref} {...p} className={cn(inputCls, "resize-y", p.className)} />;
+});
+
+const selectCls = "border border-border rounded-sm bg-bg px-3 py-2 min-h-10 max-w-full min-w-0";
+/** The shared native select: same look as the text controls; label it with `Field` or an `aria-label`. */
+export const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(function Select(p, ref) {
+  return <select ref={ref} {...p} className={cn(selectCls, p.className)} />;
 });
 
 /** A name from the server: plain words in Business view, the exact machine name in Technical view. */

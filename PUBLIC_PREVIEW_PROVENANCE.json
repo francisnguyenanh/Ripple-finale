@@ -1,0 +1,42 @@
+{
+  "schema": "ripple-public-preview-provenance/1",
+  "source_repository": "private development repository (not named here)",
+  "source_branch": "final-dev",
+  "source_commit": "93a267536ab775ecb98b92cc5177dab04c5d8467",
+  "export_manifest": "SUBMISSION_MANIFEST.json",
+  "export_manifest_sha256": "9819d095f55d3a433cc6bbbe5c19632764b39b2b129e84c969f2c5dfa9331a83",
+  "export_overall_sha256": "5e2cce3302ea3a22444a18e9ac9e1689b29693c35924b479ab1e55c48a69578b",
+  "export_file_count": 1343,
+  "public_changes": [
+    {
+      "path": "README.md",
+      "reason": "preview-specific statements (snapshot, evidence labels, interface acceptance scope, public provenance pointer)",
+      "sha256_in_export": "3e403552059986fd153d2bc03c5f0df5b375d8431b8f564ad21f0748c41bffb5",
+      "sha256_published": "e99dd6c3007cdb0c11fdfcd15f22f2cb01d90bb16f8ab83a707fb164fbbbfd56"
+    }
+  ],
+  "added_files": [
+    "PUBLIC_PREVIEW_PROVENANCE.json"
+  ],
+  "note": "All other files are byte-identical to the export. The public commit hash cannot be stored inside the tree; it is the commit that contains this file.",
+  "rehearsal": {
+    "date": "2026-10-18",
+    "tree": "export of source commit 93a2675 plus the README adjustment and this file",
+    "provider": "none",
+    "commands": [
+      "python -m venv <new>; pip install -r requirements-dev.txt",
+      "pytest tests/contract tests/unit -q (no DSN set)",
+      "python -m tools.judge_local.run_local on a throwaway PostgreSQL (own container, own port), GET /app-next/ and its four assets"
+    ],
+    "result": {
+      "pytest": "1268 passed, 3 skipped, 1 deselected",
+      "rehearsal_server": "HTTP 200 for /app-next/ and its assets; three accounts printed"
+    },
+    "not_run": [
+      "database-backed final_loop and ui_next suites",
+      "frontend design check, type check and unit tests",
+      "Chromium browser suites"
+    ],
+    "note": "Self-check on one machine, not independent validation. Skipped tests are not passes."
+  }
+}

@@ -7,7 +7,7 @@ import { Background, Controls, Handle, Position, ReactFlow, type Edge, type Node
 import { Network, TreePine } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Denied, Callout, Card, Field, Muted, StatePill, Tech, TextInput } from "@/components/bits";
+import { Denied, Callout, Card, Field, Muted, StatePill, Tech, TextInput, Select } from "@/components/bits";
 import { StatusBadge } from "@/components/StatusBadge";
 import { basename, nodePhrase, ruleTitle, scopeText, valueText } from "@/lib/fmt";
 import { replaceHash, hashFor } from "@/lib/route";
@@ -204,9 +204,9 @@ export function ExplorerPage() {
         <div className="flex flex-wrap items-end gap-3">
           <Field label="Search"><TextInput data-testid="explorer-search" value={query} onChange={(e) => setQuery(e.target.value)} /></Field>
           <Field label="State">
-            <select data-testid="explorer-state" className="border border-border rounded-sm bg-bg px-3 py-2 min-h-10" value={state} onChange={(e) => setState(e.target.value)}>
+            <Select data-testid="explorer-state" value={state} onChange={(e) => setState(e.target.value)}>
               <option value="">All</option>{states.map((x) => <option key={x} value={x}>{nodePhrase(x)}</option>)}
-            </select>
+            </Select>
           </Field>
           <Button data-testid="explorer-mode" aria-pressed={view === "graph"} onClick={() => setView(view === "tree" ? "graph" : "tree")}>{view === "tree" ? <><Network size={16} aria-hidden="true" />Graph view</> : <><TreePine size={16} aria-hidden="true" />Back to the tree</>}</Button>
           {view === "tree" && (
@@ -217,11 +217,26 @@ export function ExplorerPage() {
             </div>
           )}
         </div>
-        <p data-testid="explorer-counts" className="text-sm text-muted">
+        <ul data-testid="explorer-summary" aria-label="Summary of what was read" className="flex flex-wrap gap-2 text-sm">
+          {([["Files", T.files], ["Rules", T.rules], ["Confirmed by a person", T.confirmed], ["Not yet confirmed", T.pending],
+            ["Out of date", g.nodes.filter((n) => n.state === "stale" && n.type === "candidate").length], ["Issues", T.issues], ["Decisions", T.decisions]] as [string, number][]).map(([label, n]) => (
+            <li key={label} data-label={label} className="rounded-md border border-border px-2 py-0.5">{label}: <strong>{n}</strong></li>
+          ))}
+          {(unanalysed.length > 0 || cov.truncated) && (
+            <li data-testid="explorer-incomplete" className="rounded-md border border-warning px-2 py-0.5">
+              Incomplete: {unanalysed.length} file{unanalysed.length === 1 ? "" : "s"} not analysed{cov.truncated ? ", graph cut at its size limit" : ""}; what is missing is unknown, not zero
+            </li>
+          )}
+        </ul>
+        {vis && s.mode !== "technical" && <p data-testid="explorer-showing" className="text-sm">Showing {shownRules} matching rule{shownRules === 1 ? "" : "s"}.</p>}
+        <details data-testid="explorer-counts-more" open={s.mode === "technical"} className="text-sm">
+        <summary className="cursor-pointer w-fit text-primary">{s.mode === "technical" ? "Counts and revisions" : "What these numbers mean"}</summary>
+        <p data-testid="explorer-counts" className="text-sm text-muted mt-1">
           {s.mode === "technical"
             ? `${visible.length} of ${g.nodes.length} nodes - ${g.edges.length} edges - source revision ${g.head.source_revision_id || "none"} - knowledge revision ${g.head.knowledge_revision_id || "none"} - decision epoch ${g.head.decision_epoch}`
             : `${T.files} files, ${T.rules} rules read by the AI: ${T.confirmed} confirmed by a person, ${T.pending} not yet confirmed, ${upd.edited} changed by an applied change, ${upd.reread} read again with a different value, ${upd.scope} read again with a different scope only, ${g.nodes.filter((n) => n.state === "stale" && n.type === "candidate").length} out of date (their file changed after they were read)${cov.unchanged_since_read_candidates ? `, ${cov.unchanged_since_read_candidates} read at an earlier revision from a file that has not changed since (still valid)` : ""}. ${T.issues} issue${T.issues === 1 ? "" : "s"} and ${T.decisions} decision${T.decisions === 1 ? "" : "s"}, each counted once even when it touches several rules. ${vis ? `Showing ${shownRules} matching rule${shownRules === 1 ? "" : "s"}.` : "Showing everything."}`}
         </p>
+        </details>
         {view === "tree" ? (
           <div id="explorer-main" className="min-w-0">
             <ExplorerTree tree={tree} vis={vis} query={query} expanded={expanded} closedInSearch={closedInSearch} toggle={toggle} reveal={reveal} sel={sel} select={select} reload={load} focusId={focusId} />

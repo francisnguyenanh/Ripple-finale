@@ -28,27 +28,59 @@ def ch(env, monkeypatch):
 
 
 def _buttons(page):
+    # `seen`: the visible text the button points to with aria-describedby (the reason a person can read without hovering)
     return page.evaluate("""() => [...document.querySelectorAll('main button, main a[role=button]')].filter(b => b.offsetParent !== null)
         .map(b => ({t: (b.innerText || b.getAttribute('aria-label') || '').trim().slice(0, 60), id: b.getAttribute('data-testid') || '',
-                    off: b.disabled || b.getAttribute('aria-disabled') === 'true', why: b.getAttribute('title') || ''}))
+                    off: b.disabled || b.getAttribute('aria-disabled') === 'true', why: b.getAttribute('title') || '',
+                    seen: (b.getAttribute('aria-describedby') || '').split(/\\s+/).filter(Boolean).map(i => document.getElementById(i))
+                          .filter(e => e && e.offsetParent !== null).map(e => e.innerText.trim()).join(' ').slice(0, 80)}))
         .filter(b => b.t || b.id)""")
+
+
+def _expand(page):
+    """Open what a person can open without acting: folded stages, question rows, explorer rows and 'Advanced' disclosures. Only toggles
+    (aria-expanded / <details>) are touched, never an action; so the matrix also sees the controls that sit inside folded content."""
+    for _ in range(3):
+        n = page.evaluate("""() => { let n = 0;
+            for (const d of document.querySelectorAll('main details:not([open])')) { d.open = true; n++; }
+            for (const b of document.querySelectorAll('main button[aria-expanded=false]')) { if (b.offsetParent !== null && !b.disabled) { b.click(); n++; } }
+            return n; }""")
+        if not n:
+            return
+        page.wait_for_timeout(300)
+
+
+def _settled_buttons(page, floor_ms=1800, step_ms=600, limit_ms=15000):
+    """The buttons once the page has settled: the same set (and enabled states) on two reads one step apart, after at least `floor_ms`.
+    A fixed wait read the changes page half-loaded (its approval stage appears after ~2.3 s), so the matrix missed buttons the role really has."""
+    page.wait_for_timeout(floor_ms)
+    waited, last = floor_ms, _buttons(page)
+    while waited < limit_ms:
+        page.wait_for_timeout(step_ms)
+        waited += step_ms
+        now = _buttons(page)
+        if now == last:
+            return now
+        last = now
+    raise AssertionError(f"the page did not settle within {limit_ms} ms: {page.url}")
 
 
 def test_matrix(env, ch, monkeypatch, pw_browser):
     c = chain_to_proposal(env, ch, monkeypatch)
     _to_approval(env, ch, c)
     server = ServerThread().start()
-    out = {}
+    out, opened = {}, {}
     try:
         who = {"requester": (env.req, f"cred-r-{env.nonce}"), "admin": (env.admin, f"cred-a-{env.nonce}"), "approver": _account(env, "change_approver"),
                "reviewer": _account(env, "reviewer"), "viewer": _account(env, "viewer")}
         for role, cred in who.items():
             ctx, page = _signed_in(pw_browser, server, env, cred)
             for pg in PAGES:
-                page.goto(f"{server.url}{UI_BASE}#/ws/{env.ws}/{pg}" + (f"?intent={c.intent}&draft={c.draft}&impact={c.impact}&simulation={c.simulation}&proposal={c.proposal}" if pg == "changes" else ""))
-                page.wait_for_timeout(1800)
-                btns = [b for b in _buttons(page) if b["t"] not in CHROME]
+                page.goto(f"{server.url}{UI_BASE}#/ws/{env.ws}/{pg}" + ("?ui_section=all" if pg == "questions" else "") + (f"?intent={c.intent}&draft={c.draft}&impact={c.impact}&simulation={c.simulation}&proposal={c.proposal}" if pg == "changes" else ""))
+                btns = [b for b in _settled_buttons(page) if b["t"] not in CHROME]
                 out[(role, pg)] = btns
+                _expand(page)
+                opened[(role, pg)] = [b for b in _settled_buttons(page) if b["t"] not in CHROME]
             ctx.close()
     finally:
         server.stop()
@@ -91,6 +123,18 @@ def test_matrix(env, ch, monkeypatch, pw_browser):
     assert "Evidence" in present("reviewer") and "Evidence" in present("admin")
     # every disabled action says why
     assert not [(k, d) for k, v in rows.items() for d in v["disabled"] if "NO REASON" in d], [(k, d) for k, v in rows.items() for d in v["disabled"] if "NO REASON" in d]
+    # every disabled action shows its reason as visible text linked to it (the design rule; a hover tooltip alone is not visible on touch or keyboard)
+    unseen = sorted({(f"{r}/{pg}", b["id"] or b["t"]) for (r, pg), btns in list(out.items()) + list(opened.items()) for b in btns if b["off"] and not b["seen"]})
+    assert not unseen, unseen
+    # with every stage, row and disclosure opened, a role still has no enabled action outside its permissions
+    def opened_enabled(role):
+        return {(b["id"] or b["t"]) for (r, pg), btns in opened.items() if r == role for b in btns if not b["off"]}
+    print("\nOPENED\n" + json.dumps({r: sorted(opened_enabled(r)) for r in who}, indent=1))
+    toggles = ("qsec-", "ssec-", "explorer-", "expand-", "collapse-", "copy-request-link", "check-now", "stages-expand-all", "harbor-run")
+    assert not {n for n in opened_enabled("viewer") if not n.endswith("-toggle") and not n.startswith(toggles) and not n.startswith(("Confirm this rule", "Evidence"))}, opened_enabled("viewer")
+    assert acts(opened_enabled("viewer")) == set() and acts(opened_enabled("reviewer")) <= {"review-ready", "review-comment", "review-request-changes", "ask-start"}
+    assert not {"action-approve", "action-reject"} & (opened_enabled("requester") | opened_enabled("reviewer") | opened_enabled("viewer"))
+    assert "action-apply" not in opened_enabled("approver") and not any(a.startswith("member-") for a in opened_enabled("requester") | opened_enabled("approver") | opened_enabled("reviewer") | opened_enabled("viewer"))
     pathlib_out = os.environ.get("MATRIX_OUT")
     if pathlib_out:
         open(pathlib_out, "w", encoding="utf-8").write(json.dumps(rows, indent=1))

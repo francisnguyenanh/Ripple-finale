@@ -30,7 +30,7 @@ export function WindowBanner() {
   const leftText = long ? `${dd > 0 ? `${dd}d ` : ""}${hh}h ${mn}m` : `${mm}:${ss}`;
   const sw = (v?: string) => (v === "on" ? "ON" : v === "off" ? "OFF" : "unknown");
   return (
-    <div role="status" data-testid="window-banner" data-state={ended ? "ended" : "open"} className="bg-surface-2 border-b border-border text-sm px-4 py-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+    <div role="status" data-testid="window-banner" data-state={ended ? "ended" : "open"} className="text-sm px-4 py-1.5 flex flex-wrap items-center gap-x-4 gap-y-1">
       {ended
         ? <><strong>The evaluation window has ended.</strong><span>New work is refused with an explanation. You can still read everything saved and switch roles; nothing is lost.</span></>
         : <><strong>{long ? "Evaluation period:" : "Trial window:"}</strong><span data-testid="window-left">{leftText} left (ends {ends})</span></>}

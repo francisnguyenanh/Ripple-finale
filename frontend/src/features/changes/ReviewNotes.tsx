@@ -34,6 +34,7 @@ export function ReviewNotes({ proposalId, proposalBy, st, set }: { proposalId: s
   const s = useSession();
   const { run, pending } = useAction();
   const [text, setText] = React.useState("");
+  const whyId = React.useId();
   if (!st) return null;
   const mayReview = s.can("change.review") && proposalBy !== s.account;
   const post = async (verdict: Note["verdict"]) => {
@@ -61,10 +62,11 @@ export function ReviewNotes({ proposalId, proposalBy, st, set }: { proposalId: s
         <div className="grid gap-2">
           <Field label="Your review note"><TextArea data-testid="review-note-text" rows={2} maxLength={1000} value={text} onChange={(e) => setText(e.target.value)} /></Field>
           <div className="flex flex-wrap gap-2">
-            <Button data-testid="review-comment" title={!text.trim() ? "Write what you found first." : undefined} disabled={pending || !text.trim()} onClick={() => void post("comment")}>Add comment</Button>
-            <Button data-testid="review-request-changes" title={!text.trim() ? "Say what has to change first." : undefined} disabled={pending || !text.trim()} onClick={() => void post("request_changes")}>Ask for changes</Button>
+            <Button data-testid="review-comment" title={!text.trim() ? "Write what you found first." : undefined} aria-describedby={!text.trim() ? whyId : undefined} disabled={pending || !text.trim()} onClick={() => void post("comment")}>Add comment</Button>
+            <Button data-testid="review-request-changes" title={!text.trim() ? "Say what has to change first." : undefined} aria-describedby={!text.trim() ? whyId : undefined} disabled={pending || !text.trim()} onClick={() => void post("request_changes")}>Ask for changes</Button>
             <Button variant="primary" data-testid="review-ready" disabled={pending} onClick={() => void post("ready")}>Mark ready for approval</Button>
           </div>
+          {!text.trim() && <span id={whyId} data-testid="review-note-why" className="text-sm text-muted">Write your note first to add a comment or ask for changes; marking it ready needs no note.</span>}
           <Muted>A review note does not approve or apply anything. It is recorded with your name on this exact proposal.</Muted>
         </div>
       )}

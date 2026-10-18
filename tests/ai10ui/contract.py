@@ -163,6 +163,9 @@ def sign_in_fresh(world, name, *, view=None, workspace=None):
 
 
 def select_workspace(page, workspace_id):
+    # on a small screen (new interface) the workspace picker sits inside the menu: open it first, as a person would
+    if not page.get_by_label("Workspace").is_visible() and page.get_by_test_id("menu-button").count() and page.get_by_test_id("menu-button").is_visible():
+        page.get_by_test_id("menu-button").click()
     page.get_by_label("Workspace").select_option(value=workspace_id)
     expect(page.get_by_label("Workspace")).to_have_value(workspace_id, timeout=WAIT_MS)
 
@@ -173,7 +176,11 @@ _NEXT_NAV = {"Questions": "Questions & Decisions", "Knowledge": "Questions & Dec
 def goto_view(page, name):
     if UI_BASE.startswith("/app-next"):
         name = _NEXT_NAV.get(name, name)
-    page.get_by_role("navigation").get_by_role("link", name=name, exact=True).click()
+    link = page.get_by_role("navigation").get_by_role("link", name=name, exact=True)
+    # on a narrow layout (small screen, or a desktop at 200 % zoom) the pages are inside the menu: open it first, as a person would
+    if not link.is_visible() and page.get_by_test_id("menu-button").count() and page.get_by_test_id("menu-button").is_visible():
+        page.get_by_test_id("menu-button").click()
+    link.click()
 
 
 def open_link(page, url):

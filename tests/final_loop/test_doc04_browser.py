@@ -82,3 +82,38 @@ def test_open_generates_once_reload_keeps_it_stale_is_labelled_and_technical_obe
     assert len(listed(admin, env)) == 3 and model.calls == 0                                             # nothing generated for the refused request; no model anywhere
     for page in (owner, v):
         assert not page._errors, page._errors
+
+
+def test_topic_filter_narrows_the_loaded_topics_without_a_request_and_clearing_restores_them(ui, pw_browser):
+    """UX-12 acceptance: with more than six topics a "Find a topic" filter narrows the loaded list; typing sends no request, a miss says so with the
+    loaded count, clearing lists everything again. The fixture has fewer topics, so the real graph response is extended in the browser with eight
+    SYNTHETIC rule nodes (titles "Synthetic topic N"); none of them is opened, so no document is requested for them."""
+    import json as _json
+    env, admin, model, server, _approver, _viewer = ui
+
+    def extend(route):
+        resp = route.fetch()
+        body = resp.json()
+        body["nodes"] = list(body.get("nodes") or []) + [{"id": f"rule-synthetic-{n}", "type": "rule", "title": f"Synthetic topic {n}", "authority": "OBSERVED"} for n in range(8)]
+        route.fulfill(response=resp, body=_json.dumps(body), content_type="application/json")
+
+    owner = sign_in(pw_browser, server, env.ws, env.admin, f"cred-a-{env.nonce}", page_hash="overview")
+    owner.route("**/v2/business/graph*", extend)
+    calls = []
+    owner.on("request", lambda r: calls.append((r.method, r.url)) if "/v2/" in r.url else None)
+    owner.goto(f"{server.url}/app-next/#/ws/{env.ws}/documents")
+    box = owner.get_by_test_id("docs-topic-filter")
+    expect(box).to_be_visible(timeout=WAIT)
+    topics = owner.get_by_test_id("docs-topics")
+    before = len(calls)
+    box.fill("Synthetic topic 3")
+    expect(topics).to_contain_text("Synthetic topic 3")
+    expect(topics).not_to_contain_text("Synthetic topic 4")
+    box.fill("no such topic at all")
+    expect(owner.get_by_test_id("docs-topic-none")).to_contain_text("topics are loaded")
+    box.fill("")
+    for n in (0, 7):
+        expect(topics).to_contain_text(f"Synthetic topic {n}")
+    owner.wait_for_timeout(300)
+    assert not [c for c in calls[before:] if "/v2/business/documents" in c[1] or c[0] != "GET"], calls[before:]      # filtering requested nothing
+    assert not owner._errors, owner._errors

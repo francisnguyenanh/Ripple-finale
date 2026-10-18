@@ -12,9 +12,12 @@ import { useAction } from "@/lib/useAction";
 import { useNotify } from "@/lib/notify";
 import { PageHeader } from "@/pages/Page";
 import { useSession } from "@/session";
+import { useParam } from "@/lib/param";
+import { SectionNav } from "@/components/SectionNav";
 import type { Rec } from "@/features/changes/types";
 import { WorkspaceSection } from "./WorkspaceSection";
 import { OperatorSwitches } from "./OperatorSwitches";
+import { LiveStatus } from "./LiveStatus";
 
 const q = encodeURIComponent;
 
@@ -225,17 +228,27 @@ const TechTd = ({ r }: { r: Rec }) => (
   </Tech>
 );
 
+const SUPPORT_SECTIONS = [
+  { id: "ws", label: "This workspace" }, { id: "access", label: "Access" }, { id: "sandbox", label: "Demo session" }, { id: "matrix", label: "What this demo supports" },
+  { id: "live", label: "Live updates" },
+];
+
 export function SupportPage() {
   const s = useSession();
   const ws = s.route.ws!;
+  const [uiSection, setUiSection] = useParam("ui_section");
+  const sel = SUPPORT_SECTIONS.some((x) => x.id === uiSection) ? uiSection : null;
+  const show = (id: string) => sel === null || sel === id;
   return (
     <>
       <PageHeader id="support" next="Start a demo session before creating or approving anything in a shared sandbox." />
+      <SectionNav ariaLabel="Support sections" testid="support-sections" prefix="ssec" sections={SUPPORT_SECTIONS} selected={sel} onSelect={setUiSection} />
       <div className="grid gap-8">
-        <section aria-labelledby="sup-ws" className="grid gap-4"><h2 id="sup-ws" className="text-lg font-semibold">This workspace</h2><WorkspaceSection ws={ws} /><OperatorSwitches /></section>
-        <section aria-labelledby="sup-access" className="grid gap-4"><h2 id="sup-access" className="text-lg font-semibold">Access</h2><Access /></section>
-        <section aria-labelledby="sup-sandbox" className="grid gap-4"><h2 id="sup-sandbox" className="text-lg font-semibold">Demo session</h2><SandboxSection ws={ws} /></section>
-        <section aria-labelledby="sup-matrix" className="grid gap-4"><h2 id="sup-matrix" className="text-lg font-semibold">What this demo supports</h2><Matrix ws={ws} /></section>
+        <section aria-labelledby="sup-ws" hidden={!show("ws")} data-testid="ssection-ws" className="grid gap-4"><h2 id="sup-ws" className="text-lg font-semibold">This workspace</h2><WorkspaceSection ws={ws} /><OperatorSwitches /></section>
+        <section aria-labelledby="sup-access" hidden={!show("access")} data-testid="ssection-access" className="grid gap-4"><h2 id="sup-access" className="text-lg font-semibold">Access</h2><Access /></section>
+        <section aria-labelledby="sup-sandbox" hidden={!show("sandbox")} data-testid="ssection-sandbox" className="grid gap-4"><h2 id="sup-sandbox" className="text-lg font-semibold">Demo session</h2><SandboxSection ws={ws} /></section>
+        <section aria-labelledby="sup-matrix" hidden={!show("matrix")} data-testid="ssection-matrix" className="grid gap-4"><h2 id="sup-matrix" className="text-lg font-semibold">What this demo supports</h2><Matrix ws={ws} /></section>
+        <section aria-labelledby="sup-live" hidden={!show("live")} data-testid="ssection-live" className="grid gap-4"><h2 id="sup-live" className="text-lg font-semibold">Live updates</h2><LiveStatus ws={ws} /></section>
       </div>
     </>
   );

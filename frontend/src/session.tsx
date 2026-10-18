@@ -30,6 +30,8 @@ export interface Session {
 }
 
 const Ctx = React.createContext<Session | null>(null);
+/** Exposed only so the development component catalog can supply a synthetic session; the app itself uses SessionProvider. */
+export const SessionContext = Ctx;
 export const useSession = () => {
   const s = React.useContext(Ctx);
   if (!s) throw new Error("no session");

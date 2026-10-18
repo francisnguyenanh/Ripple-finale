@@ -286,6 +286,7 @@ def test_ui_asks_which_rule_when_several_match_and_never_takes_the_first(env, ch
         assert tid(requester, "action-run-impact").is_disabled() and tid(requester, "action-run-relations").is_disabled()
         assert not seen, "nothing was looked up for a guessed first rule"
         picker.locator("select").select_option(value=values[1])                                  # the SECOND rule
+        expect(tid(requester, "action-run-relations")).to_have_attribute("data-read", "done", timeout=WAIT)   # its coverage was read for that rule
         assert tid(requester, "action-run-relations").is_enabled()
         tid(requester, "action-run-relations").click()
         requester.wait_for_timeout(1500)

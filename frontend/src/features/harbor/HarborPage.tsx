@@ -85,12 +85,12 @@ export function HarborPage() {
               <Field key={k} label={l}><TextInput value={form[k]} onChange={set(k)} data-testid={`harbor-in-${k}`} /></Field>
             ))}
             <Field label="Process">
-              <select className="h-9 rounded-md border border-border bg-background px-2" value={form.process} onChange={set("process")} data-testid="harbor-in-process">
+              <select className="h-9 rounded-md border border-border bg-bg px-2" value={form.process} onChange={set("process")} data-testid="harbor-in-process">
                 <option value="STANDARD">Standard</option><option value="EMERGENCY">Emergency</option>
               </select>
             </Field>
             <Field label="Category">
-              <select className="h-9 rounded-md border border-border bg-background px-2" value={form.category} onChange={set("category")} data-testid="harbor-in-category">
+              <select className="h-9 rounded-md border border-border bg-bg px-2" value={form.category} onChange={set("category")} data-testid="harbor-in-category">
                 <option value="OPEX">OPEX</option><option value="CAPEX">CAPEX</option>
               </select>
             </Field>
@@ -100,12 +100,12 @@ export function HarborPage() {
           {revs.length === 0 ? <Muted>No version of this workspace holds Harbor's approval.yaml yet.</Muted> : (
             <div className="grid gap-3">
               <Field label="Before">
-                <select className="h-9 w-full rounded-md border border-border bg-background px-2" value={before} onChange={(e) => setBefore(e.target.value)} data-testid="harbor-before">
+                <select className="h-9 w-full rounded-md border border-border bg-bg px-2" value={before} onChange={(e) => setBefore(e.target.value)} data-testid="harbor-before">
                   {revs.map((r) => <option key={String(r.source_revision_id)} value={String(r.source_revision_id)}>{label(r)}</option>)}
                 </select>
               </Field>
               <Field label="After">
-                <select className="h-9 w-full rounded-md border border-border bg-background px-2" value={after} onChange={(e) => setAfter(e.target.value)} data-testid="harbor-after">
+                <select className="h-9 w-full rounded-md border border-border bg-bg px-2" value={after} onChange={(e) => setAfter(e.target.value)} data-testid="harbor-after">
                   {revs.map((r) => <option key={String(r.source_revision_id)} value={String(r.source_revision_id)}>{label(r)}</option>)}
                 </select>
               </Field>

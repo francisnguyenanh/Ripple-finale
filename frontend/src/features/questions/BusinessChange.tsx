@@ -32,6 +32,7 @@ export function BusinessChange({ ws }: { ws: string }) {
   const [data, setData] = React.useState<Rec | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
   const [done, setDone] = React.useState<Rec | null>(null);
+  const submitWhy = React.useId();
   const mode = s.mode;
   React.useEffect(() => {
     if (!cid) { setData(null); return; }
@@ -71,7 +72,7 @@ export function BusinessChange({ ws }: { ws: string }) {
           <Field label="Describe a change to a business rule" hint="For example who approves, when it applies, an exception, where it applies, or a value. Nothing changes until you confirm, and confirming only records your request.">
             <TextArea data-testid="chg-input" rows={3} maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} />
           </Field>
-          <div><Button variant="primary" data-testid="chg-submit" disabled={pending || !text.trim()} onClick={() => void submit()}>Check my request</Button></div>
+          <div><Button variant="primary" data-testid="chg-submit" title={!text.trim() ? "Describe the change first." : pending ? "The request is being sent." : undefined} disabled={pending || !text.trim()} aria-describedby={!text.trim() ? submitWhy : undefined} onClick={() => void submit()}>Check my request</Button>{!text.trim() && <span id={submitWhy} data-testid="chg-submit-why" className="ml-3 text-sm text-muted">Describe the change first.</span>}</div>
         </div>
       ) : <Muted testid="chg-no-ask">You can read change requests, but your role cannot make new ones.</Muted>}
       {err && <Callout tone="danger" testid="chg-error">{err}</Callout>}

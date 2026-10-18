@@ -417,6 +417,7 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str | None] = {
     ("POST", "/v2/projection/conversations"): "membership.manage",
     ("GET", "/v2/business/documents/{artifact_id}/offline-manifest"): "project.read",
     ("POST", "/v2/sources/git/sync"): "source.import",
+    ("GET", "/v2/sources/repositories"): "project.read",
     ("GET", "/v2/business/changes/{change_id}/draft"): "project.read",
     ("POST", "/v2/business/changes/{change_id}/draft/guidance"): "change.prepare",
     ("GET", "/v2/business/changes/{change_id}/review"): "project.read",

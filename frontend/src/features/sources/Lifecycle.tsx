@@ -79,33 +79,52 @@ export function FileStages({ row, provider }: { row: Rec; provider?: Rec }) {
   );
 }
 
-export function LifeSummary({ life, paths }: { life: Rec; paths: string[] }) {
+/** A number from the server, or "unknown" when it was not read: a missing value is never shown as 0. */
+const num = (v: unknown): React.ReactNode => (typeof v === "number" ? v : <span className="text-muted">unknown</span>);
+
+function Metric({ label, value, testid, tone }: { label: string; value: React.ReactNode; testid: string; tone?: "warn" | "danger" }) {
+  return (
+    <div data-testid={testid} className={`rounded-md border px-3 py-2 ${tone === "danger" ? "border-danger" : tone === "warn" ? "border-warning" : "border-border"}`}>
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="text-base font-semibold">{value}</dd>
+    </div>
+  );
+}
+
+/** D3: one row of labelled counts; warnings (out of date, failed, waiting, partial coverage) stay visible, the explanations wait behind "Show more". */
+export function LifeSummary({ life, paths, coverage }: { life: Rec; paths: string[]; coverage?: React.ReactNode }) {
   const t = (life.totals ?? {}) as Rec;
   const k = (life.knowledge ?? {}) as Rec;
   const harborOnly = paths.length > 0 && paths.every((p) => p.startsWith("harbor_demo/"));
-  const waiting = (t.pending_approval ?? 0) + (t.queued ?? 0) + (t.running ?? 0);
+  const waiting = typeof t.pending_approval === "number" || typeof t.queued === "number" || typeof t.running === "number" ? (t.pending_approval ?? 0) + (t.queued ?? 0) + (t.running ?? 0) : null;
   return (
     <Card title="What has been done with these files" testid="lifecycle-summary">
-      <p className="text-sm" data-testid="source-count"><strong>{t.imported}</strong> source file{t.imported === 1 ? " is" : "s are"} in the current version of this workspace. The numbers below come from what is stored right now.</p>
-      <ul className="grid gap-1 text-sm" aria-label="Counts by stage">
-        <li data-testid="count-parsed">Read by the parser: <strong>{t.parsed}</strong> of {t.imported}</li>
-        <li data-testid="count-analysed">Analysed by the AI (current version of the file): <strong>{t.analysed}</strong> of {t.imported}</li>
-        {t.stale > 0 && <li data-testid="count-stale">Out of date (analysed before the file changed): <strong>{t.stale}</strong></li>}
-        {waiting > 0 && <li data-testid="count-waiting">Waiting or running: <strong>{waiting}</strong></li>}
-        {t.failed > 0 && <li data-testid="count-failed">Analysis failed: <strong>{t.failed}</strong></li>}
-        <li data-testid="count-not-analysed">Not analysed yet: <strong>{t.not_analysed}</strong></li>
-        <li data-testid="count-rules">Rules found: <strong>{t.claims_total}</strong> - confirmed by a person: <strong>{t.claims_confirmed}</strong>, waiting for a person: <strong>{t.claims_pending}</strong></li>
-      </ul>
+      <dl className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2" aria-label="Counts by stage" data-testid="source-metrics">
+        <Metric testid="source-count" label="Source files" value={num(t.imported)} />
+        <Metric testid="count-parsed" label="Read by the parser" value={<>{num(t.parsed)} of {num(t.imported)}</>} />
+        <Metric testid="count-analysed" label="Analysed by the AI" value={<>{num(t.analysed)} of {num(t.imported)}</>} />
+        <Metric testid="count-not-analysed" label="Not analysed yet" value={num(t.not_analysed)} />
+        <Metric testid="count-rules" label="Rules found" value={<>{num(t.claims_total)} <span className="text-xs font-normal text-muted">(confirmed {num(t.claims_confirmed)}, waiting {num(t.claims_pending)})</span></>} />
+        {t.stale > 0 && <Metric testid="count-stale" tone="warn" label="Out of date (file changed after analysis)" value={t.stale} />}
+        {(waiting ?? 0) > 0 && <Metric testid="count-waiting" tone="warn" label="Waiting or running" value={waiting} />}
+        {t.failed > 0 && <Metric testid="count-failed" tone="danger" label="Analysis failed" value={t.failed} />}
+      </dl>
       <p className="text-sm" data-testid="knowledge-state" data-state={k.state}>
-        Knowledge version: {k.state === "built_on_current_sources" ? "built on the current files." : k.state === "built_on_older_sources" ? "built on older files, so it does not yet include the current version." : k.state === "no_sources" ? "there are no files yet." : "no knowledge version has been accepted yet."}{" "}
-        <span className="text-muted">Accepting knowledge is its own decision. An analysis finishing does not accept anything.</span>
+        Knowledge version: {k.state === "built_on_current_sources" ? "built on the current files." : k.state === "built_on_older_sources" ? "built on older files, so it does not yet include the current version." : k.state === "no_sources" ? "there are no files yet." : "no knowledge version has been accepted yet."}
       </p>
       <Muted testid="provider-line">AI mode: {providerLine(life.provider as Rec)}</Muted>
-      <Callout testid="subset-note">
+      <details data-testid="sources-more" className="text-sm">
+        <summary className="cursor-pointer w-fit text-primary">Show more: what these numbers mean and the reading coverage</summary>
+        <div className="grid gap-2 mt-2">
+          <p data-testid="source-count-note">The numbers come from what is stored right now for the current version of this workspace. Accepting knowledge is its own decision; an analysis finishing does not accept anything.</p>
+          <Callout testid="subset-note">
         {harborOnly
           ? <span>This workspace holds a <strong>selected part of the public Harbor demo files</strong> ({t.imported} file{t.imported === 1 ? "" : "s"}), not the whole demo bundle. Anything that was not imported has not been read and is not part of any result.</span>
           : <span>These are the files that were imported. Files that were not imported have not been read and are not part of any result. Add more files with Import source files below.</span>}
       </Callout>
+          {coverage}
+        </div>
+      </details>
       <Tech><TechField label="source revision" value={life.source_revision_id} /><TechField label="knowledge revision" value={k.knowledge_revision_id ?? "none"} /><TechField label="decision epoch" value={k.decision_epoch ?? ""} /></Tech>
     </Card>
   );
