@@ -37,6 +37,8 @@
       "frontend design check, type check and unit tests",
       "Chromium browser suites"
     ],
-    "note": "Self-check on one machine, not independent validation. Skipped tests are not passes."
-  }
+    "note": "Self-check on one machine, not independent validation. Skipped tests are not passes.",
+    "deselected_reason": "The one deselected test is marked live_llm (it would make a real provider call); pytest.ini addopts exclude it by default. It was not run."
+  },
+  "manifest_scope": "SUBMISSION_MANIFEST.json describes the source export of the source commit. The public README.md was adjusted after export and has its own hash (public_changes); this file was added. The public tree therefore does NOT match the original manifest byte for byte; every other file does."
 }
