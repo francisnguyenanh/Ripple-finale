@@ -296,3 +296,60 @@ def record_decision(store, tenant_id, workspace_id, change_id, *, actor_id: str,
                                                                            "semantic_diff_hash": draft["semantic_diff_hash"], "draft_hash": draft["draft_hash"], **({"ref": binding["ref"]} if kind == "clarification" else {})})))
     return {"decision_id": decision_id, "replayed": False, "kind": kind, "action": action, "self_approval": self_approval, "draft_hash": draft["draft_hash"],
             "semantic_diff_hash": draft["semantic_diff_hash"]}
+
+MAX_DIFF_FILES = 10
+MAX_DIFF_LINES_PER_FILE = 120
+
+
+def file_diff(store, tenant_id, workspace_id, change_id) -> dict | None:
+    """EUI-03: the candidate byte diff of every automatic (AI_EDIT_SUPPORTED) file edit of a confirmed request, computed IN MEMORY from the exact bytes of the
+    draft's pinned source revision with the same scalar-edit function the apply job uses. Nothing is staged, written or applied; a candidate is not an applied
+    change. Bounded: at most MAX_DIFF_FILES files and MAX_DIFF_LINES_PER_FILE lines each, with the coverage stated. None if the request is not confirmed."""
+    import difflib
+    import hashlib
+    from infra.worker.business_source_apply import apply_scalar_edits
+    got = current_draft(store, tenant_id, workspace_id, change_id)
+    if got is None:
+        return None
+    draft = got[0]
+    pin = (draft.get("pin") or {}).get("source_revision_id")
+    actions = draft.get("file_actions") or []
+    auto = [i for i in actions if i.get("action") == "AI_EDIT_SUPPORTED"]
+    by_artifact: dict = {}
+    for it in auto:
+        by_artifact.setdefault(it.get("resolved_artifact_id") or it.get("path"), []).append(it)
+    files = []
+    for artifact_id, its in list(by_artifact.items())[:MAX_DIFF_FILES]:
+        entry = {"artifact_id": artifact_id, "path": its[0].get("path"), "refs": [i.get("ref") for i in its], "lines": [], "truncated": False}
+        supported = all(i.get("kind") == "config" and str(i.get("path") or "").lower().endswith((".yaml", ".yml")) and isinstance(i.get("proposal_edit"), dict) for i in its)
+        if not supported:
+            files.append(dict(entry, state="no_byte_diff", reason="only a YAML scalar edit has a byte diff"))
+            continue
+        try:
+            art = store.read_artifact_blob(tenant_id, workspace_id, pin, artifact_id)
+            text = art["content"].decode("utf-8")
+        except (TenantScopeError, UnicodeDecodeError, KeyError, TypeError):
+            files.append(dict(entry, state="unavailable", reason="the pinned bytes of this file could not be read"))
+            continue
+        except Exception:                                                                 # noqa: BLE001 - blob integrity or storage: never a guessed diff
+            files.append(dict(entry, state="unavailable", reason="the pinned bytes of this file could not be read"))
+            continue
+        try:
+            new_text, _applied = apply_scalar_edits(text, [dict(i["proposal_edit"]) for i in its])
+        except Exception as exc:                                                          # noqa: BLE001 - the apply job would refuse the same edit
+            files.append(dict(entry, state="refused", reason=str(getattr(exc, "args", [""])[-1] or type(exc).__name__)[:200]))
+            continue
+        lines = []
+        for raw in difflib.unified_diff(text.splitlines(), new_text.splitlines(), n=2, lineterm=""):
+            if raw.startswith(("---", "+++")):
+                continue
+            kind = "hunk" if raw.startswith("@@") else "add" if raw.startswith("+") else "remove" if raw.startswith("-") else "context"
+            lines.append({"kind": kind, "text": raw if kind == "hunk" else raw[1:]})
+            if len(lines) >= MAX_DIFF_LINES_PER_FILE:
+                entry["truncated"] = True
+                break
+        files.append(dict(entry, state="candidate", lines=lines, before_hash=art.get("blob_hash"), after_hash="sha256:" + hashlib.sha256(new_text.encode("utf-8")).hexdigest()))
+    return {"change_id": change_id, "pinned_source_revision_id": pin, "files": files,
+            "coverage": {"auto_files": len(by_artifact), "files_shown": len(files), "files_not_shown": max(0, len(by_artifact) - MAX_DIFF_FILES),
+                         "manual_items": sum(1 for i in actions if i.get("action") == "MANUAL"), "unresolved_items": sum(1 for i in actions if i.get("action") == "UNRESOLVED")},
+            "statement": "Candidate bytes computed from the pinned version for review only. Nothing was staged, written or applied; manual and unresolved items have no byte diff."}

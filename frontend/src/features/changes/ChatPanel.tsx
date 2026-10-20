@@ -6,12 +6,13 @@ import * as React from "react";
 import { Send } from "lucide-react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Callout, Card, Field, Muted, TechField, TextArea, TextInput, usePlain } from "@/components/bits";
+import { Callout, Card, Field, HowItWorks, Muted, TechField, TextArea, TextInput, usePlain } from "@/components/bits";
 import { humanize, num } from "@/lib/fmt";
 import { useAction } from "@/lib/useAction";
 import { useNotify } from "@/lib/notify";
 import { useSession } from "@/session";
 import { Permission, Turns } from "./ChatBits";
+import { AIInterpretationPreview } from "@/components/decision/AIInterpretationPreview";
 import { useFlow } from "./flow";
 import type { Chat, Ids, Rec, StageKey, Understanding } from "./types";
 import { STAGES } from "./types";
@@ -44,32 +45,19 @@ function UnderstandingCard({ chat, u }: { chat: Chat; u: Understanding }) {
     : "No usable reply";
   const others = (u.safety ?? []).filter((x) => !chat.safety_notes.some((y) => y.code === x.code));
   return (
-    <div data-testid="chat-understanding" data-state={u.status} data-version={String(chat.version)} className="rounded-md border border-border bg-surface-2 p-3 grid gap-2 anim-in">
-      <p className="text-base font-semibold">{heading}</p>
-      {fields && (
-        <dl data-testid="chat-fields" className="grid grid-cols-[minmax(8rem,12rem)_1fr] gap-x-3 gap-y-1 text-sm">
-          {keys.map((k) => {
-            const v = show(k, fields[k]);
-            const src = u.sources?.[k] as Rec | undefined;
-            return (
-              <React.Fragment key={k}>
-                <dt className="text-muted">{label(k)}</dt>
-                <dd data-testid={`chat-field-${k}`} data-missing={v === null ? "true" : "false"}>
-                  {v === null ? <span className="text-muted">not known yet</span> : v}
-                </dd>
-                {src && (
-                  <>
-                    <dt aria-hidden="true" />
-                    <dd data-testid={`chat-source-${k}`} className="text-xs text-muted">
-                      {src.quote ? `from your words: "${src.quote}"` : "from the stored rule"}
-                    </dd>
-                  </>
-                )}
-              </React.Fragment>
-            );
-          })}
-        </dl>
-      )}
+    <AIInterpretationPreview testid="chat-understanding" status={u.status} version={String(chat.version)} heading={heading}
+      fields={fields ? keys.map((k) => {
+        const src = u.sources?.[k] as Rec | undefined;
+        return { key: k, label: label(k), value: show(k, fields[k]), source: src ? (src.quote ? `from your words: "${src.quote}"` : "from the stored rule") : null };
+      }) : null}
+      assumptions={u.assumptions ?? []} ids={{ fields: "chat-fields", field: (k) => `chat-field-${k}`, source: (k) => `chat-source-${k}`, assumptions: "chat-assumptions" }}
+      footer={<>
+        <TechField label="understanding version" value={chat.version} />
+        <TechField label="source" value={u.source ?? ""} />
+        <TechField label="conversation id" value={chat.conversation_id} />
+        <TechField label="pinned source revision" value={chat.pinned_source_revision_id ?? ""} />
+        <TechField label="pinned decision epoch" value={chat.pinned_decision_epoch ?? ""} />
+      </>}>
       {(u.questions ?? []).map((q, i) => <Callout key={i} tone="warn" testid="chat-question">{p(q)}</Callout>)}
       {(u.changes ?? []).length > 0 && (
         <div>
@@ -89,13 +77,7 @@ function UnderstandingCard({ chat, u }: { chat: Chat; u: Understanding }) {
       {others.map((h) => (
         <Muted key={h.code} testid="chat-safety"><span data-code={h.code}>{h.business}</span></Muted>
       ))}
-      {(u.assumptions ?? []).length > 0 && <Muted testid="chat-assumptions">Assumed, please check: {u.assumptions!.join("; ")}</Muted>}
-      <TechField label="understanding version" value={chat.version} />
-      <TechField label="source" value={u.source ?? ""} />
-      <TechField label="conversation id" value={chat.conversation_id} />
-      <TechField label="pinned source revision" value={chat.pinned_source_revision_id ?? ""} />
-      <TechField label="pinned decision epoch" value={chat.pinned_decision_epoch ?? ""} />
-    </div>
+    </AIInterpretationPreview>
   );
 }
 
@@ -206,9 +188,9 @@ export function ChatPanel() {
         <Muted testid="chat-privacy">
           Who can read this conversation: you, and people who hold the knowledge-confirmer permission (normally the workspace administrator). Reviewers, approvers and viewers cannot open it; what they see of your request is the saved request and its proposal.
         </Muted>
-        <Muted>
+        <HowItWorks testid="chat-how" title="Who does which step"><Muted>
           You do these yourself: chat with the AI, confirm what you mean, confirm your saved request, ask for the draft and the analysis. Steps that need ANOTHER person: stating the check after the change and approving the change (an approver), and the optional review. You cannot approve your own change.
-        </Muted>
+        </Muted></HowItWorks>
       </Callout>
     </>
   );

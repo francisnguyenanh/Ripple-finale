@@ -13,7 +13,7 @@ import { useSession } from "@/session";
 import type { Rec } from "@/features/changes/types";
 import { AdvisoryMemo } from "./AdvisoryMemo";
 import { formatEngine } from "./simFormat";
-import { citedBy, parseMetricRef } from "./metricRefs";
+import { citedBy, parseMetricRef, interpretationCheck } from "./metricRefs";
 
 const q = encodeURIComponent;
 const RUN: Record<string, { status: Status; label: string }> = {
@@ -100,6 +100,8 @@ function Simulation({ ws, run }: { ws: string; run: Rec }) {
           )}
           <OriginSection origin="ai" ariaLabel="AI interpretation" testid="sim-interpretation" status={String(interp?.status ?? "none")}
             title="AI interpretation (every number checked against the engine result)">
+            <span data-testid="sim-interpretation-check" data-kept={interpretationCheck(interp).kept} data-refused={interpretationCheck(interp).refused}>
+              <StatusBadge status={interpretationCheck(interp).status} label={interpretationCheck(interp).label} /></span>
             {!interp && <Muted>No interpretation was written; the engine result stands on its own.</Muted>}
             {interp && ((interp.statements ?? []) as Rec[]).length === 0 && <Muted>The interpreter kept no statement after the server checks.</Muted>}
             <ol className="list-decimal pl-5 grid gap-1">{statements.map((st, i) => {

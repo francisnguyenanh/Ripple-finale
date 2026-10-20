@@ -72,7 +72,11 @@ function Timeline({ events, onRetry }: { events: Rec[] | null; onRetry: () => vo
               <Clock size={12} aria-hidden="true" className="absolute -left-[1.45rem] top-1 bg-surface text-muted" />
               <strong>{e.actor_id || "the system"}</strong> {eventLabel(e)}{" "}
               <span className="text-muted">{e.created_at ? new Date(e.created_at).toLocaleString() : ""}</span>
-              <Tech><span className="block text-xs text-muted break-all">{e.event_type} {JSON.stringify(e.payload ?? {}).slice(0, 300)}</span></Tech>
+              <Tech><span className="block text-xs text-muted break-all">{e.event_type} {JSON.stringify(e.payload ?? {}).slice(0, 300)}
+                {JSON.stringify(e.payload ?? {}).length > 300 ? <span data-testid="history-payload-cut"> (first 300 characters of the stored details)</span> : null}</span>
+                {JSON.stringify(e.payload ?? {}).length > 300 && (                      // the details already received for this event; nothing is requested
+                  <details><summary className="cursor-pointer text-xs text-primary">All received details</summary>
+                    <pre className="text-xs text-muted whitespace-pre-wrap break-all" data-testid="history-payload-full">{JSON.stringify(e.payload, null, 1)}</pre></details>)}</Tech>
             </li>
           ))}
         </ol>
@@ -87,8 +91,10 @@ function Compare({ ws, revs }: { ws: string; revs: Rec[] }) {
   const [to, setTo] = React.useState("");
   const [diff, setDiff] = React.useState<Rec | null>(null);
   const [names, setNames] = React.useState<Record<string, string>>({});
+  const [failed, setFailed] = React.useState(false);
+  const [attempt, setAttempt] = React.useState(0);
   React.useEffect(() => {
-    setDiff(null);
+    setDiff(null); setFailed(false);
     if (!from || !to || from === to) return;
     let live = true;
     (async () => {
@@ -99,10 +105,10 @@ function Compare({ ws, revs }: { ws: string; revs: Rec[] }) {
           try { for (const a of ((await api<Rec>("GET", `/v2/sources/revisions/${q(r)}?workspace_id=${q(ws)}`)).artifacts ?? []) as Rec[]) map[a.artifact_id] = a.logical_path; } catch { /* names are a convenience */ }
         }
         if (live) { setDiff(d); setNames(map); }
-      } catch (e) { notify.fail(e); }
+      } catch (e) { if (live) setFailed(true); notify.fail(e); }               // a failed comparison is never shown as "choose two versions"
     })();
     return () => { live = false; };
-  }, [from, to, ws]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [from, to, ws, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
   if (revs.length < 2)
     return <Card title="Compare versions" testid="history-no-compare"><Muted>There is only one version of the files so far, so there is nothing to compare yet. After a change is applied, the before and after appear here.</Muted></Card>;
   const sel = (id: string, v: string, set: (x: string) => void, testid: string) => (
@@ -132,7 +138,13 @@ function Compare({ ws, revs }: { ws: string; revs: Rec[] }) {
             }))}
             <Muted>Unchanged files: {diff.unchanged_count}{diff.truncated ? " (list truncated)" : ""}</Muted>
           </>
-        ) : <Muted>Choose two different versions to see what changed.</Muted>}
+        ) : failed ? (
+          <Callout tone="warn" testid="history-diff-unavailable" role="status">
+            <p>This comparison could not be loaded, so what changed between these versions is unknown here (not "nothing changed").</p>
+            <div><Button onClick={() => setAttempt((n) => n + 1)} data-testid="history-diff-retry">Try again</Button></div>
+          </Callout>
+        ) : from && to && from !== to ? <Muted testid="history-diff-loading">Loading the comparison...</Muted>
+        : <Muted>Choose two different versions to see what changed.</Muted>}
       </div>
     </Card>
   );

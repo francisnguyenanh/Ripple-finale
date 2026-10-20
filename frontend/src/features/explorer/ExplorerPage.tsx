@@ -276,6 +276,12 @@ export function ExplorerPage() {
                   </ReactFlow>
                 </div>
               )}
+              {visible.length > 0 && (                                                    // UX-11: the line key sits next to the graph; the full legend stays below
+                <p data-testid="graph-key" className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+                  <span><span aria-hidden="true" className="inline-block w-6 border-t-2 border-text align-middle mr-1" />Solid: where it comes from (file, quote, person)</span>
+                  <span><span aria-hidden="true" className="inline-block w-6 border-t-2 border-dashed border-warning align-middle mr-1" />Dashed: a proposed look-alike link, not a dependency</span>
+                </p>
+              )}
             </div>
             <aside id="explorer-detail" className="rounded-lg border border-border bg-surface p-4 min-w-0 lg:max-h-[620px] lg:overflow-auto"><Detail g={g} tree={tree} id={sel} reload={load} /></aside>
           </div>

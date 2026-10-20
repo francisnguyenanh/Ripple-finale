@@ -123,3 +123,45 @@ def test_an_event_without_a_wording_is_named_neutrally_and_its_code_stays_techni
         ctx.close()
     finally:
         server.stop()
+
+
+def test_a_failed_comparison_is_unavailable_not_choose_two_versions(env, ch, pw_browser):
+    server = ServerThread().start()
+    try:
+        ctx = pw_browser.new_context(base_url=server.url, viewport={"width": 1280, "height": 900})
+        page = ctx.new_page()
+        page.set_default_timeout(WAIT)
+        calls = []
+        def diff(route):
+            calls.append(route.request.url)
+            route.fulfill(status=500, content_type="application/json", body='{"detail":"injected"}')
+        page.route("**/v2/history/*/diff*", diff)
+
+        def two_versions(route):                                                # the fixture has one version: a second listed one makes the chooser appear
+            if "/diff" in route.request.url:
+                return route.fallback()
+            res = route.fetch()
+            body = res.json()
+            revs = body.get("revisions") or []
+            if len(revs) == 1:
+                body["revisions"] = revs + [dict(revs[0], revision_id=revs[0]["revision_id"] + "-listed", sequence=(revs[0].get("sequence") or 1) + 1)]
+            route.fulfill(response=res, json=body)
+        page.route(f"**/v2/history/{env.ws}", two_versions)
+        open_app(page, server.url)
+        login(page, env.admin, f"cred-a-{env.nonce}")
+        select_workspace(page, env.ws)
+        page.goto(f"{server.url}/app-next/#/ws/{env.ws}/history")
+        expect(tid(page, "history-diff-from")).to_be_visible(timeout=WAIT)
+        opts = tid(page, "history-diff-from").locator("option").evaluate_all("els => els.map(e => e.value).filter(Boolean)")
+        assert len(opts) >= 2, opts
+        tid(page, "history-diff-from").select_option(opts[0])
+        tid(page, "history-diff-to").select_option(opts[1])
+        expect(tid(page, "history-diff-unavailable")).to_be_visible(timeout=WAIT)
+        assert "Choose two different versions" not in tid(page, "history-diff").inner_text()
+        n = len(calls)
+        tid(page, "history-diff-retry").click()
+        expect(tid(page, "history-diff-unavailable")).to_be_visible(timeout=WAIT)
+        assert len(calls) == n + 1, "Try again must re-read the comparison exactly once"
+        ctx.close()
+    finally:
+        server.stop()

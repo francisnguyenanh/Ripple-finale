@@ -42,9 +42,11 @@ def test_typed_authority_is_rendered_by_the_server_free_authority_is_refused_and
     ask(q, q.req, t["thread_id"], "Can I approve it, and who decides?", "key-0040-aaaa", 0)
     m = settle(q, q.req, t["thread_id"])["messages"][0]
     reasons = sorted(r["reason"] for r in m["answer"]["rejected"])
-    assert model.calls == 1 and m["answer"]["status"] == "partial" and [b["kind"] for b in m["answer"]["blocks"]] == ["authority", "interpretation"]
+    blocks = m["answer"]["blocks"]
+    assert model.calls == 1 and m["answer"]["status"] == "partial" and [b["kind"] for b in blocks] == ["authority", "authority", "interpretation"]
     assert "assertion_contradicts_fact" in reasons and ("contradicts_cited_permission" in reasons or "authority_in_free_text" in reasons)
-    assert "holds this step" in m["answer"]["blocks"][0]["text"] and "legacy_checks" not in m["answer"]
+    assert blocks[0].get("corrected") is True and blocks[0]["text"].startswith("You may not do this:")      # checks/6: the false "may" is answered by the record
+    assert "holds this step" in blocks[1]["text"] and not blocks[1].get("corrected") and "legacy_checks" not in m["answer"]
     assert (m["answer"]["checks_version"], m["answer"]["answer_schema"], m["answer"]["locale"], m["answer"]["context_version"]) == \
         (ra.CHECKS_VERSION, ra.ANSWER_SCHEMA, "en", ra.CONTEXT_VERSION)
     assert "authority_assertions" in model.prompts[0]

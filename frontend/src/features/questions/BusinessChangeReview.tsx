@@ -13,6 +13,8 @@ import { CodeCandidate, CodeRecommendations } from "./CodePanel";
 import { ChangeAiPanels } from "./ChangeAiPanels";
 import { TaskFrame } from "@/features/request-assistant/TaskFrame";
 import { refusalWords } from "@/lib/refusal";
+import { DiffView } from "@/features/changes/ProposalStage";
+import { basename } from "@/lib/fmt";
 
 const q = encodeURIComponent;
 const ACTION_WORDS: Record<string, string> = { approve: "Accepted", reject: "Rejected", request_changes: "Changes requested", clarify: "Clarified" };
@@ -30,6 +32,36 @@ function errText(e: unknown): string {
     return text || "The decision could not be recorded.";
   }
   return "The decision could not be recorded.";
+}
+
+/** EUI-03: the candidate byte diff of the automatic file edits, read on request (GET, no model): computed by the server from the pinned bytes, nothing staged or applied. */
+function CandidateFileDiff({ ws, cid }: { ws: string; cid: string }) {
+  const [got, setGot] = React.useState<Rec | null>(null);
+  const [state, setState] = React.useState<"idle" | "loading" | "failed">("idle");
+  const [why, setWhy] = React.useState("");
+  const load = async () => {
+    setState("loading");
+    try { setGot(await api<Rec>("GET", `/v2/business/changes/${encodeURIComponent(cid)}/file-diff?workspace_id=${encodeURIComponent(ws)}`)); setState("idle"); }
+    catch (e) { setWhy(errText(e)); setState("failed"); }
+  };
+  if (!got) return (
+    <div className="grid gap-1">
+      <div><Button size="sm" data-testid="rev-file-diff-show" disabled={state === "loading"} onClick={() => void load()}>{state === "loading" ? "Reading the files..." : "Show the candidate file changes"}</Button></div>
+      {state === "failed" && <Callout tone="warn" testid="rev-file-diff-unavailable">The candidate file changes could not be shown: {why}</Callout>}
+    </div>);
+  const cov = (got.coverage ?? {}) as Rec;
+  return (
+    <div data-testid="rev-file-diff" className="grid gap-2">
+      <Muted>{String(got.statement)}</Muted>
+      {((got.files ?? []) as Rec[]).map((f) => (
+        <div key={String(f.artifact_id)} data-testid="rev-file-diff-file" data-state={String(f.state)} className="grid gap-1">
+          <p className="font-medium">{basename(String(f.path))} <span className="text-muted">({f.state === "candidate" ? "candidate, not applied" : String(f.reason ?? f.state)})</span></p>
+          {f.state === "candidate" && <DiffView diff={f} />}
+        </div>
+      ))}
+      <Muted testid="rev-file-diff-coverage">Files with an automatic edit: {String(cov.auto_files)}; shown: {String(cov.files_shown)}{Number(cov.files_not_shown) ? `; not shown: ${String(cov.files_not_shown)}` : ""}. Items a person edits: {String(cov.manual_items)}; unresolved: {String(cov.unresolved_items)} (no byte diff for these).</Muted>
+    </div>
+  );
 }
 
 export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
@@ -199,6 +231,7 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
         <p data-testid="rev-counts">Automatic edits possible: {counts.AI_EDIT_SUPPORTED ?? 0}. By hand: {counts.MANUAL ?? 0}. Already as requested: {counts.NO_OP ?? 0}. Unresolved: {counts.UNRESOLVED ?? 0}.</p>
         {ops.map((o) => <p key={o.what as string} data-testid="rev-op" data-coverage={o.file_coverage as string}>{o.what as string} — rule change {String(o.rule_change).toLowerCase().replace(/_/g, " ")}, files {o.file_coverage as string}.</p>)}
         {files.length > 0 && <ul className="list-disc pl-5" data-testid="rev-files">{files.map((f) => <li key={f.ref as string} data-testid="rev-file" data-action={f.action as string}>{f.ref as string} {f.path as string}{f.locator ? ` at ${f.locator as string}` : ""}: <span data-testid="rev-file-action">{FILE_ACTION_WORDS[f.action as string] ?? `state ${String(f.action)}`}</span>{f.instruction ? ` — ${f.instruction as string}` : ""}{f.clarification ? ` [${(f.clarification as Rec).label as string}]` : ""}{clarifyHere(f.ref as string, `${f.ref as string}: ${(f.instruction as string) ?? `${f.action as string} (${f.kind as string})`}`)}</li>)}</ul>}
+        {files.some((f) => f.action === "AI_EDIT_SUPPORTED") && <CandidateFileDiff ws={ws} cid={cid} />}
         {unresolved.map((u) => <div key={u.ref as string}><p data-testid="rev-unresolved">{u.ref as string}: {u.instruction as string}{u.clarification ? ` [${(u.clarification as Rec).label as string}]` : ""}</p>{clarifyHere(u.ref as string, `${u.ref as string}: ${u.instruction as string}`)}</div>)}
         {(draft.files_withheld as number) > 0 && <Muted testid="rev-withheld">{String(draft.files_withheld)} file detail(s) need evidence rights to be shown.</Muted>}
       </div>

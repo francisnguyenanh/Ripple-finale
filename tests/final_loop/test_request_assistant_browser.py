@@ -42,7 +42,8 @@ def rq_ui(qa_env, monkeypatch, tmp_path):                  # noqa: F811
     cid2, _ = confirmed(q, ACTOR_REQ, [OP_ACTOR])                                            # a second request, to switch to (before the assistant stub is set)
     q.cid2 = cid2
     model = Model(lambda p: answer(blocks=[("The current stage is shown in the facts.", [fact_id(p, "state"), fact_id(p, "impact")], "fact")],
-                                   assertions=[{"subject": "self", "fact_ref": own_obligation(p), "relation": "holds", "polarity": True, "scope": "current"}]))
+                                   assertions=[{"subject": "self", "fact_ref": own_obligation(p), "relation": "holds", "polarity": True, "scope": "current"},
+                                               {"subject": "self", "fact_ref": own_obligation(p), "relation": "may", "polarity": False, "scope": "current"}]))   # false: corrected
     q.monkeypatch.setattr(explain, "_client_for_model", lambda m: model)
     worker = LiveWorker(q.env).start()
     server = ServerThread().start()
@@ -109,8 +110,12 @@ def test_task_frame_and_private_assistant_on_a_business_change(rq_ui, pw_browser
     panel.get_by_test_id("assistant-ask").click()
     msg = panel.locator('[data-testid="assistant-message"]').first
     expect(msg).to_have_attribute("data-state", "answered", timeout=60000)
-    expect(msg.locator('[data-testid="assistant-block"]')).to_have_count(2)
-    expect(msg.locator('[data-testid="assistant-block"][data-kind="authority"]')).to_contain_text("Who acts: You hold the current step")   # AIG-01: the server's sentence
+    expect(msg.locator('[data-testid="assistant-block"]')).to_have_count(3)
+    expect(msg.locator('[data-testid="assistant-block"][data-kind="authority"]').first).to_contain_text("Who acts: You hold the current step")   # AIG-01: the server's sentence
+    expect(msg.locator('[data-testid="assistant-block"][data-corrected="true"]')).to_contain_text("corrected: the assistant's claim did not match the task record")   # checks/6
+    expect(msg.locator('[data-testid="assistant-block"][data-corrected="true"]')).to_contain_text("You may do this")
+    msg.locator('[data-testid="assistant-block"][data-corrected="true"]').scroll_into_view_if_needed()
+    _shot(page, "6_corrected_authority")
     expect(msg.get_by_test_id("assistant-next")).to_contain_text("approve")
     assert model.calls == 1 and counts(env)["v2_business_decisions"] == before["v2_business_decisions"]   # "I agree" approved nothing
     assert _threads(env, cid) == 1                                                                         # the first ask created the one private thread

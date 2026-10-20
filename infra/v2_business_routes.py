@@ -195,6 +195,7 @@ async def business_gap_proposals(request: Request):
             rec = store.job_record(tenant, workspace_id, jid)
         except TenantScopeError:
             rec = None
+        reused = rec is not None                                                           # LLM-00: the same inputs return the job already made (no new call or charge)
         if rec is None:
             from infra import ai_admission, provider_gate
             provider_gate.require_provider(KIND)
@@ -207,7 +208,7 @@ async def business_gap_proposals(request: Request):
             rec = store.job_record(tenant, workspace_id, jid)
         from infra.adapters import v2_business_proposals
         return JSONResponse({"snapshot_id": snap["snapshot"]["snapshot_id"], "attempt": attempt, "job_id": jid, "status": v2_business_proposals._state(rec),
-                             "reason": rec.get("execution_reason") if rec.get("execution_status") == "FAILED" else None}, headers=_NO_STORE)
+                             "reason": rec.get("execution_reason") if rec.get("execution_status") == "FAILED" else None, "reused": reused}, headers=_NO_STORE)
     except IdentityDenied as exc:
         return _denied(exc)
     except PermissionDenied as exc:
@@ -266,6 +267,7 @@ async def business_gap_interpret(request: Request, gap_id: str):
             rec = store.job_record(tenant, workspace_id, jid)
         except TenantScopeError:
             rec = None
+        reused = rec is not None                                                           # LLM-00: the same inputs return the job already made (no new call or charge)
         if rec is None:
             from infra import ai_admission, provider_gate
             provider_gate.require_provider(KIND)
@@ -275,7 +277,7 @@ async def business_gap_interpret(request: Request, gap_id: str):
                              budget_reservation=reservation, requested_by=authority["account_id"])
             ai_admission.admit(store, tenant, workspace_id, jid, KIND, authority)
             rec = store.job_record(tenant, workspace_id, jid)
-        return JSONResponse({"gap_id": gap_id, "job_id": jid, **_qa_state(rec)}, headers=_NO_STORE)
+        return JSONResponse({"gap_id": gap_id, "job_id": jid, **_qa_state(rec), "reused": reused}, headers=_NO_STORE)
     return _interpret_shell(request, workspace_id, action)
 
 
@@ -1155,6 +1157,42 @@ def read_business_change_review(request: Request, change_id: str, workspace_id: 
     except v2_business.BusinessKnowledgeRefused as exc:
         return JSONResponse({"error": str(exc), "code": exc.code}, status_code=409, headers=_NO_STORE)
 
+
+
+@router.get("/v2/business/changes/{change_id}/file-diff")
+def read_business_change_file_diff(request: Request, change_id: str, workspace_id: str):
+    """EUI-03: bounded candidate byte diff of the automatic file edits, from the pinned bytes, in memory. Needs evidence rights (file contents); never calls a model;
+    writes and stages nothing."""
+    identity, store = _identity_store(), _v2_store()
+    if identity is None or store is None:
+        return _error("v2 unavailable", 503)
+    try:
+        authority = _authority(identity, request, workspace_id)
+        require(authority, "project.read")
+        if not change_id.startswith("chg-"):
+            return _error("unknown change", 404)
+        tenant = authority["tenant_id"]
+        _rec, perms = _change_record_for(store, tenant, workspace_id, change_id, authority)
+        if "evidence.read" not in perms:
+            return JSONResponse({"error": "File contents need evidence rights; nothing is shown.", "code": "evidence_rights_required"}, status_code=403, headers=_NO_STORE)
+        from infra import v2_source_routes
+        from infra.adapters import v2_business_review
+        from infra.adapters.v2_postgres import PostgresV2Store
+        blobs = v2_source_routes._blob_port()                                            # the route store has no blob port: bytes come through the source blob seam
+        if blobs is None:
+            return _error("source storage unavailable", 503)
+        out = v2_business_review.file_diff(PostgresV2Store(os.environ["RIPPLE_V2_DSN"], blobs), tenant, workspace_id, change_id)
+        if out is None:
+            return JSONResponse({"error": "Confirm the request first; the review starts from a confirmed request.", "code": "not_confirmed"}, status_code=409, headers=_NO_STORE)
+        return JSONResponse(out, headers=_NO_STORE)
+    except IdentityDenied as exc:
+        return _denied(exc)
+    except PermissionDenied as exc:
+        return _error(f"permission denied: {exc}", 403)
+    except TenantScopeError as exc:
+        return _error(str(exc), 404)
+    except v2_business.BusinessKnowledgeRefused as exc:
+        return JSONResponse({"error": str(exc), "code": exc.code}, status_code=409, headers=_NO_STORE)
 
 async def _decision_call(request: Request, change_id: str, *, kind_from_body: bool):
     if not _origin_ok(request):

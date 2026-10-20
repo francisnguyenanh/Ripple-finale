@@ -20,3 +20,16 @@ export function citedBy(statements: { metric_refs?: unknown }[]): Record<string,
   });
   return out;
 }
+
+/** EUI-07: the check badge of an interpretation, counted from what the server kept and refused. A skipped or absent check is never shown as passed,
+ * and this badge never stands for a human confirmation. */
+export function interpretationCheck(interp: unknown): { status: "info" | "partial" | "empty"; label: string; kept: number; refused: number } {
+  const i = (interp && typeof interp === "object" ? interp : null) as Record<string, unknown> | null;
+  if (!i) return { status: "empty", label: "No interpretation, so nothing was checked", kept: 0, refused: 0 };
+  const kept = Array.isArray(i.statements) ? i.statements.length : 0;
+  const refused = Array.isArray(i.rejected) ? i.rejected.length : 0;
+  if (i.status === "skipped" || i.status === "not_run") return { status: "empty", label: "Metric references not checked (skipped)", kept, refused };
+  if (kept + refused === 0) return { status: "empty", label: "No statement to check", kept, refused };
+  if (refused === 0) return { status: "info", label: `Metric references checked by the server: ${kept} kept`, kept, refused };
+  return { status: "partial", label: `Metric references checked by the server: ${kept} kept, ${refused} refused`, kept, refused };
+}

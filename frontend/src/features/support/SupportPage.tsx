@@ -5,7 +5,7 @@ import * as React from "react";
 import { Ban, CircleHelp, Hammer, Pencil, ShieldCheck, X } from "lucide-react";
 import { api, ApiError, type SandboxStatus } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Callout, Card, Field, Muted, Tech, TextInput } from "@/components/bits";
+import { Callout, Card, Field, HowItWorks, Muted, Tech, TextInput } from "@/components/bits";
 import { StatusBadge } from "@/components/StatusBadge";
 import { humanize } from "@/lib/fmt";
 import { useAction } from "@/lib/useAction";
@@ -71,7 +71,7 @@ function Lease({ st, ws, onChanged }: { st: SandboxStatus & Rec; ws: string; onC
         {!held ? "No demo session is running: nobody may change anything." : mine ? `Your demo session runs until ${until}. You and your participants may change things.` : `Another demo session is running until ${until}; you can read only.`}
       </p>
       {held && <Muted testid="sandbox-lease-holder">Held by {L?.holder}; participants: {(L?.participants ?? []).length ? (L!.participants as string[]).join(", ") : "none"}; ends {until}.</Muted>}
-      <Muted>A demo session is a time-limited slot for a group trying the product together. Creating or approving anything needs it, and only one runs at a time; everyone with access can read. It coordinates the demo only: it gives nobody extra rights, no approval and no budget, and the person who asks for a change still cannot approve it.</Muted>
+      <HowItWorks testid="sandbox-how" title="What a demo session is"><Muted>A demo session is a time-limited slot for a group trying the product together. Creating or approving anything needs it, and only one runs at a time; everyone with access can read. It coordinates the demo only: it gives nobody extra rights, no approval and no budget, and the person who asks for a change still cannot approve it.</Muted></HowItWorks>
       {(!held || mine) && (
         <div className="grid gap-2">
           {people.length > 0 && (
@@ -193,7 +193,7 @@ function Matrix({ ws }: { ws: string }) {
   return (
     <div className="grid gap-3">
       <Muted>What you can view, simulate, apply or only analyse. Nothing outside this table is promised.</Muted>
-      <Muted testid="support-biz-note">Where a cell says the configuration does not control the behaviour, changing the setting would not change what the system does: the behaviour is written in the program itself, so changing it needs a code change, planned for the final product. The Technical view shows the code lines that prove each statement.</Muted>
+      <HowItWorks testid="support-how" title="How to read this table"><Muted testid="support-biz-note">Where a cell says the configuration does not control the behaviour, changing the setting would not change what the system does: the behaviour is written in the program itself, so changing it needs a code change, planned for the final product. The Technical view shows the code lines that prove each statement.</Muted></HowItWorks>
       <Muted testid="support-ai">{m.ai}</Muted>
       <Muted testid="support-isolation">{m.isolation}</Muted>
       <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="What each Harbor case supports (scrolls sideways on a small screen)">

@@ -336,7 +336,8 @@ def test_an_applicable_approval_gate_the_model_left_out_is_added_by_the_server_t
     tech = q.admin.get(f"/v2/business/questions/{got['question_id']}", params={"workspace_id": q.env.ws, "mode": "technical"}).json()["answer"]["technical"]
     assert "applicable_rule_not_cited" in tech["reasons"] and tech["dropped_claims"] == []
     stored = job_body(q.admin, q.env, got["question_id"])["execution_result"]["ai_outcome"]
-    assert stored == {"model_attempted": True, "provider_calls": 1, "retained": 1, "rejected": 0, "server_added": 1, "contribution": "retained", "degraded": None}   # LLM-00
+    assert {k: v for k, v in stored.items() if k != "execution_mode"} == {"model_attempted": True, "provider_calls": 1, "retained": 1, "rejected": 0, "server_added": 1, "contribution": "retained", "degraded": None}
+    assert stored["execution_mode"] in ("synthetic", "undeclared")                              # a stub provider is never labelled real   # LLM-00
     tclaims = q.admin.get(f"/v2/business/questions/{got['question_id']}", params={"workspace_id": q.env.ws, "mode": "technical"}).json()["answer"]["claims"]
     assert sorted(c["origin"] for c in tclaims) == ["model", "server_applicability"]
     assert sorted(c["origin"] for c in a["claims"]) == ["model", "server_applicability"]                 # the business view says it too

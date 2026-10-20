@@ -13,6 +13,9 @@ import { answerText } from "@/lib/fmt";
 import type { Rec } from "@/features/changes/types";
 import { ConflictScan } from "./ConflictScan";
 import { GapInterview } from "./GapInterview";
+import { FindingsTriage } from "@/components/decision/FindingsTriage";
+import { AIInterpretationPreview } from "@/components/decision/AIInterpretationPreview";
+import { filterCounts, matches, triage, type TriageItem } from "./gapTriage";
 
 const q = encodeURIComponent;
 const KIND_WORDS: Record<string, string> = {
@@ -168,12 +171,11 @@ function GapCard({ ws, gap, onDone }: { ws: string; gap: Rec; onDone: () => Prom
           {canRead && <GapInterview ws={ws} gapId={String(gap.gap_id)} onConfirmed={onDone} />}
           {error && <Callout tone="danger" testid="business-gap-error">{error}</Callout>}
           {reading && reading.status !== "READY" && (
-            <Callout tone="warn" testid="business-gap-interpret-uncovered">
-              <p className="text-sm font-medium">{reading.status === "UNSUPPORTED" ? "Your words could not be turned into this question's form." : "Part of your answer could not be read, so nothing is proposed from it yet."}</p>
-              {reading.uncovered.length > 0 && <ul className="list-disc pl-5 text-sm">{reading.uncovered.map((u, i) => <li key={i} data-testid="business-gap-uncovered-part">{u}</li>)}</ul>}
-              {reading.message && <Muted>{reading.message}</Muted>}
-              {reading.proposed_answer && <Muted>What was read so far: {JSON.stringify(reading.proposed_answer)} - not confirmable until the rest is clear.</Muted>}
-            </Callout>
+            <AIInterpretationPreview testid="business-gap-interpret-uncovered" status={reading.status} quoted={reading.quote}
+              heading={reading.status === "UNSUPPORTED" ? "Your words could not be turned into this question's form." : "Part of your answer could not be read, so nothing is proposed from it yet."}
+              uncovered={reading.uncovered} ids={{ uncoveredPart: "business-gap-uncovered-part" }}
+              limitations={[...(reading.message ? [reading.message] : []),
+                ...(reading.proposed_answer ? [`What was read so far: ${answerText(reading.proposed_answer)} - not confirmable until the rest is clear.`] : [])]} />
           )}
           {shown && (
             <div data-testid="business-gap-preview-result" data-source={reading && reading.status === "READY" ? "reading" : "controls"} className="rounded-md border border-border p-3 grid gap-1">
@@ -274,10 +276,16 @@ export function BusinessGaps({ ws }: { ws: string }) {
   const [tick, setTick] = React.useState(0);
   const [data, setData] = React.useState<Queue | null>(null);
   const [err, setErr] = React.useState<ApiError | null>(null);
+  const [filter, setFilter] = React.useState("");
+  const seq = React.useRef(0);
   const refresh = React.useCallback(async () => {
-    try { setData(await api<Queue>("GET", `/v2/business/gaps?workspace_id=${q(ws)}`)); setErr(null); setTick((t) => t + 1); } catch (e) { if (e instanceof ApiError) setErr(e); else throw e; }
+    const mine = ++seq.current;                                                      // only the latest read is shown: an older, slower response never overwrites it
+    try {
+      const got = await api<Queue>("GET", `/v2/business/gaps?workspace_id=${q(ws)}`);
+      if (mine === seq.current) { setData(got); setErr(null); setTick((t) => t + 1); }
+    } catch (e) { if (!(e instanceof ApiError)) throw e; if (mine === seq.current) setErr(e); }
   }, [ws]);
-  React.useEffect(() => { void refresh(); }, [refresh]);
+  React.useEffect(() => { setData(null); setFilter(""); void refresh(); }, [refresh]);
   if (err) return <Callout tone="danger" testid="business-gaps-error">The business questions could not be loaded.</Callout>;
   if (!data) return null;
   if (!data.snapshot_id) return <Muted testid="business-gaps-none">No business rules have been read from the sources yet, so there are no business questions.</Muted>;
@@ -288,7 +296,11 @@ export function BusinessGaps({ ws }: { ws: string }) {
       {s.can("knowledge.confirm") && <ConflictScan ws={ws} canScan={s.can("ai.use")} />}
       {data.critical_accepted_unknown > 0 && <Callout tone="warn" testid="business-gaps-unknown">{data.critical_accepted_unknown} important question(s) are left open on purpose.</Callout>}
       {data.gaps.length === 0 ? <Muted testid="business-gaps-empty">No business question is open.</Muted>
-        : data.gaps.map((g) => <GapCard key={g.gap_id} ws={ws} gap={g} onDone={refresh} />)}
+        : <FindingsTriage<Rec> groups={triage(data.gaps as unknown as (Rec & TriageItem)[], KIND_WORDS)} filter={filter} onFilter={setFilter}
+            pills={filterCounts(data.gaps as unknown as TriageItem[]).filter((p) => p.key !== "critical" || p.count > 0)
+              .map((p) => ({ ...p, label: p.key === "" ? "All" : p.key === "critical" ? "Needs an answer" : (KIND_WORDS[p.key.slice(5)] ?? "Other questions") }))}
+            visible={(g) => matches(g as unknown as TriageItem, filter)} itemKey={(g) => String(g.gap_id)} testid="business-gaps-triage"
+            render={(g) => <GapCard ws={ws} gap={g} onDone={refresh} />} />}
       {data.accepted_unknown.length > 0 && <Muted>Left open on purpose: {data.accepted_unknown.map((g) => g.question).join(" | ")}</Muted>}
     </div>
   );

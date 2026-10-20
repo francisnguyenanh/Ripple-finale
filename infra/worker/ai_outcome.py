@@ -5,8 +5,14 @@ fall back to deterministic content. `annotate` adds `ai_outcome` to the stored r
   model_attempted / provider_calls, retained (model proposals kept), rejected (model proposals refused), server_added (deterministic items the server added),
   contribution: retained | rejected (the model was called and nothing it proposed survived) | none (no model call), and a degraded reason when the job fell back.
 It never changes what the job decided; it only counts it. Readers use it to tell valid AI output from degraded assistance.
+
+`execution_mode` (LLM-00 15.2) says what produced the result, from the server's declared provider mode at execution time (`RIPPLE_PROVIDER_MODE`):
+  deterministic (no model call) | synthetic (a call to the SIMULATED stub provider) | real (a call on a server declared LIVE) | undeclared (a call on a server that did
+  not declare its mode: never presented as real). There is no replay transport in the product, so `replay` is never produced here.
 """
 from __future__ import annotations
+
+import os
 
 
 def _qa(r):
@@ -80,16 +86,23 @@ EXTRACT = {"knowledge.qa": _qa, "change.understand": _understand, "gap.answer_in
            "gap.interview_question": _interview, "ma.specialist": _specialist, "change.risk_memo": _memo, "ma.synthesis_memo": _memo, "ci.semantic_drift": _drift, "source.correspondence": _correspondence, "code.diff_proposal": _code_proposal, "roi.analyst": _roi_analyst}
 
 
-def summarize(kind: str, result, provider_calls: int):
+def execution_mode(attempted: bool, provider_mode: str | None) -> str:
+    if not attempted:
+        return "deterministic"
+    mode = (provider_mode or "").strip().upper()
+    return {"SIMULATED": "synthetic", "LIVE": "real"}.get(mode, "undeclared")
+
+
+def summarize(kind: str, result, provider_calls: int, provider_mode: str | None = None):
     if kind not in EXTRACT or not isinstance(result, dict):
         return None
     retained, rejected, server_added, degraded = EXTRACT[kind](result)
     attempted = int(provider_calls or 0) > 0
     contribution = "none" if not attempted else ("retained" if retained > 0 else "rejected")
     return {"model_attempted": attempted, "provider_calls": int(provider_calls or 0), "retained": retained, "rejected": rejected, "server_added": server_added,
-            "contribution": contribution, "degraded": degraded}
+            "contribution": contribution, "degraded": degraded, "execution_mode": execution_mode(attempted, provider_mode)}
 
 
 def annotate(kind: str, result, provider_calls: int):
-    summary = summarize(kind, result, provider_calls)
+    summary = summarize(kind, result, provider_calls, os.environ.get("RIPPLE_PROVIDER_MODE"))
     return result if summary is None else {**result, "ai_outcome": summary}

@@ -281,9 +281,11 @@ def test_the_same_words_under_a_changed_prompt_are_read_again_never_replayed(qa_
     g = actor_gap(q)
     model = use(q, lambda p: mobj("actor", "shift lead", quote="The shift lead handles them."))
     first, j1 = run(q, q.admin, g["gap_id"], "The shift lead handles them.")
-    assert model.calls == 1 and interpret(q, q.admin, g["gap_id"], "The shift lead handles them.").json()["job_id"] == j1
+    again = interpret(q, q.admin, g["gap_id"], "The shift lead handles them.").json()
+    assert model.calls == 1 and again["job_id"] == j1 and again["reused"] is True                    # the reading already made is returned and says so
     real = gai.load_config
     monkeypatch.setattr(gai, "load_config", lambda: (real()[0], "a" * 64))
+    assert interpret(q, q.admin, g["gap_id"], "The shift lead handles them.").json()["reused"] is False   # changed prompt: a new reading, not a reuse
     second, j2 = run(q, q.admin, g["gap_id"], "The shift lead handles them.")
     assert j2 != j1 and model.calls == 2                                                                 # a new job, a new model call, the old reading untouched
 

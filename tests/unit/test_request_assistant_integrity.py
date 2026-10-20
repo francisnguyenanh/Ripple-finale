@@ -98,8 +98,10 @@ def test_a_bare_yes_or_hidden_authority_in_an_explanation_is_refused():
 def test_an_all_refused_answer_is_refused_not_useful():
     p = pack_of(tv([ob()]))
     o = fid(p, "obligation")
-    out = answer(p, [A(o, "holds")], [{"text": "You must decide it.", "fact_refs": [o], "kind": "fact"}])
+    out = answer(p, [A(o, "waiting_on")], [{"text": "You must decide it.", "fact_refs": [o], "kind": "fact"}])     # unsupported: nothing for the server to correct
     assert out["status"] == "refused" and out["blocks"] == []
+    corrected = answer(p, [A(o, "holds")], [{"text": "You must decide it.", "fact_refs": [o], "kind": "fact"}])
+    assert corrected["status"] == "partial" and [b.get("corrected") for b in corrected["blocks"]] == [True] and not ra.semantic_success(corrected)
 
 
 def test_two_requests_with_the_same_holder_and_stage_keep_their_own_blocker_explanations():
@@ -125,7 +127,7 @@ def test_assertion_shape_is_validated_and_old_model_objects_stay_valid():
                 [dict(A("F1", "holds"), extra=1)]):
         with pytest.raises(ValueError):
             ra.validate_model_object({**base, "authority_assertions": bad}, lim)
-    assert ra.ANSWER_SCHEMA == "request-assistant-answer/2" and ra.LOCALE == "en"
+    assert ra.ANSWER_SCHEMA == "request-assistant-answer/3" and ra.LOCALE == "en"
 
 
 # ---------------- AIG-02: bounded priority context ----------------
@@ -218,3 +220,130 @@ def test_two_requests_same_holder_and_stage_score_on_their_own_causes():
     assert ra_["blocks"][1]["text"] != rb["blocks"][1]["text"] and ra_["blocks"][0]["text"] != rb["blocks"][0]["text"]
     wrong = answer(b, [A(fid(b, "blocker"), "blocked")], [{"text": "Finance must still approve the 5000 EUR budget impact.", "fact_refs": [fid(b, "blocker")], "kind": "interpretation"}])
     assert not ra.semantic_success(wrong)                                                              # A's cause on B is refused, leaving only the template
+
+
+# ---------------- AIG-03 v5 (checks/5, answer/3): cause blocks and server-computed blocker coverage ----------------
+
+def two_blockers(codes=("knowledge_moved", "unmapped_changed_rule"), texts=("The business knowledge moved after confirmation.", "A changed rule has no mapped file.")):
+    return pack_of(tv([ob(state="blocked")], blockers=[{"code": c, "text": t} for c, t in zip(codes, texts)]))
+
+
+def blocker_ids(p):
+    return [f["id"] for f in p["facts"] if f["kind"] == "blocker"]
+
+
+def test_every_offered_blocker_is_explained_or_disclosed_never_dropped_silently():
+    p = two_blockers()
+    b1, b2 = blocker_ids(p)
+    one = answer(p, blocks=[{"text": "The request is stopped because the business knowledge moved after confirmation.", "fact_refs": [b1], "kind": "cause"}])
+    assert one["blocker_coverage"] == {"offered": 2, "explained": [b1], "unexplained": [b2]}
+    assert any(x.startswith("Not explained in this answer: ") and "mapped file" in x for x in one["limitations"])       # disclosed, nothing invented
+    both = answer(p, blocks=[{"text": "The request is stopped because the knowledge moved and a changed rule has no mapped file.", "fact_refs": [b1, b2], "kind": "cause"}])
+    assert both["blocker_coverage"]["unexplained"] == [] and not any(x.startswith("Not explained") for x in both["limitations"])
+    authority_only = answer(p, [A(b1, "blocked"), A(b2, "blocked")])
+    assert authority_only["blocker_coverage"]["unexplained"] == [b1, b2]                                     # the server sentence is not an explanation
+
+
+def test_same_holder_and_stage_with_different_causes_and_an_unknown_blocker():
+    a = two_blockers(codes=("knowledge_moved",), texts=("The business knowledge moved after confirmation.",))
+    b = two_blockers(codes=("knowledge_moved", "unmapped_changed_rule"))
+    ra_ = answer(a, blocks=[{"text": "The request is stopped because the knowledge moved.", "fact_refs": blocker_ids(a), "kind": "cause"}])
+    rb = answer(b, blocks=[{"text": "The request is stopped because the knowledge moved.", "fact_refs": blocker_ids(b)[:1], "kind": "cause"}])
+    assert ra_["blocker_coverage"]["unexplained"] == [] and len(rb["blocker_coverage"]["unexplained"]) == 1      # the same words do not cover B's second cause
+    unknown = pack_of(tv([ob(state="blocked")], blockers=[{"code": None, "text": "Something the analysis could not classify."}]))
+    out = answer(unknown, blocks=[{"text": "The stage is waiting for the knowledge decision.", "fact_refs": [fid(unknown, "state")], "kind": "fact"}])
+    assert out["blocker_coverage"]["offered"] == 1 and any("could not classify" in x for x in out["limitations"])
+
+
+def test_no_blocker_adds_nothing_and_a_cause_needs_a_cause_fact_and_no_authority():
+    p = pack_of(tv([ob(me=True, may=True)]))
+    plain = answer(p, blocks=[{"text": "The decision waits for the rule change to be reviewed.", "fact_refs": [fid(p, "state")], "kind": "fact"}])
+    assert plain["blocker_coverage"] == {"offered": 0, "explained": [], "unexplained": []} and plain["limitations"] == []
+    assert reasons(answer(p, blocks=[{"text": "The request is at this stage.", "fact_refs": [fid(p, "state")], "kind": "cause"}])) == ["cause_without_cause_fact"]
+    q = two_blockers()
+    refused = answer(q, blocks=[{"text": "You cannot approve because the knowledge moved.", "fact_refs": blocker_ids(q)[:1], "kind": "cause"}])
+    assert reasons(refused) == ["authority_in_free_text"] and len(refused["blocker_coverage"]["unexplained"]) == 2   # refused whole, never trimmed
+    assert reasons(answer(q, [A(fid(q, "obligation"), "holds")])) == ["assertion_contradicts_fact"]
+
+
+def test_a_kept_cause_block_counts_as_semantic_success_and_the_model_may_still_disclose_itself():
+    p = two_blockers(codes=("knowledge_moved",), texts=("The business knowledge moved after confirmation.",))
+    out = ra.check_answer({"outcome": "partial", "answer_blocks": [{"text": "The request is stopped because the knowledge moved.", "fact_refs": blocker_ids(p), "kind": "cause"}],
+                           "limitations": ["The facts do not say when the knowledge moved."], "authority_assertions": []}, p, LIMITS)
+    assert ra.semantic_success(out) and out["limitations"] == ["The facts do not say when the knowledge moved."]
+
+
+# ---------------- checks/6: a contradicted assertion is answered by the server's corrected sentence ----------------
+
+def test_a_contradicted_claim_about_someone_elses_step_shows_that_it_is_not_the_readers():
+    for state in ("current", "blocked", "future"):
+        p = pack_of(tv([ob(state=state)]))
+        o = fid(p, "obligation")
+        out = answer(p, [A(o, "holds"), A(o, "must")])
+        assert reasons(out) == ["assertion_contradicts_fact"] * 2, state                    # the refusals stay recorded
+        assert [(b["text"], b["corrected"]) for b in out["blocks"]] == [("This step is not yours: Decide the knowledge change (held by an approver).", True)], state
+
+
+def test_a_current_claim_about_a_blocked_or_later_step_is_corrected_by_its_stage():
+    p = pack_of(tv([ob(state="blocked", me=True, may=True)]))
+    o = fid(p, "obligation")
+    assert [b["text"] for b in answer(p, [A(o, "holds", subject="holder")])["blocks"]] == ["This step is blocked: Decide the knowledge change."]
+    assert [b["text"] for b in answer(p, [A(o, "may")])["blocks"]] == ["This step is blocked: Decide the knowledge change."]   # never "you may not": the stage decides
+    later = pack_of(tv([ob(state="future", me=True)]))
+    lo = fid(later, "obligation")
+    assert [b["text"] for b in answer(later, [A(lo, "must")])["blocks"]] == ["You will be asked to do this later: Decide the knowledge change."]
+
+
+def test_an_opposite_is_shown_only_when_the_fact_decides_it_and_never_twice():
+    p = pack_of(tv([ob(me=False, may=True)], actions=[{"action": "approve", "label": "Approve", "allowed": False, "current": False}]))
+    o, act = fid(p, "obligation"), fid(p, "action")
+    out = answer(p, [A(o, "may", polarity=False), A(act, "may")])
+    assert reasons(out) == ["assertion_contradicts_fact", "assertion_contradicts_fact"]
+    assert [b["text"] for b in out["blocks"]] == ["You may do this, but you are not asked to: Decide the knowledge change.", "You may not do this: Approve."]
+    dup = answer(p, [A(o, "may"), A(o, "may", polarity=False)])                             # the kept claim and the correction of its opposite are the same sentence
+    assert [b["text"] for b in dup["blocks"]] == ["You may do this, but you are not asked to: Decide the knowledge change."]
+    done = pack_of(tv([ob(state="done", me=True)]))
+    assert answer(done, [A(fid(done, "obligation"), "must")])["blocks"] == []                # a finished step decides nothing about "now"
+
+
+
+def test_a_correction_names_the_refused_assertion_and_the_accounting_keeps_model_errors_apart():
+    p = pack_of(tv([ob()]))
+    o = fid(p, "obligation")
+    out = answer(p, [A(o, "holds"), A(o, "may", polarity=False), A(o, "waiting_on")])
+    corr = [b for b in out["blocks"] if b.get("corrected")]
+    assert [(b["origin"], b["corrects"]) for b in corr] == [("server_correction", 0)]
+    assert [r.get("corrected") for r in out["rejected"]] == [True, None]                     # the contradiction is corrected; the unsupported one is not
+    assert out["authority_accounting"] == {"model_assertions": 3, "model_kept": 1, "model_contradicted": 1, "model_unsupported": 1, "model_unknown_fact": 0,
+                                           "server_corrections": 1, "shown_authority": 2, "shown_from_model": 1}
+
+
+def test_a_correction_never_carries_a_wrong_or_unsupported_business_cause():
+    p = pack_of(tv([ob(state="blocked")], blockers=[{"code": "budget", "text": "The budget impact of 5000 EUR is not approved."}]))
+    o, b = fid(p, "obligation"), fid(p, "blocker")
+    out = answer(p, [A(o, "holds")], [{"text": "It is blocked because 7000 EUR were never approved.", "fact_refs": [b], "kind": "cause"},
+                                      {"text": "The request waits for the knowledge decision.", "fact_refs": [o], "kind": "cause"},
+                                      {"text": "Stopped because of the budget; you cannot approve it.", "fact_refs": [b], "kind": "cause"}])
+    assert reasons(out) == ["number_not_in_cited_facts", "cause_without_cause_fact", "authority_in_free_text", "assertion_contradicts_fact"]
+    assert [b_["kind"] for b_ in out["blocks"]] == ["authority"] and out["blocks"][0]["corrected"]   # only the server's sentence is shown
+    assert out["status"] == "partial" and not ra.semantic_success(out)                       # a correction is not a business explanation
+    assert out["blocker_coverage"]["unexplained"] == [b] and any(x.startswith("Not explained in this answer") for x in out["limitations"])
+
+
+def test_a_correction_comes_only_from_the_readers_own_pack_and_differs_by_reader():
+    mine, other = pack_of(tv([ob(me=True, may=True)])), pack_of(tv([ob(me=False, may=True)]))
+    om, oo = fid(mine, "obligation"), fid(other, "obligation")
+    assert [b["text"] for b in answer(mine, [A(om, "holds", polarity=False)])["blocks"]] == ["You hold the current step: Decide the knowledge change."]
+    assert [b["text"] for b in answer(other, [A(oo, "holds")])["blocks"]] == ["This step is not yours: Decide the knowledge change (held by an approver)."]
+    unknown = answer(mine, [A("F999", "holds")])
+    assert unknown["blocks"] == [] and unknown["rejected"][0]["reason"] == "assertion_unknown_fact" and "corrected" not in unknown["rejected"][0]   # no fact, no correction
+
+
+def test_an_out_of_scope_answer_carries_no_blocker_notes_but_insufficient_context_still_does():
+    """Finding of Q3 (AIG03-Q3-20261021-01): "Not explained in this answer: <blocker>" was appended to answers about something else entirely."""
+    p = pack_of(tv([ob(state="blocked")], blockers=[{"code": "budget", "text": "The budget impact is not approved."}]))
+    oos = answer(p, outcome="out_of_scope", blocks=[{"text": "That is not about this request.", "fact_refs": [], "kind": "interpretation"}])
+    assert oos["status"] == "out_of_scope" and not any(x.startswith("Not explained") for x in oos["limitations"])
+    assert oos["blocker_coverage"]["unexplained"]                                            # the coverage is still computed and stored
+    ins = answer(p, outcome="insufficient_context", blocks=[{"text": "The facts do not say.", "fact_refs": [], "kind": "interpretation"}])
+    assert any(x.startswith("Not explained") for x in ins["limitations"])

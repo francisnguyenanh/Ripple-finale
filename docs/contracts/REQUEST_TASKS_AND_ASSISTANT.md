@@ -69,7 +69,7 @@ such records to every `project.read` member).
 | `GET /v2/requests/{family}/{id}/assistant/threads` | the caller's own threads of that request only |
 | `GET /v2/request-assistant/threads/{thread_id}` | own thread and the request still readable, else the generic 404 (the whole thread is withheld) |
 | `POST /v2/request-assistant/threads/{thread_id}/messages {workspace_id, question, idempotency_key, after_seq}` | explicit ask; idempotent per thread + key (another question under the same key: 409 `idempotency_conflict`); `after_seq` must be the last message number (another window asked first: 409 `sequence_conflict`); one admitted `request.qa` job |
-| `GET /v2/request-assistant/threads/{thread_id}/messages/{message_id}/citations/{fact_ref}/source` | EUI-03: the source of a cited fact, resolved by the server from the pack the answer was built on and rechecked at read time. Requires: the asker's own thread, the same access, a fact this answer cites, an unchanged manifest (otherwise `stale_context`; nothing is regenerated), and `evidence.read` for any path or excerpt (otherwise `needs_evidence_rights`). Only impact and draft rule-change facts carry sources; any other fact gives `no_source_locator`, and the page's own section is shown instead. Each source has: path, locator, binding revision, state against the current sources (`current` / `changed_since` / `absent_now`), and for a YAML key the stored value at that key. No model call; no client-supplied path |
+| `GET /v2/request-assistant/threads/{thread_id}/messages/{message_id}/citations/{fact_ref}/source` | EUI-03: the source of a cited fact, resolved by the server from the pack the answer was built on and rechecked at read time. Requires: the asker's own thread, the same access, a fact this answer cites, an unchanged manifest (otherwise `stale_context`; nothing is regenerated), and `evidence.read` for any path or excerpt (otherwise `needs_evidence_rights`). Only impact and draft rule-change facts carry sources; any other fact gives `no_source_locator`, and the page's own section is shown instead. Each source has: path, locator, binding revision, state against the current sources (`current` / `changed_since` / `absent_now`), and for a YAML key the stored value at that key, read through the source blob seam (no excerpt when no blob store is configured; never a guess). No model call; no client-supplied path |
 | `POST /v2/request-assistant/threads/{thread_id}/messages/{message_id}/cancel` | the asker stops a pending answer where the job has not started; a started one keeps its result and cost |
 Storage: `v2_request_threads`, `v2_request_messages` (migration `ext_t10_request_assistant.sql`): question, context manifest hash and the asker's authorization fingerprint
 at ask time, job id, and the validated answer once published. v1 retention: threads live with the workspace; no user delete, no sharing, no export (owner may revise
@@ -114,3 +114,32 @@ Support tier: the confirmed request, rule changes, impact, current decisions. Hi
 - `coverage` reports offered / selected / omitted per tier and upstream caps (for example the impact list limit), only from what the reader may read.
 - Local ids `F1..Fn` are assigned on copies after ordering and belong to that stored pack; the manifest hash binds facts (with tier and key), coverage, context version and
   authorization, so two reads of the same frozen state give the same pack and a real change (a new blocker or decision, lost access) gives `context_changed`.
+
+### 6.x Answer integrity v3 (AIG-03 v5: `request-assistant-answer/3`, `request-assistant-checks/5`, config version 3)
+- **`cause` block:** a new block kind that says WHY the request is where it is, written about the request (never about who may, must or can act).
+  - It must cite a fact with business substance (blocker, decision, rule change, impact, request, waiting, review note); otherwise it is refused as `cause_without_cause_fact`.
+  - Authority in its prose is refused like any free block (`authority_in_free_text`). The whole block is refused; nothing is cut out of it.
+- **Blocker coverage:** computed by the server for every answer, from the offered pack and for any request, with no expected ids: `blocker_coverage {offered, explained, unexplained}`.
+  - An offered blocker that no kept explanation cites is disclosed as a limitation, "Not explained in this answer: …", using the blocker's own text. Nothing is made up for it, and the status is unchanged.
+  - With no blocker offered, nothing is added.
+- **Compatibility:** answers stored under `request-assistant-checks/4` are shown as stored (their authority is already typed and server-rendered). Older ones keep the legacy view. Nothing is regenerated.
+- **Quality:** the prompt asks for every offered blocker to be explained or named in the limitations. Model compliance is measured only by a live cohort under its own approved allocation; the R1 / Q1 runs were made on answer/2 and stay as recorded.
+
+### 6.y Corrected authority (`request-assistant-checks/6`; answer schema, prompt and config unchanged)
+- A typed assertion the cited fact contradicts stays refused (`assertion_contradicts_fact`, counted in `rejected`). When the same fact decides the right answer to the question the model raised, the server shows that sentence instead, as an `authority` block with `corrected: true`. The UI marks it "corrected: the assistant's claim did not match the task record".
+- What the fact decides:
+  - a step held by someone else that the model gave to the reader (holds / must) → "This step is not yours" (true whatever the step's stage);
+  - a claim about the step's own stage → its opposite;
+  - a current claim about a blocked step → "This step is blocked";
+  - a current claim about a later step → the same claim for later.
+  Every candidate is re-checked against the fact before it is shown. Nothing is corrected from a finished step, an unsupported combination or an unknown fact. A sentence already shown is not repeated.
+- Authority stays deterministic: the model only chose what was asked about. A corrected sentence is not a model explanation (`semantic_success` and blocker coverage ignore authority blocks). Evaluations count corrected sentences apart from the model's own correct assertions.
+- **Compatibility:** answers stored under checks/4 and checks/5 are shown as stored.
+- **Source of a correction:** the pack the worker rebuilds at answer time, under the asker's CURRENT roles, for this request only. If that pack differs from the pack of the question (request moved, access changed), the job refuses with `context_changed` and nothing is corrected. A revoked asker refuses with `authority_revoked`. The correction never reads another person's record, and a fact not in the pack (`assertion_unknown_fact`) gets no correction.
+- **Business causes are untouched:** a correction is only an authority sentence. Cause, fact and interpretation blocks keep all their checks (numbers in cited facts, cause facts, no free-text authority). A wrong cause is refused even when an authority correction is shown. A correction is not a business explanation: `semantic_success` and blocker coverage ignore it, and an unexplained blocker is still disclosed.
+- **Three records:**
+  1. the raw model object, `model_answer`, stored for evaluation and never returned by a route;
+  2. the validated answer: kept blocks and `rejected`, where each contradicted assertion carries `corrected: true|false`;
+  3. the server corrections: `authority` blocks with `corrected: true`, `origin: "server_correction"` and `corrects: <index of the refused assertion>`.
+- **`authority_accounting`:** model_assertions, model_kept, model_contradicted, model_unsupported, model_unknown_fact, server_corrections, shown_authority and shown_from_model. Evaluations score the model from the `model_*` counts only: a contradicted assertion is a model error even when the reader sees the corrected sentence. What the reader sees is scored separately (`aig-03-scorer/2`, developing tool).
+- **Q2:** collected under checks/5 and scored by `aig-03-q2-scorer/1`. It stays as recorded and says nothing about checks/6 live behaviour.

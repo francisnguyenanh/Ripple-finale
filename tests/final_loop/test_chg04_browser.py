@@ -105,6 +105,16 @@ def test_requester_confirms_and_sees_the_meaning_an_approver_decides_separately_
     expect(a.get_by_test_id("chg-review")).to_be_visible(timeout=WAIT)
     expect(a.get_by_test_id("rev-file").first).to_be_visible()                                    # evidence rights: paths and instructions shown
     assert "approval.yaml" in a.get_by_test_id("rev-files").inner_text()
+    a.get_by_test_id("rev-file-diff-show").click()                                               # EUI-03: the candidate byte diff, read on request, nothing applied
+    fd = a.get_by_test_id("rev-file-diff")
+    expect(fd).to_be_visible(timeout=WAIT)
+    expect(fd.locator('[data-testid="rev-file-diff-file"][data-state="candidate"]')).to_have_count(1)
+    expect(fd.locator('[data-testid="diff-line"][data-kind="remove"]')).to_have_count(1)
+    expect(fd.locator('[data-testid="diff-line"][data-kind="add"]')).to_have_count(1)
+    expect(fd).to_contain_text("candidate, not applied")
+    expect(a.get_by_test_id("rev-file-diff-coverage")).to_contain_text("no byte diff for these")
+    fd.scroll_into_view_if_needed()
+    _shot(a, "eui03_candidate_file_diff_1440")
     expect(a.get_by_test_id("rev-approve")).to_be_disabled()                                     # a reason is required
     a.get_by_test_id("rev-reason").fill("Checked with Finance; the new threshold is right.")
     a.get_by_test_id("rev-approve").click()

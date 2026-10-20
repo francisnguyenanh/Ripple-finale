@@ -67,6 +67,19 @@ def test_business_question_is_answered_in_the_browser_and_a_requester_only_reads
         pick = next(o for o in conflict["options"] if o["label"] == "2000000")
         card.locator(f'input[type=radio][value="{pick["rule_id"]}"]').check()
         expect(card.locator('[data-testid="conflict-card"][data-selected="true"]')).to_have_count(1)
+        triage = page.get_by_test_id("business-gaps-triage")                                   # UX-07: grouped by kind, exact loaded counts, filters only hide
+        total = int(page.get_by_test_id("business-gaps").get_attribute("data-count"))
+        assert sum(int(c) for c in triage.get_by_test_id("business-gaps-triage-group").evaluate_all("els => els.map(e => e.dataset.count)")) == total
+        expect(triage.locator('[data-testid="business-gaps-triage-pill"][data-key=""]')).to_contain_text(f"All ({total})")
+        other = [k for k in triage.get_by_test_id("business-gaps-triage-pill").evaluate_all("els => els.filter(e => !e.disabled).map(e => e.dataset.key)")
+                 if k.startswith("kind:") and k != "kind:conflicting_facts"]
+        if other:                                                                               # hide the card, show it again: the choice is kept, nothing recorded
+            triage.locator(f'[data-testid="business-gaps-triage-pill"][data-key="{other[0]}"]').click()
+            expect(card).to_be_hidden()
+        triage.locator('[data-testid="business-gaps-triage-pill"][data-key="kind:conflicting_facts"]').click()
+        expect(card).to_be_visible()
+        expect(card.locator('[data-testid="conflict-card"][data-selected="true"]')).to_have_count(1)
+        triage.locator('[data-testid="business-gaps-triage-pill"][data-key=""]').click()
         card.scroll_into_view_if_needed()
         _shot(page, "eui06_conflict_ab")
         assert counts(env) == before                                                      # choosing a card records nothing

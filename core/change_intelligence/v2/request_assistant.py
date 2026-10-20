@@ -13,7 +13,7 @@ from typing import Iterable, Mapping
 from core.change_intelligence.v2.serialize import canonical_hash
 
 CONTEXT_VERSION = "request-assistant-context/2"                 # AIG-02: tiered, stable selection with honest overflow (contract section 6)
-ANSWER_SCHEMA = "request-assistant-answer/2"                    # AIG-01: typed authority assertions, server-rendered authority sentences
+ANSWER_SCHEMA = "request-assistant-answer/3"                    # AIG-03 v5: + `cause` blocks and server-computed blocker coverage (answer/2: typed authority, AIG-01)
 LOCALE = "en"                                                   # the only supported answer locale
 TIERS = ("mandatory", "support", "history")
 _KIND_RANK = {k: i for i, k in enumerate(("state", "request", "obligation", "waiting", "blocker", "action", "step", "axis", "rule_change", "open_question", "impact",
@@ -131,7 +131,10 @@ REQUIRED_MODEL_KEYS = frozenset({"outcome", "answer_blocks", "limitations"})
 ASSERTION_KEYS = frozenset({"subject", "fact_ref", "relation", "polarity", "scope"})
 RELATIONS = ("holds", "must", "may", "waiting_on", "blocked")
 OUTCOMES = ("answered", "partial", "insufficient_context", "out_of_scope")
-BLOCK_KINDS = ("fact", "interpretation", "suggestion")
+BLOCK_KINDS = ("fact", "interpretation", "suggestion", "cause")
+# a `cause` block says WHY the request is where it is, about the request (never who may / must act): it must cite a fact with business substance
+CAUSE_FACTS = frozenset({"blocker", "decision", "rule_change", "impact", "request", "waiting", "review_note"})
+MAX_UNEXPLAINED_SHOWN = 5
 _NOT_PLAIN = re.compile(r"[<>`|]|https?://|www\.|\]\(|[\x00-\x08\x0b-\x1f\x7f]", re.I)
 _NUM = re.compile(r"(?<![A-Za-z0-9_])\d+(?:[.,]\d+)*")
 _NEGATED = re.compile(r"(?i)\b(not|cannot|can't|can not|no|unable|never|isn't|aren't|doesn't|don't|won't)\b")
@@ -148,7 +151,8 @@ _NOT_HOLDS = re.compile(r"(?i)\b(you (do not|don't|no longer) hold|not (held by|
 _ABLE = re.compile(r"(?i)\byou (can|may|are (allowed|able|permitted) to|could)\s+(now\s+)?(proceed (by|to)\s+)?(approv|decid|confirm|commit|apply|clarif|answer|review|reject|accept)")
 _UNABLE = re.compile(r"(?i)\byou (cannot|can't|can not|may not|are not (allowed|able|permitted) to|could not)\s+(approv|decid|confirm|commit|apply|clarif|answer|review|reject|accept)|\byour role cannot\b")
 _REQUIRED = re.compile(r"(?i)\byou (are|were) (required|obliged)\b|\byou (must|have to)\b")
-CHECKS_VERSION = "request-assistant-checks/4"
+CHECKS_VERSION = "request-assistant-checks/6"                   # checks/6: a contradicted assertion is answered by the server's corrected sentence
+COMPATIBLE_CHECKS = frozenset({"request-assistant-checks/4", "request-assistant-checks/5", CHECKS_VERSION})   # authority already typed and server-rendered: shown as stored, no legacy filtering
 _ROLE_WORDS = {"requester": ("requester", "person who asked"), "approver": ("approver",), "reviewer": ("reviewer",), "knowledge owner": ("knowledge owner",),
                "administrator": ("administrator", "admin"), "system": ("system", "the ai")}
 _THIRD = re.compile(r"(?i)\b(?:the |an |a )?(requester|approver|reviewer|knowledge owner|administrator|admin|system)s?\b[^.;]{0,40}?\b(holds?|must|needs? to|has to|is (?:asked|responsible|expected|required) to|is the one|is to)\b")
@@ -299,8 +303,36 @@ def render_assertion(a: Mapping, f: Mapping) -> str:
     return f"This step is blocked: {label}." if pos else f"This step is not blocked: {label}."
 
 
+def corrected_assertion(a: Mapping, f: Mapping) -> dict | None:
+    """What the cited fact decides about the same question when a CONTRADICTED assertion is refused, as a typed assertion the server renders; None when the fact
+    does not decide it. Each candidate is re-checked by `assertion_truth`, so nothing is shown that the fact does not make true:
+    - a step of someone else that the model gave to the reader -> "this step is not yours" (true whatever its stage);
+    - same stage as asserted -> the opposite assertion;
+    - a current claim about a blocked step -> "this step is blocked"; about a later step -> the same claim for later."""
+    d, rel, subj, scope = f.get("data") or {}, a["relation"], a["subject"], a["scope"]
+    cands = []
+    if f["kind"] == "obligation":
+        state = d.get("state")
+        if subj == "self" and rel in ("holds", "must") and a["polarity"] and not d.get("you"):
+            cands.append(dict(a, relation="holds", polarity=False))
+        elif _scope_ok(state, scope):
+            cands.append(dict(a, polarity=not a["polarity"]))
+        elif scope == "current" and state == "blocked":
+            cands.append(dict(a, subject="self", relation="blocked", polarity=True))
+        elif scope == "current" and state == "future":
+            cands.append(dict(a, scope="later"))
+    elif f["kind"] == "action":
+        cands.append(dict(a, polarity=not a["polarity"]))
+    for c in cands:
+        if assertion_truth(c, f) is c["polarity"]:
+            return c
+    return None
+
+
 def check_assertions(assertions, facts: Mapping) -> tuple[list, list]:
-    kept, rejected = [], []
+    """Kept assertions are rendered by the server. A contradicted one stays refused (its reason is recorded); when the right answer to the same question is decided by
+    the cited fact, the server's corrected sentence is shown instead, marked `corrected` (authority stays deterministic; the model chose only what was asked about)."""
+    kept, rejected, seen = [], [], set()
     for i, a in enumerate(assertions or []):
         f = facts.get(a["fact_ref"])
         if f is None or f["kind"] not in ("obligation", "action", "waiting", "blocker"):
@@ -310,10 +342,32 @@ def check_assertions(assertions, facts: Mapping) -> tuple[list, list]:
         if truth is None:
             rejected.append({"index": i, "kind": "authority", "reason": "assertion_not_supported"})
         elif truth != a["polarity"]:
-            rejected.append({"index": i, "kind": "authority", "reason": "assertion_contradicts_fact"})
-        else:
+            c = corrected_assertion(a, f)
+            rejected.append({"index": i, "kind": "authority", "reason": "assertion_contradicts_fact", "corrected": c is not None})
+            if c is not None and _akey(c) not in seen:
+                seen.add(_akey(c))
+                kept.append({"text": render_assertion(c, f), "fact_refs": [a["fact_ref"]], "kind": "authority", "assertion": c, "corrected": True,
+                             "origin": "server_correction", "corrects": i})                  # the refused model assertion this sentence answers
+        elif _akey(a) not in seen:
+            seen.add(_akey(a))
             kept.append({"text": render_assertion(a, f), "fact_refs": [a["fact_ref"]], "kind": "authority", "assertion": dict(a)})
     return kept, rejected
+
+
+def authority_accounting(model_assertions, rejected: list, kept: list) -> dict:
+    """checks/6: the model's authority work and the server's corrections, counted apart. A contradicted assertion is a model error even when the server shows the
+    right sentence for it; `shown_*` describe what the reader sees. Evaluations score the model from the `model_*` counts only."""
+    refused = [r for r in rejected if r.get("kind") == "authority"]
+    reasons = [r["reason"] for r in refused]
+    shown = [b for b in kept if b.get("kind") == "authority"]
+    return {"model_assertions": len(model_assertions or []), "model_kept": len(model_assertions or []) - len(refused),
+            "model_contradicted": reasons.count("assertion_contradicts_fact"), "model_unsupported": reasons.count("assertion_not_supported"),
+            "model_unknown_fact": reasons.count("assertion_unknown_fact"), "server_corrections": sum(1 for b in shown if b.get("corrected")),
+            "shown_authority": len(shown), "shown_from_model": sum(1 for b in shown if not b.get("corrected"))}
+
+
+def _akey(a: Mapping) -> tuple:
+    return (a["fact_ref"], a["subject"], a["relation"], a["scope"], a["polarity"])
 
 
 def _nums(text: str) -> set:
@@ -342,6 +396,8 @@ def check_answer(model: Mapping, pack_: Mapping, limits: Mapping) -> dict:
             reason = "number_not_in_cited_facts"
         elif b["kind"] == "suggestion" and not any(f["kind"] in ("action", "obligation", "blocker") for f in cited):
             reason = "suggestion_without_action_fact"
+        elif b["kind"] == "cause" and not any(f["kind"] in CAUSE_FACTS for f in cited):
+            reason = "cause_without_cause_fact"
         else:                                                                               # a wrong claim keeps its specific reason; a right one is still refused in free text:
             reason = authority_problem(text, cited, b["kind"]) or free_text_authority(text)   # authority is stated only through typed assertions (AIG-01)
         if reason:
@@ -350,6 +406,7 @@ def check_answer(model: Mapping, pack_: Mapping, limits: Mapping) -> dict:
         kept.append({"text": text, "fact_refs": refs, "kind": b["kind"]})
     authority, a_rejected = check_assertions(model.get("authority_assertions") or [], facts)
     rejected += a_rejected
+    accounting = authority_accounting(model.get("authority_assertions") or [], a_rejected, authority)
     kept = authority + kept                                                                 # the server-rendered authority sentences first, then the model's explanation
     lims = [" ".join(x.split())[:300] for x in model["limitations"][: int(limits["max_limitations"])] if x.strip() and not _NOT_PLAIN.search(x)]
     outcome = model["outcome"]
@@ -360,7 +417,20 @@ def check_answer(model: Mapping, pack_: Mapping, limits: Mapping) -> dict:
     else:
         status = outcome
     explained = sorted({facts[r]["kind"] for blk in kept if blk["kind"] != "authority" for r in blk["fact_refs"] if facts[r]["kind"] in EXPLANATION_FACTS})
-    return {"status": status, "outcome": outcome, "blocks": kept, "rejected": rejected, "limitations": lims, "explained_fact_kinds": explained}
+    coverage = blocker_coverage(kept, pack_["facts"])
+    shown_unexplained = [] if outcome == "out_of_scope" else coverage["unexplained"][:MAX_UNEXPLAINED_SHOWN]   # a question not about this request gets no blocker notes
+    for fid in shown_unexplained:                                                         # AIG-03 v5: an offered blocker is never dropped silently; nothing is made up for it
+        f = facts[fid]
+        lims.append("Not explained in this answer: " + " ".join(str(f.get("display") or f["text"]).split()).removeprefix("Blocker: ")[:240])
+    return {"status": status, "outcome": outcome, "blocks": kept, "rejected": rejected, "limitations": lims, "explained_fact_kinds": explained, "blocker_coverage": coverage,
+            "authority_accounting": accounting}
+
+
+def blocker_coverage(kept: list, facts: list) -> dict:
+    """Which offered blocker facts a KEPT explanation (non-authority block) cites. Computed by the server from the pack, for any request: no expected ids."""
+    offered = [f["id"] for f in facts if f["kind"] == "blocker"]
+    cited = {r for b in kept if b["kind"] != "authority" for r in b["fact_refs"]}
+    return {"offered": len(offered), "explained": [i for i in offered if i in cited], "unexplained": [i for i in offered if i not in cited]}
 
 
 EXPLANATION_FACTS = frozenset({"blocker", "decision", "rule_change", "impact", "review_note", "request", "open_question", "waiting"})

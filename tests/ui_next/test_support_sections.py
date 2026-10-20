@@ -15,6 +15,17 @@ WAIT = 30000
 SECTIONS = ["ws", "access", "sandbox", "matrix", "live"]
 
 
+def _shot(page, name, el=None):                                                        # optional review capture (UI_NEXT_SHOTS, outside Git); never affects the assertions
+    import os
+    target = os.environ.get("UI_NEXT_SHOTS")
+    if target:
+        os.makedirs(target, exist_ok=True)
+        if el is not None:
+            el.scroll_into_view_if_needed()
+            page.wait_for_timeout(200)
+        page.screenshot(path=os.path.join(target, f"{name}.png"), full_page=False)
+
+
 @pytest.fixture
 def ch(env, monkeypatch):
     return build(env, monkeypatch, finguide_scope={"category": "all"})
@@ -94,5 +105,43 @@ def test_live_updates_section_reports_polling_and_the_sink_and_an_unreadable_sta
         expect(tid(page, "live-unavailable")).to_contain_text("not the same as everything being up to date")
         expect(tid(page, "live-request-id")).to_contain_text("0123456789abcdef0123456789abcdef")
         ctx.close()
+    finally:
+        server.stop()
+
+
+def test_each_operator_switch_states_what_off_does_and_an_unreadable_state_is_unavailable(env, ch, pw_browser, monkeypatch):
+    monkeypatch.setenv("RIPPLE_OPERATOR_FLAGS", "1")                                    # the runtime switches are a deployment setting; on for this page only
+    server = ServerThread().start()
+    try:
+        page, ctx = _open(pw_browser, server, env)
+        box = tid(page, "operator-switches")
+        expect(box).to_be_visible(timeout=WAIT)
+        for k in ("ai_switch", "worker_claims", "request_assistant"):
+            row = tid(page, f"switch-{k}")
+            expect(row.get_by_test_id("switch-consequence")).to_contain_text("Off:")
+            expect(row.get_by_test_id(f"flip-{k}")).to_be_disabled()                      # the recorded reason comes first
+        expect(tid(page, "switch-worker_claims").get_by_test_id("switch-consequence")).to_contain_text("an attempt already running finishes")
+        _shot(page, "ux14_switch_consequences_1440", box)
+        assert not [u for m, u in page._calls if m == "POST" and "/operator/flags" in u]
+        ctx.close()
+        ctx2 = pw_browser.new_context(base_url=server.url, viewport={"width": 1280, "height": 900})
+        p2 = ctx2.new_page()
+        p2.set_default_timeout(WAIT)
+        reads = []
+        def fail(route):
+            reads.append(route.request.url)
+            route.fulfill(status=500, content_type="application/json", body='{"detail":"injected"}')
+        p2.route("**/v2/operator/flags*", fail)
+        open_app(p2, server.url)
+        login(p2, env.admin, f"cred-a-{env.nonce}")
+        select_workspace(p2, env.ws)
+        p2.goto(f"{server.url}/app-next/#/ws/{env.ws}/support")
+        expect(tid(p2, "switches-unavailable")).to_be_visible(timeout=WAIT)
+        n = len(reads)
+        tid(p2, "switches-retry").click()
+        expect(tid(p2, "switches-unavailable")).to_be_visible()
+        p2.wait_for_timeout(500)
+        assert len(reads) == n + 1, "Try again re-reads exactly once"
+        ctx2.close()
     finally:
         server.stop()

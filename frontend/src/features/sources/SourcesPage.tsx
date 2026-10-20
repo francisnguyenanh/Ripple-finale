@@ -16,7 +16,8 @@ import { hashFor } from "@/lib/route";
 import { PageHeader } from "@/pages/Page";
 import { useSession } from "@/session";
 import { jobState, isTerminal, type Job, type Rec } from "@/features/changes/types";
-import { AnalysisButtons, FileStages, LifeSummary } from "./Lifecycle";
+import { AnalysisButtons, FileStages, LifeSummary, costNote } from "./Lifecycle";
+import { useParam } from "@/lib/param";
 import { filterFiles } from "./fileFilter";
 import { RepoSync } from "./RepoSync";
 import { RefreshCorrespondence, type HumanProof } from "./RefreshCorrespondence";
@@ -85,7 +86,9 @@ function JobPanel({ ws, id }: { ws: string; id: string }) {
 }
 
 // ---------------------------------------------------------------- evidence drawer
-function EvidenceDrawer({ ws, rev, art, onClose }: { ws: string; rev: string; art: Rec | null; onClose: () => void }) {
+/** What the parser read from one stored file: its observations, and the verbatim value of the one picked. Shared by the evidence drawer and the selected-file pane
+ * (D6); `idp` prefixes the test ids so both can be on a page. Reads only (evidence.read). */
+function EvidenceBody({ ws, rev, art, onFail, idp = "" }: { ws: string; rev: string; art: Rec | null; onFail?: () => void; idp?: string }) {
   const notify = useNotify();
   const [obs, setObs] = React.useState<Rec[] | null>(null);
   const [sel, setSel] = React.useState<Rec | null>(null);
@@ -94,7 +97,7 @@ function EvidenceDrawer({ ws, rev, art, onClose }: { ws: string; rev: string; ar
     if (!art) return;
     let live = true;
     api<{ observations?: Rec[] }>("GET", `/v2/sources/revisions/${q(rev)}/artifacts/${q(art.artifact_id)}/observations?workspace_id=${q(ws)}`)
-      .then((r) => { if (live) setObs(r.observations ?? []); }).catch((e) => { notify.fail(e); onClose(); });
+      .then((r) => { if (live) setObs(r.observations ?? []); }).catch((e) => { notify.fail(e); onFail?.(); });
     return () => { live = false; };
   }, [art, rev, ws]); // eslint-disable-line react-hooks/exhaustive-deps
   const pick = async (o: Rec) => {
@@ -102,26 +105,71 @@ function EvidenceDrawer({ ws, rev, art, onClose }: { ws: string; rev: string; ar
   };
   const loc = sel?.locator && typeof sel.locator === "object" ? Object.entries(sel.locator as Rec).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`).join("; ") : JSON.stringify(sel?.locator ?? "");
   return (
+    <div data-testid={`${idp}evidence-box`} className="grid gap-3">
+      {obs === null && <StatusBadge status="loading" />}
+      {obs && !obs.length && <Muted>This file has no observations.</Muted>}
+      {obs && obs.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {obs.map((o) => <Button key={o.observation_id} data-testid={`${idp}observation-item`} onClick={() => void pick(o)}>{humanize(o.kind)} <Tech><span> @ {JSON.stringify(o.locator)}</span></Tech></Button>)}
+        </div>
+      )}
+      {sel && art && (
+        <section data-testid={`${idp}evidence-panel`} data-provenance="observed" className="rounded-md border border-border p-3 grid gap-2 text-sm">
+          <p>File: <code data-testid={`${idp}evidence-file`}>{art.logical_path || art.artifact_id}</code></p>
+          <p>Location: <code data-testid={`${idp}evidence-locator`}>{loc}</code></p>
+          <p>Source version: <code data-testid={`${idp}evidence-revision`}>{sel.source_revision_id}</code></p>
+          <p>Value as written: <code data-testid={`${idp}evidence-value`}>{typeof sel.raw_value === "string" ? sel.raw_value : JSON.stringify(sel.raw_value)}</code></p>
+          <Muted>Provenance: observed (read by the parser from the stored file, not inferred).</Muted>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function EvidenceDrawer({ ws, rev, art, onClose }: { ws: string; rev: string; art: Rec | null; onClose: () => void }) {
+  return (
     <Modal open={!!art} onClose={onClose} side="right" title={`Evidence: ${basename(art?.logical_path ?? art?.artifact_id)}`} description="What the parser read from the stored file. These are the original values, not interpretations.">
-      <div data-testid="evidence-box" className="grid gap-3">
-        {obs === null && <StatusBadge status="loading" />}
-        {obs && !obs.length && <Muted>This file has no observations.</Muted>}
-        {obs && obs.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {obs.map((o) => <Button key={o.observation_id} data-testid="observation-item" onClick={() => void pick(o)}>{humanize(o.kind)} <Tech><span> @ {JSON.stringify(o.locator)}</span></Tech></Button>)}
-          </div>
-        )}
-        {sel && art && (
-          <section data-testid="evidence-panel" data-provenance="observed" className="rounded-md border border-border p-3 grid gap-2 text-sm">
-            <p>File: <code data-testid="evidence-file">{art.logical_path || art.artifact_id}</code></p>
-            <p>Location: <code data-testid="evidence-locator">{loc}</code></p>
-            <p>Source version: <code data-testid="evidence-revision">{sel.source_revision_id}</code></p>
-            <p>Value as written: <code data-testid="evidence-value">{typeof sel.raw_value === "string" ? sel.raw_value : JSON.stringify(sel.raw_value)}</code></p>
-            <Muted>Provenance: observed (read by the parser from the stored file, not inferred).</Muted>
-          </section>
-        )}
-      </div>
+      <EvidenceBody ws={ws} rev={rev} art={art} onFail={onClose} />
     </Modal>
+  );
+}
+
+/** D6 (owner, 2026-10-21): the details of ONE selected file beside the unchanged cards. Reading, AI extraction and person confirmation stay separate stages; the
+ * paid-action note sits next to the analysis buttons; what the parser read is shown inline for evidence readers (same reads as the drawer). Nothing starts on select. */
+function SelectedFile({ ws, rev, a, row, provider, busy, onAnalyze, onClose }: {
+  ws: string; rev: string; a: Rec | null; row: Rec | undefined; provider?: Rec; busy: boolean; onAnalyze: (a: Rec) => void; onClose: () => void;
+}) {
+  const s = useSession();
+  const notify = useNotify();
+  const head = React.useRef<HTMLHeadingElement>(null);
+  React.useEffect(() => { head.current?.focus(); }, [a?.artifact_id]);
+  return (
+    <aside data-testid="sources-selected" data-artifact-id={a?.artifact_id ?? ""} aria-label="Selected file"
+      className="order-first lg:order-none lg:col-start-2 lg:row-start-1 rounded-lg border border-border bg-surface p-4 grid gap-3 min-w-0">
+      <div className="flex items-start gap-2">
+        <h2 ref={head} tabIndex={-1} className="font-semibold break-all flex-1 flex items-center gap-2">{a ? <><KindIcon mt={a.media_type} /><Path p={a.logical_path} /></> : "Selected file"}</h2>
+        <Button size="sm" variant="ghost" data-testid="sources-selected-close" onClick={onClose}>Close</Button>
+      </div>
+      {!a ? <Muted testid="sources-selected-missing">This file is not in the current version of the sources.</Muted> : (
+        <>
+          <Muted>{sizeText(a.byte_size)} - {KIND_WORDS[a.media_type] ?? a.media_type}</Muted>
+          {row ? <FileStages row={row} provider={provider} /> : <Muted testid="sources-selected-no-stages">The stages of this file could not be read.</Muted>}
+          <div className="grid gap-1" data-testid="sources-selected-actions">
+            <div className="flex flex-wrap gap-2 items-center">
+              {row ? <AnalysisButtons ws={ws} row={row} canRun={s.can("source.import")} busy={busy} onStart={() => onAnalyze(a)} provider={provider} />
+                : s.can("source.import") && <Button disabled={s.aiOff} onClick={() => onAnalyze(a)}>Analyze</Button>}
+              {s.can("evidence.read") && <a role="link" tabIndex={0} className="text-primary underline cursor-pointer text-sm"
+                onClick={() => void downloadArtifact(ws, rev, a, notify.fail)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void downloadArtifact(ws, rev, a, notify.fail); } }}>Export</a>}
+            </div>
+            {s.can("source.import") && !row && <Muted testid="sources-selected-cost">{costNote(provider)}</Muted>}{/* the analysis buttons state it themselves when the stages are known */}
+          </div>
+          <div className="grid gap-1">
+            <h3 className="text-sm font-medium">What the parser read</h3>
+            {s.can("evidence.read") ? <EvidenceBody ws={ws} rev={rev} art={a} idp="sel-" /> : <Muted testid="sources-selected-no-evidence">Reading the file contents needs evidence rights.</Muted>}
+          </div>
+        </>
+      )}
+    </aside>
   );
 }
 
@@ -324,6 +372,8 @@ export function SourcesPage() {
   const { run } = useAction();
   const [starting, setStarting] = React.useState<string | null>(null);
   const [fileFilter, setFileFilter] = React.useState("");
+  const [selId, setSelId] = useParam("file");                                     // D6: the selected file lives in the URL (reload / Back keep it)
+  React.useEffect(() => { setArt(null); }, [ws]);                                 // another workspace closes the evidence drawer
 
   const load = React.useCallback(async () => {
     try {
@@ -407,9 +457,13 @@ export function SourcesPage() {
                 <Muted testid="files-filter-count">Showing {shownFiles.length} of {allFiles.length} files.</Muted>
               </div>
             )}
-            <div className="grid gap-3 md:grid-cols-2">{/* owner decision D6 (2026-10-18): file cards, no worklist / detail panel this round */}
+            <div className={selId ? "grid gap-4 lg:grid-cols-[minmax(0,1fr)_26rem] items-start" : ""}>
+            {selId && <SelectedFile ws={ws} rev={view.revision_id} a={allFiles.find((x) => x.artifact_id === selId) ?? null} row={(() => { const f = allFiles.find((x) => x.artifact_id === selId); return f ? rowOf(f) : undefined; })()}
+              provider={life?.provider as Rec} busy={starting === selId} onAnalyze={(a) => void analyze(a)} onClose={() => setSelId("")} />}
+            <div className={selId ? "grid gap-3 lg:col-start-1 lg:row-start-1" : "grid gap-3 md:grid-cols-2"}>{/* owner decision D6, updated 2026-10-21: the file cards stay; a selected-file pane is added beside them */}
               {shownFiles.map((a) => (
-                <article key={a.artifact_id} data-testid="artifact-row" data-logical-path={a.logical_path} data-artifact-id={a.artifact_id} className="rounded-lg border border-border bg-surface p-4 grid gap-2 min-w-0">
+                <article key={a.artifact_id} data-testid="artifact-row" data-logical-path={a.logical_path} data-artifact-id={a.artifact_id} data-selected={String(selId === a.artifact_id)}
+                  className={`rounded-lg border bg-surface p-4 grid gap-2 min-w-0 ${selId === a.artifact_id ? "border-primary ring-2 ring-primary" : "border-border"}`}>
                   <h3 className="font-semibold flex items-center gap-2 break-all"><KindIcon mt={a.media_type} /><Path p={a.logical_path} /></h3>
                   <Muted>{sizeText(a.byte_size)} - {KIND_WORDS[a.media_type] ?? a.media_type} - folder {String(a.logical_path).includes("/") ? <Name raw={String(a.logical_path).split("/").slice(0, -1).join("/")} /> : "(top)"}</Muted>
                   <Tech><Muted>{a.byte_size} bytes - {a.media_type} - role: {a.source_role}</Muted></Tech>
@@ -418,12 +472,14 @@ export function SourcesPage() {
                   <div className="flex flex-wrap gap-2 items-center">
                     {rowOf(a) ? <AnalysisButtons ws={ws} row={rowOf(a)!} canRun={s.can("source.import")} busy={starting === a.artifact_id} onStart={() => void analyze(a)} provider={life?.provider as Rec} />
                       : s.can("source.import") && <Button disabled={s.aiOff} title={s.aiOff ? "AI actions are switched off on this server" : undefined} onClick={() => void analyze(a)}>Analyze</Button>}
+                    <Button data-testid="artifact-details" aria-pressed={selId === a.artifact_id} onClick={() => setSelId(selId === a.artifact_id ? "" : String(a.artifact_id))}>{selId === a.artifact_id ? "Hide details" : "Details"}</Button>
                     {s.can("evidence.read") && <Button onClick={() => setArt(a)}><Search size={14} aria-hidden="true" />Evidence</Button>}
                     {s.can("evidence.read") && <a role="link" tabIndex={0} data-testid="export-link-source" className="text-primary underline cursor-pointer text-sm"
                       onClick={() => void downloadArtifact(ws, view.revision_id, a, notify.fail)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void downloadArtifact(ws, view.revision_id, a, notify.fail); } }}>Export</a>}
                   </div>
                 </article>
               ))}
+            </div>
             </div>
           </>
         )}

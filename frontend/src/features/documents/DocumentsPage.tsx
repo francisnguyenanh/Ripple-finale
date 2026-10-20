@@ -75,7 +75,7 @@ export function DocumentsPage() {
         }
       } catch (e) {
         if (!live || (e instanceof DOMException && e.name === "AbortError")) return;
-        setContent(null);
+        setContent(null); setState(null);                                         // an error clears the old document and its toolbar: nothing stale stays on screen
         setErr(e instanceof ApiError && (e.status === 403 || e.status === 404) ? "This document is not available to your account. Nothing is shown." : errorText(e));
       }
     };
@@ -186,7 +186,9 @@ export function DocumentsPage() {
             <section data-testid="docs-reader" data-freshness={String(state.freshness)} data-mode={String(state.mode)} className="rounded-lg border border-border bg-surface p-4 grid gap-3">
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <StatePill state={String(state.freshness)} label={FRESH[String(state.freshness)] ?? String(state.freshness)} testid="docs-freshness" />
-                <span data-testid="docs-version">{String(state.mode)} document of {state.freshness === "stale" ? `an older knowledge version (the current version is ${String(head.business_revision)})` : `knowledge version ${String(head.business_revision)}`}</span>
+                <span data-testid="docs-version" data-pinned={state.snapshot_id && state.snapshot_id === head.accepted_snapshot_id ? "current" : "older"}>{String(state.mode)} document of {   // from the document's own pinned version, never the head alone
+                  state.snapshot_id && state.snapshot_id === head.accepted_snapshot_id ? `knowledge version ${String(head.business_revision)} (the current one)`
+                  : `an older saved knowledge version (the current version is ${String(head.business_revision ?? "-")})`}</span>
                 {canRefresh && <Button variant="primary" data-testid="docs-refresh" disabled={busy} onClick={() => void request(currentTopic!)}>Generate for the current version</Button>}
                 {content && <Button data-testid="docs-download" disabled={busy} onClick={() => void download()}>Download this document (.md)</Button>}
                 {content && <Button data-testid="docs-export" disabled={busy} onClick={() => void exportBundle()}>Export bundle of this version (.zip)</Button>}

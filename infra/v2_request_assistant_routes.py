@@ -11,6 +11,8 @@ Another person's thread, a request the caller may not read and a missing one all
 """
 from __future__ import annotations
 
+import os
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -93,10 +95,18 @@ async def ask_assistant(request: Request, thread_id: str):
                 mutating=True, not_found=rt.THREAD_NOT_FOUND)
 
 
+def _with_blobs(store):
+    """The route store has no blob port (`_NullBlobs`); the YAML excerpt reads pinned bytes through the source blob seam. Without one, no excerpt (never a guess)."""
+    from infra import v2_source_routes
+    from infra.adapters.v2_postgres import PostgresV2Store
+    blobs = v2_source_routes._blob_port()
+    return PostgresV2Store(os.environ["RIPPLE_V2_DSN"], blobs) if blobs is not None else store
+
+
 @router.get("/v2/request-assistant/threads/{thread_id}/messages/{message_id}/citations/{fact_ref}/source")
 def citation_source(request: Request, thread_id: str, message_id: str, fact_ref: str, workspace_id: str):
-    return _run(request, workspace_id, lambda store, tenant, a: rt.citation_source(store, tenant, workspace_id, thread_id, message_id, fact_ref, a), mutating=False,
-                not_found=rt.THREAD_NOT_FOUND)
+    return _run(request, workspace_id, lambda store, tenant, a: rt.citation_source(_with_blobs(store), tenant, workspace_id, thread_id, message_id, fact_ref, a),
+                mutating=False, not_found=rt.THREAD_NOT_FOUND)
 
 
 @router.post("/v2/request-assistant/threads/{thread_id}/messages/{message_id}/cancel")

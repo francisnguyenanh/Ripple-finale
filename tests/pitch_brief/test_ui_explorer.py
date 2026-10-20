@@ -66,6 +66,7 @@ def test_explorer_graph_list_filter_detail_and_confirm_reload(env, ch, pw_browse
         if NEXT:      # the optional graph view shows the same data; the tree (with its inline text) is the readable alternative
             expect(tid(page, "graph-svg")).to_be_visible()
             assert page.locator(f"[data-node='{tidc}']").count() == 1
+            expect(tid(page, "graph-key")).to_contain_text("not a dependency")                 # UX-11: the line key next to the graph
             tid(page, "explorer-mode").click()
             expect(tid(page, "explorer-tree")).to_be_visible()
         else:

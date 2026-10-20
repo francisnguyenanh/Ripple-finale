@@ -2,11 +2,10 @@ import { stageNo, stageTitle } from "./registry";
 import { StageCard } from "./StageCard";
 import { SimulationAnalysisCard } from "@/features/explain/SimulationAnalysisCard";
 import * as React from "react";
-import { ArrowRight } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Callout, Muted, Tech, usePlain } from "@/components/bits";
-import { basename, humanize, newId } from "@/lib/fmt";
+import { Callout, HowItWorks, Muted, Tech, usePlain } from "@/components/bits";
+import { basename, humanize, newId, ruleTitle } from "@/lib/fmt";
 import { useSession } from "@/session";
 import { useNotify } from "@/lib/notify";
 import { draftResult } from "./DraftStage";
@@ -15,6 +14,8 @@ import { ensureCoverage, readCoverage } from "./Coverage";
 import { JobLine, useCreateStage } from "./StageBits";
 import type { Rec } from "./types";
 import { isDone, isTerminal } from "./types";
+import { SimulationOutcome } from "@/components/decision/SimulationOutcome";
+import { outcomeOf } from "@/components/decision/outcomeModel";
 
 const REASONS: Record<string, string> = {
   no_confirmed_relation_evidence_bounded_investigation_not_run: "No relation evidence covers this rule and the target - UNKNOWN (not 'unaffected'). Compute relation coverage and run the impact analysis again.",
@@ -23,6 +24,7 @@ const REASONS: Record<string, string> = {
 };
 
 type Labels = Record<string, { label?: string; logical_path?: string }>;
+const SHOWN = 10;
 
 export function ImpactReport({ res, relationJobs = 0 }: { res: Rec; relationJobs?: number }) {
   const { ws } = useFlow();
@@ -37,14 +39,27 @@ export function ImpactReport({ res, relationJobs = 0 }: { res: Rec; relationJobs
     }
     return () => { live = false; };
   }, [ws, res.target_candidate_id]);
-  const lab = (id: string) => (labels[id]?.label ? labels[id].label + (labels[id].logical_path ? ` (${tech ? labels[id].logical_path : basename(labels[id].logical_path)})` : "") : "a related rule");
+  const words = (l: string) => {                                                         // the server label is "subject / predicate = value": Business view names the rule in words
+    const m = /^(.*?) \/ (.*?) = (.*)$/.exec(l);
+    return tech || !m ? l : ruleTitle(m[1], m[2]);
+  };
+  const lab = (id: string) => (labels[id]?.label ? words(labels[id].label!) + (labels[id].logical_path ? ` (${tech ? labels[id].logical_path : basename(labels[id].logical_path)})` : "") : "a related rule");
   const cite = (ev: Rec[] | undefined) => (ev ?? []).map((e, i) => <span key={i} className="block text-muted">cites <span data-verbatim>{e.quote || e.text || ""}</span><Tech> <code>{JSON.stringify(e.locator)}</code></Tech></span>);
+  const uid = React.useId().replace(/:/g, "");
+  // UX-09: a long category shows its first items; the rest open on demand. The count in the heading and in the worklist is always the full count.
   const section = (title: string, items: Rec[], render: (x: Rec) => React.ReactNode, testid: string) => (
-    <div data-testid={testid} className="grid gap-1">
+    <div data-testid={testid} id={`${uid}${testid}`} tabIndex={-1} className="grid gap-1">
       <h4 className="font-semibold">{title} ({items.length})</h4>
-      {items.length ? <ul className="list-disc pl-5 text-sm grid gap-1">{items.map((x, i) => <li key={i}>{render(x)}</li>)}</ul> : <Muted>none</Muted>}
+      {items.length ? <ul className="list-disc pl-5 text-sm grid gap-1">{items.slice(0, SHOWN).map((x, i) => <li key={i}>{render(x)}</li>)}</ul> : <Muted>none</Muted>}
+      {items.length > SHOWN && (
+        <details data-testid={`${testid}-more`}><summary className="cursor-pointer text-sm text-primary">Show all {items.length} ({items.length - SHOWN} more)</summary>
+          <ul className="list-disc pl-5 text-sm grid gap-1">{items.slice(SHOWN).map((x, i) => <li key={i}>{render(x)}</li>)}</ul>
+        </details>
+      )}
     </div>
   );
+  const worklist = [["impact-direct", "Directly affected", res.direct], ["impact-indirect", "Text-scan hints", res.indirect], ["impact-indirect-model", "AI judgement", res.indirect_model],
+    ["impact-unknown", "Unknown (not covered)", res.unknown], ["impact-excluded", "Excluded", res.excluded]] as const;
   const cov = (res.coverage ?? {}) as Rec;
   const why = [
     (cov.omitted_relation_jobs ?? []).length && "some relation jobs were unusable",
@@ -55,7 +70,12 @@ export function ImpactReport({ res, relationJobs = 0 }: { res: Rec; relationJobs
   ].filter(Boolean).join("; ");
   return (
     <div data-testid="impact-report" className="grid gap-3">
-      <Muted testid="impact-kinds">Three different kinds of evidence appear on this page. <strong>AI-extracted rules</strong> carry a quote that the server checked against the stored file. <strong>Text-scan hints</strong> come from a deterministic scan (a number or file name that also appears elsewhere): a place to look, not a proven dependency and not an AI finding. The <strong>simulation</strong> runs the real, pinned Harbor code with the changed configuration. Paths come from stored relations and a deterministic text scan of the pinned revision. A graph projection is not a causal dependency; UNKNOWN means not covered, not unaffected.</Muted>
+      <nav aria-label="Impact categories" data-testid="impact-worklist" className="flex flex-wrap gap-1.5 text-sm">
+        {worklist.filter(([id, , items]) => id !== "impact-indirect-model" || (items ?? []).length > 0).map(([id, label, items]) => (
+          <a key={id} href={`#${uid}${id}`} data-testid="impact-worklist-item" data-key={id} data-count={(items ?? []).length}
+            className="rounded-full border border-border px-2 py-0.5 hover:bg-surface-2" onClick={(e) => { e.preventDefault(); const el = document.getElementById(`${uid}${id}`); el?.scrollIntoView({ block: "start" }); el?.focus(); }}>
+            {label}: {(items ?? []).length}</a>))}
+      </nav>
       {section(tech ? "Direct" : "Directly affected", res.direct ?? [], (x) => <><strong>{lab(x.candidate_id)}</strong><Tech> path: {(x.path ?? []).join(" → ")}</Tech>{cite(x.evidence)}</>, "impact-direct")}
       {section(tech ? "Indirect (file level, text-scan hints)" : "Possibly affected: text-scan hints (file level, not an AI finding)", res.indirect ?? [], (x) => <><strong>{basename(x.logical_path)}</strong><Tech> rule {x.rule}; path: {(x.path ?? []).join(" → ")}</Tech>{cite(x.evidence)}</>, "impact-indirect")}
       {(res.indirect_model ?? []).length > 0 && section("Indirectly affected (AI judgement, re-checked by the server)", res.indirect_model, (x) => <><strong>{basename(x.logical_path)}</strong> quote: <span data-verbatim>{x.evidence_quote}</span></>, "impact-indirect-model")}
@@ -65,6 +85,7 @@ export function ImpactReport({ res, relationJobs = 0 }: { res: Rec; relationJobs
       <p data-testid="impact-coverage" data-traversal={String(!!cov.traversal_complete)} data-impact={String(!!cov.impact_complete)} className={`text-sm ${cov.impact_complete ? "text-muted" : "text-warning"}`}>
         {cov.impact_complete ? "Impact fully resolved (no UNKNOWN rule)." : `${cov.traversal_complete ? "Traversal finished, but the impact is NOT fully resolved" : "Traversal INCOMPLETE"}: ${why}`}
       </p>
+      <HowItWorks testid="impact-how" title="What kinds of evidence this page shows"><Muted testid="impact-kinds">Three different kinds of evidence appear on this page. <strong>AI-extracted rules</strong> carry a quote that the server checked against the stored file. <strong>Text-scan hints</strong> come from a deterministic scan (a number or file name that also appears elsewhere): a place to look, not a proven dependency and not an AI finding. The <strong>simulation</strong> runs the real, pinned Harbor code with the changed configuration. Paths come from stored relations and a deterministic text scan of the pinned revision. A graph projection is not a causal dependency; UNKNOWN means not covered, not unaffected.</Muted></HowItWorks>
     </div>
   );
 }
@@ -72,9 +93,6 @@ export function ImpactReport({ res, relationJobs = 0 }: { res: Rec; relationJobs
 export function SimulationReport({ h }: { h: Rec }) {
   const p = usePlain();
   const tech = useSession().mode === "technical";
-  const rows = ((h.changed ?? []) as Rec[]).slice(0, 60);
-  const invoices = h.case === "match";
-  const routes = Array.from(new Set([...Object.keys(h.by_route_before ?? {}), ...Object.keys(h.by_route_after ?? {})]));
   return (
     <div data-testid="sim-report" data-changed={String(h.changed_count)} data-unexplained={String(h.unexplained_changes)} className="grid gap-3">
       <h4 className="font-semibold flex items-center gap-2"><span className="rounded-full border border-border px-2 text-xs">DETERMINISTIC</span>Harbor itself, before vs after</h4>
@@ -83,35 +101,7 @@ export function SimulationReport({ h }: { h: Rec }) {
         <Tech> Baseline: {h.baseline_source?.logical_path ?? h.baseline_source?.kind}{h.baseline_source?.source_revision_id ? ` @ ${h.baseline_source.source_revision_id}` : ""}.</Tech>
       </p>
       <p className="text-sm">Edit(s): {((h.edits ?? []) as Rec[]).map((e) => `${e.from} → ${e.to}${e.no_op ? " (no change)" : ""}`).join("; ")}<Tech> <code>{((h.edits ?? []) as Rec[]).map((e) => e.path).join(", ")}</code></Tech></p>
-      <p data-testid="sim-summary" className="text-sm">
-        {h.transactions} public {invoices ? "invoices" : "requisitions"} simulated. {h.changed_count} change their outcome{h.unexplained_changes ? ` (${h.unexplained_changes} NOT explained by the edited ${tech ? "keys" : "values"})` : ` (all explained by the edited ${tech ? "keys" : "values"})`}.
-      </p>
-      {routes.length > 0 && (
-        <table className="text-sm border border-border w-full max-w-md">
-          <caption className="sr-only">Outcomes before and after the edit</caption>
-          <thead><tr className="bg-surface-2 text-left"><th className="p-2">Outcome</th><th className="p-2 tnum">Before</th><th className="p-2 tnum">After</th></tr></thead>
-          <tbody>{routes.map((r) => <tr key={r} className="border-t border-border"><td className="p-2">{tech ? r : humanize(r)}</td><td className="p-2 tnum">{h.by_route_before?.[r] ?? 0}</td><td className="p-2 tnum">{h.by_route_after?.[r] ?? 0}</td></tr>)}</tbody>
-        </table>
-      )}
-      {h.changed_count ? (
-        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Table (scrolls sideways on a small screen)">
-          <table data-testid="sim-changed" className="text-sm border border-border w-full">
-            <caption className="sr-only">Cases that change their outcome</caption>
-            <thead><tr className="bg-surface-2 text-left">{[invoices ? "Invoice" : "Request", "Amount JPY", "Detail", "Before", "After", "Cause"].map((t) => <th key={t} className="p-2">{t}</th>)}</tr></thead>
-            <tbody>
-              {rows.map((c) => (
-                <tr key={c.id} data-request={c.id} className="border-t border-border align-top">
-                  <td className="p-2">{c.id}</td><td className="p-2 tnum">{c.amount_jpy}</td><td className="p-2">{c.label}</td>
-                  <td className="p-2">{tech ? c.before.outcome : humanize(c.before.outcome)} <Tech>({c.before.reason}{c.before.due_date ? `, due ${c.before.due_date}` : ""})</Tech></td>
-                  <td className="p-2"><ArrowRight size={12} aria-hidden="true" className="inline mr-1" />{tech ? c.after.outcome : humanize(c.after.outcome)} <Tech>({c.after.reason}{c.after.due_date ? `, due ${c.after.due_date}` : ""})</Tech></td>
-                  <td className="p-2">{((c.cause ?? []) as Rec[]).length ? <><span>the edited value</span><Tech> {(c.cause as Rec[]).map((x) => `${x.config_key} ${x.from}->${x.to}${x.code_ref ? ` [${x.code_ref.file}:${x.code_ref.line}]` : ""}`).join("; ")}</Tech></> : "not explained"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : <Muted>No requisition changes its outcome under this edit.</Muted>}
-      {h.changed_count > rows.length && <Muted>Showing {rows.length} of {h.changed_count} changed cases.</Muted>}
+      <SimulationOutcome o={outcomeOf(h)} tech={tech} />
       {h.snapshot && <Tech><p data-testid="sim-snapshot" className="text-sm text-muted">{h.snapshot.statement}. Code {h.snapshot.code_sha256.slice(0, 10)}, input {h.snapshot.input_sha256.slice(0, 10)} ({(h.snapshot.input_files ?? []).join(", ")}), config {h.snapshot.config_baseline_sha256.slice(0, 10)} vs {h.snapshot.config_proposed_sha256.slice(0, 10)}.</p></Tech>}
       {(h.not_controlled ?? []).length > 0 && (
         <div data-testid="sim-not-controlled"><h4 className="font-semibold">The configuration does not control this behaviour</h4>

@@ -195,6 +195,10 @@ def test_simulation_shows_engine_result_and_checked_interpretation_and_the_risk_
     expect(run).to_contain_text("Exploratory: not calibrated against observed data")
     expect(run.get_by_test_id("sim-table")).to_be_visible()
     expect(run.get_by_test_id("sim-statement")).to_have_count(1)                              # the invented and the certainty statements were refused by the server
+    check = run.get_by_test_id("sim-interpretation-check")                                         # EUI-07: the badge counts the server's outcome (1 kept, 2 refused), never "all checked"
+    expect(check).to_have_attribute("data-kept", "1")
+    expect(check).to_have_attribute("data-refused", "2")
+    expect(check).to_contain_text("1 kept, 2 refused")
     expect(run.get_by_test_id("sim-interpretation")).to_contain_text("refused")
     assert run.get_by_test_id("sim-interpretation").get_attribute("data-origin") == "ai"             # EUI-01: model text and engine numbers carry separate origins
     expect(run.locator('section[aria-label="Engine result"]')).to_have_attribute("data-origin", "engine")

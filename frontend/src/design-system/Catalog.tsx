@@ -7,6 +7,11 @@ import { StatusBadge, type Status } from "@/components/StatusBadge";
 import { ResultSummary } from "@/components/decision/ResultSummary";
 import { NextActionPanel } from "@/components/decision/NextActionPanel";
 import { TrustStateSummary } from "@/components/decision/TrustStateSummary";
+import { FindingsTriage } from "@/components/decision/FindingsTriage";
+import { AIInterpretationPreview } from "@/components/decision/AIInterpretationPreview";
+import { SimulationOutcome } from "@/components/decision/SimulationOutcome";
+import { outcomeOf } from "@/components/decision/outcomeModel";
+import { filterCounts, matches, triage } from "@/features/questions/gapTriage";
 import { OriginSection, OriginTag } from "@/components/decision/Origin";
 import { useSession } from "@/session";
 import { TaskFrame } from "@/features/request-assistant/TaskFrame";
@@ -168,6 +173,34 @@ export function Catalog() {
           { key: "code", label: "Code", raw: "applied_pending_readback" }, { key: "behaviour", label: "Behaviour", raw: undefined },
         ]} limitations={["Each axis is separate. A committed knowledge change does not mean files or code changed."]} testid="catalog-axes" />
       </Block>
+
+      <Block id="cat-triage" title="Grouped findings with filter pills (FindingsTriage)">
+        <TriageExample />
+      </Block>
+
+      <Block id="cat-sim-outcome" title="Measured sample run (SimulationOutcome)">
+        <SimulationOutcome tech={false} o={outcomeOf({ transactions: 40, case: "route", changed_count: 2, unexplained_changes: 0, by_route_before: { manager_approval: 12 }, by_route_after: { manager_approval: 10, finance_review: 2 },
+          changed: [{ id: "REQ-1 (synthetic)", amount_jpy: 1200000, label: "Laptop", before: { outcome: "manager_approval", reason: "x" }, after: { outcome: "finance_review", reason: "y" }, cause: [{ config_key: "k", from: 1, to: 2 }] }] })} />
+      </Block>
+
+      <Block id="cat-ai-preview" title="Model reading before confirmation (AIInterpretationPreview)">
+        <AIInterpretationPreview testid="catalog-ai-preview" status="CLARIFY" heading="Part of your answer could not be read, so nothing is proposed from it yet." quoted="Finance approves, except during audit season (synthetic)"
+          fields={[{ key: "actor", label: "Who acts", value: "Finance", source: "from your words" }, { key: "condition", label: "When", value: null }]}
+          uncovered={["except during audit season"]} assumptions={["the amount is in JPY"]} limitations={["Confirmation is a separate control; this preview records nothing."]} />
+      </Block>
     </main>
+  );
+}
+
+const TRIAGE_SAMPLE = [{ gap_id: "s1", kind: "missing_actor", priority: "critical", q: "Who approves purchases above the limit? (synthetic)" },
+  { gap_id: "s2", kind: "conflicting_facts", q: "Two sources give different limits. (synthetic)" }, { gap_id: "s3", kind: "missing_actor", q: "Who files the receipt? (synthetic)" }];
+const TRIAGE_WORDS: Record<string, string> = { missing_actor: "Who acts?", conflicting_facts: "Sources disagree" };
+
+function TriageExample() {
+  const [filter, setFilter] = React.useState("");
+  return (
+    <FindingsTriage groups={triage(TRIAGE_SAMPLE, TRIAGE_WORDS)} filter={filter} onFilter={setFilter} testid="catalog-triage"
+      pills={filterCounts(TRIAGE_SAMPLE).map((p) => ({ ...p, label: p.key === "" ? "All" : p.key === "critical" ? "Needs an answer" : TRIAGE_WORDS[p.key.slice(5)] ?? "Other questions" }))}
+      visible={(g) => matches(g, filter)} itemKey={(g) => g.gap_id} render={(g) => <p className="text-sm rounded-md border border-border p-2">{g.q}</p>} />
   );
 }

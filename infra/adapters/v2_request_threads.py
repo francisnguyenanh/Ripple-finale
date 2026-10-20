@@ -114,7 +114,7 @@ def _settle(store, tenant, ws, m, current_auth) -> dict:
     st = rec.get("execution_status")
     if st == "COMPLETED" and isinstance(rec.get("execution_result"), dict):
         ans = {k: rec["execution_result"].get(k) for k in ("status", "outcome", "blocks", "rejected", "limitations", "next_actions", "as_of", "manifest_hash",
-                                                           "answer_schema", "checks_version", "locale", "context_version", "explained_fact_kinds")}
+                                                           "answer_schema", "checks_version", "locale", "context_version", "explained_fact_kinds", "blocker_coverage", "authority_accounting")}
     elif st in ("FAILED", "CANCELLED", "REJECTED"):
         ans = {"status": "unavailable" if st == "FAILED" else "cancelled", "reason": rec.get("execution_reason"), "blocks": [], "rejected": [], "limitations": []}
     else:
@@ -132,7 +132,7 @@ LEGACY_NOTE = ("This answer was checked by an earlier version of the assistant's
 def _legacy_view(answer: dict) -> dict:
     """AIG-01: an answer stored before typed authority (checks < 4) is shown as it was stored, except free blocks that state authority, which are withheld on read.
     The stored record is not rewritten and nothing is regenerated."""
-    if answer.get("checks_version") == ra.CHECKS_VERSION or answer.get("status") in ("unavailable", "cancelled"):
+    if answer.get("checks_version") in ra.COMPATIBLE_CHECKS or answer.get("status") in ("unavailable", "cancelled"):
         return answer
     blocks = answer.get("blocks") or []
     kept = [b for b in blocks if b.get("kind") == "authority" or not ra.free_text_authority(b.get("text") or "")]

@@ -3,7 +3,8 @@
 // "Ask" send one paid question (stated next to the buttons); "Edit question" only fills the composer. The first question creates the private thread in the same
 // idempotent call. "Go to" chips focus an existing control on the page and never submit it. Answers show their blocks as facts, interpretations or suggestions with the
 // facts they cite; refused blocks are counted, not shown. Who holds a step or may act ("Who acts") is a sentence written by the server from a checked assertion, never the
-// model's own wording (AIG-01); an answer stored under older checks says so and hides its free-text authority statements. An answer asked under different access is withheld until asked again. The assistant never acts: next steps are
+// model's own wording (AIG-01); a claim the task record contradicts is replaced by the record's sentence, marked corrected (checks/6);
+// an answer stored under older checks says so and hides its free-text authority statements. An answer asked under different access is withheld until asked again. The assistant never acts: next steps are
 // the request's own controls, named here, never submitted from the chat. "I agree" in the chat is not an approval.
 import * as React from "react";
 import { api, ApiError, errorText } from "@/lib/api";
@@ -22,7 +23,7 @@ const STATE: Record<string, { status: Status; label: string }> = {
 };
 const OUTCOME: Record<string, string> = { answered: "Answered", partial: "Partly answered", insufficient_context: "The facts do not answer this", out_of_scope: "Outside this request",
   refused: "The answer did not pass the checks" };
-const KIND: Record<string, string> = { authority: "Who acts", fact: "Fact", interpretation: "Interpretation", suggestion: "Suggestion" };
+const KIND: Record<string, string> = { authority: "Who acts", cause: "Why", fact: "Fact", interpretation: "Interpretation", suggestion: "Suggestion" };
 // what a cited fact is, for a Business reader (the fact id and its full text stay in the Technical view)
 const FACT_KIND: Record<string, string> = { state: "Stage", request: "Request", obligation: "Step", waiting: "Waiting", blocker: "Blocker", action: "Action", step: "Progress",
   axis: "Completion", rule_change: "Rule change", impact: "Impact", decision: "Decision", review_note: "Reviewer note" };
@@ -204,9 +205,9 @@ export function AssistantMessage({ m, technical, onCancel, onAction, actionable,
       {m.state === "withheld" ? <Muted>{String(m.reason)}</Muted> : null}
       {m.state === "unavailable" ? <Muted testid="assistant-unavailable">No answer was produced{ans?.reason ? ` (${String(ans.reason)})` : ""}. Nothing was concluded; you can ask again.</Muted> : null}
       {((ans?.blocks ?? []) as Rec[]).map((b, i) => (
-        <div key={i} data-testid="assistant-block" data-kind={String(b.kind)} className="grid gap-0.5">
+        <div key={i} data-testid="assistant-block" data-kind={String(b.kind)} data-corrected={b.corrected ? "true" : undefined} className="grid gap-0.5">
           <span>{b.kind === "authority" ? <OriginTag origin="source" label="Task record" /> : <OriginTag origin="ai" />}{" "}
-            <span className="text-xs text-muted">{KIND[String(b.kind)] ?? String(b.kind)}:</span> {String(b.text)}</span>
+            <span className="text-xs text-muted">{KIND[String(b.kind)] ?? String(b.kind)}{b.corrected ? " (corrected: the assistant's claim did not match the task record)" : ""}:</span> {String(b.text)}</span>
           {((b.fact_refs ?? []) as string[]).filter((r) => cites[r]).map((r) => (
             <span key={r} className="flex flex-wrap items-baseline gap-1">
               <Muted testid="assistant-citation">{technical ? `${r}: ${String(cites[r].text)}` : `${FACT_KIND[String(cites[r].kind)] ?? "Fact"}: ${String(cites[r].display ?? cites[r].text)}`}</Muted>

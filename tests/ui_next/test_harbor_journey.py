@@ -30,6 +30,17 @@ from tests.ui_next.textscan import assert_business_clean  # noqa: E402
 WAIT = 30000
 
 
+def _shot(page, name, el=None):                                                        # optional review capture (UI_NEXT_SHOTS, outside Git); never affects the assertions
+    import os
+    target = os.environ.get("UI_NEXT_SHOTS")
+    if target:
+        os.makedirs(target, exist_ok=True)
+        if el is not None:
+            el.scroll_into_view_if_needed()
+            page.wait_for_timeout(200)
+        page.screenshot(path=os.path.join(target, f"{name}.png"), full_page=False)
+
+
 @pytest.fixture
 def ch(env, monkeypatch):
     return build(env, monkeypatch, finguide_scope={"category": "all"})
@@ -121,6 +132,9 @@ def test_full_harbor_loop_in_the_new_interface_with_a_clean_business_view(env, c
         expect(tid(requester, "sim-summary")).to_contain_text("all explained by the edited")
         assert requester.locator("[data-testid=sim-changed] tbody tr").count() >= 1
         expect(tid(requester, "sim-runner")).to_contain_text("NOT a security boundary")
+        requester.evaluate("window.scrollTo(0, 0)")
+        _shot(requester, "ux08_changes_journey_top")
+        _shot(requester, "ux08_changes_impact_and_simulation", tid(requester, "impact-report"))
         expect(tid(requester, "preview-simulation")).to_have_attribute("data-state", "RAN")
         assert_business_clean(requester, "impact and simulation")
         assert tid(requester, "prep-manifest").count() == 0                     # EUI-08 guided preparation is off by default: the manual flow is unchanged
