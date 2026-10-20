@@ -265,6 +265,8 @@ class PostgresV2Store:
         sql += "\n" + (migrations_dir / "ext_t07_projection_checkpoints.sql").read_text(encoding="utf-8")
         sql += "\n" + (migrations_dir / "ext_t08_notifications.sql").read_text(encoding="utf-8")
         sql += "\n" + (migrations_dir / "ext_t09_code_pr_published.sql").read_text(encoding="utf-8")
+        sql += "\n" + (migrations_dir / "ext_t10_request_assistant.sql").read_text(encoding="utf-8")   # RQA-02 private assistant threads
+        sql += "\n" + (migrations_dir / "ext_t11_preparation_runs.sql").read_text(encoding="utf-8")    # EUI-08 guided preparation runs (feature off by default)
         with self._tx() as cur:
             cur.execute(sql)
 
@@ -3423,6 +3425,39 @@ class PostgresV2Store:
                     VALUES (%s,%s,%s,%s,'RESERVED')""",
                     (tenant_id, workspace_id, job_id, actual))
         return actual
+
+    ADJUSTMENT_PREFIX = "adjustment:"
+
+    def record_cost_adjustment(self, tenant_id: str, workspace_id: str, adjustment_id: str, cost_usd, *, reason: str) -> dict:
+        """Book a cost the provider charged that no attempt recorded (e.g. usage lost before it was booked, priced fail-closed) into THE ledger that every
+        reservation sums (`create_job` re-sums the whole project under the project lock), so every live entry point is held to the allowance net of it.
+        One SETTLED row `adjustment:<id>`; idempotent: the same id and amount again changes nothing, a different amount is refused (history is never
+        rewritten). Returns {"created", "cost_usd", "job_id"}."""
+        import re
+        from decimal import Decimal
+        if not re.fullmatch(r"ADJ-[0-9]{8}-[A-Za-z0-9-]{1,40}", str(adjustment_id)):
+            raise ValueError("adjustment id must look like ADJ-YYYYMMDD-<tag>")
+        amount = Decimal(str(cost_usd))
+        if not amount.is_finite() or amount <= 0:
+            raise ValueError("an adjustment is a positive, finite amount")
+        if not str(reason or "").strip():
+            raise ValueError("an adjustment needs a reason")
+        job_id = self.ADJUSTMENT_PREFIX + adjustment_id
+        with self._tx() as cur:
+            cur.execute("SELECT project_id FROM v2_workspaces WHERE tenant_id=%s AND workspace_id=%s", (tenant_id, workspace_id))
+            row = cur.fetchone()
+            if row is None:
+                raise TenantScopeError(f"{tenant_id}/{workspace_id}: unknown workspace")
+            cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (f"v2-project-budget:{tenant_id}:{row[0]}",))
+            cur.execute("""INSERT INTO v2_job_cost_ledger (tenant_id, workspace_id, job_id, cost_usd, entry_state, settled_at)
+                VALUES (%s,%s,%s,%s,'SETTLED',now()) ON CONFLICT (tenant_id, workspace_id, job_id) DO NOTHING""", (tenant_id, workspace_id, job_id, str(amount)))
+            created = cur.rowcount == 1
+            if not created:
+                cur.execute("SELECT cost_usd FROM v2_job_cost_ledger WHERE tenant_id=%s AND workspace_id=%s AND job_id=%s", (tenant_id, workspace_id, job_id))
+                existing = Decimal(cur.fetchone()[0])
+                if existing != amount:
+                    raise StoreConflict(f"adjustment {adjustment_id} is already booked at {existing}; it is never rewritten")
+        return {"created": created, "cost_usd": str(amount), "job_id": job_id}
 
     def begin_provider_attempt(self, tenant_id: str, workspace_id: str, job_id: str, attempt_key: str, *,
                                ceiling_usd, context: Mapping[str, object]) -> None:

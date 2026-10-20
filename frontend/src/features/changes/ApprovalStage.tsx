@@ -10,6 +10,7 @@ import { useAction } from "@/lib/useAction";
 import { useNotify } from "@/lib/notify";
 import { useSession } from "@/session";
 import { ExplanationCard } from "@/features/explain/ExplanationCard";
+import { ScopeGap } from "./RequestCard";
 import { fmtForm } from "./RequestCard";
 import { DecisionBasis, decisionBasis } from "./DecisionBasis";
 import { ReviewNotes, useReviewNotes } from "./ReviewNotes";
@@ -98,6 +99,7 @@ export function ApprovalStage() {
         {stale && <Callout tone="danger">This approval bundle was computed before the workspace changed. It cannot be approved as shown; prepare a new bundle.</Callout>}
         {s.can("change.approve") && decState === "NONE" && !(d.approval?.requested_by && d.approval.requested_by === s.account) && (
           <div className="grid gap-2">
+            {d.intent && <ScopeGap it={d.intent} where="Approving approves the change as scoped." />}
             <Field label="Decision reason"><TextArea data-testid="field-decision-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
             <div className="flex flex-wrap gap-2">
               {([["approve", "Approve", "action-approve", true, Check], ["reject", "Reject", "action-reject", false, X]] as const).map(([action, label, testid, primary, Icon]) => (

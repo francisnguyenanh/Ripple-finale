@@ -1,6 +1,6 @@
 """Audience variants of generated documents (extension AIX-D1):
 
-POST /v2/business/documents/{artifact_id}/variants      {workspace_id, audience, locale?}   request (or find) the variant; base permission + redaction rechecked, `ai.use`   human actor
+POST /v2/business/documents/{artifact_id}/variants      {workspace_id, audience, locale?, attempt?}   request (or find) the variant; base permission + redaction rechecked, `ai.use`   human actor
 GET  /v2/business/documents/{artifact_id}/variants      ?workspace_id=                      the variants of one base document (states)
 GET  /v2/business/documents/variants/{variant_id}       ?workspace_id=                      state (never the bytes)
 GET  /v2/business/documents/variants/{variant_id}/content ?workspace_id=                    the immutable Markdown bytes
@@ -63,6 +63,9 @@ async def request_variant(request: Request, artifact_id: str):
     locale = body.get("locale")
     if locale is not None and not (isinstance(locale, str) and 1 <= len(locale) <= 8):
         return _error("locale invalid", 400)
+    attempt = body.get("attempt", 1)
+    if not (isinstance(attempt, int) and not isinstance(attempt, bool) and 1 <= attempt <= 3):          # a new attempt after a failed variant (same bounds as mining)
+        return _error("attempt must be 1, 2 or 3", 400)
 
     def action(store, authority):
         _authorized_state(store, authority, body["workspace_id"], artifact_id)
@@ -72,7 +75,7 @@ async def request_variant(request: Request, artifact_id: str):
         provider_gate.require_provider(variants.KIND)
         limit, reservation = _quota_for(variants.KIND)
         out = variants.request_variant(store, authority["tenant_id"], body["workspace_id"], artifact_id=artifact_id, audience=audience, locale=locale, requested_by=authority["account_id"],
-                                       limit=limit, reservation=reservation)
+                                       limit=limit, reservation=reservation, attempt=attempt)
         if out["freshness"] == "generating":
             from infra import ai_admission
             ai_admission.admit(store, authority["tenant_id"], body["workspace_id"], out["variant_id"], variants.KIND, authority)

@@ -200,3 +200,32 @@ def test_condition_and_exception_changes_find_their_rules_files_and_recommendati
         assert any(a["kind"] == "update_rule" and a["rule_id"] == rule for a in rep["proposed_actions"]) and any(a["kind"].startswith("recommend_") for a in rep["proposed_actions"])
         assert {s["status"] for s in rep["simulation"]} == {"NOT_SIMULATED"} and "no simulation adapter supports" in rep["simulation"][0]["reason"]
     assert any(a["kind"] == "recommend_code" and "routing.py" in a["path"] for a in report([exc], list(RULES.values()))["proposed_actions"])
+
+
+def test_two_versions_of_one_rule_are_grouped_for_the_reader_with_their_links_and_same_titles_are_never_merged():
+    a = make("rule-a", "concept-c1", actor="role-a", value=5)
+    b = make("rule-b", "concept-c1", actor="role-a", value=9)                                     # conflicts with the changed rule: counterevidence
+    bt = make("rule-b-target", "concept-c1", actor="role-z", value=9, authority="TARGET")         # its accepted target version, reached as a lead
+    twin = make("rule-c", "concept-c1", actor="role-z", value=11)                                # another rule that only shares the title
+    for r in (b, bt, twin):
+        r["title"] = "Same title"
+    rep = report([op("set_value", "rule-a", {"value": 5, "unit": "JPY"}, {"value": 6, "unit": "JPY"})], [a, b, bt, twin])
+    links = {i["rule_id"]: i["link"] for i in rep["affected_rules"]}
+    assert links["rule-b"] == "counterevidence" and links["rule-b-target"] in ("inferred_dependency", "confirmed_link") and "rule-c" in links   # the stored report: one item per id
+    out = bi.render(rep, mode="technical", can_read_evidence=True)
+    same = [e for e in out["affected_rules"] if e["title"] == "Same title"]
+    assert len(same) == 2                                                                       # rule-b (two versions) and rule-c: never merged by title
+    grouped = next(e for e in same if e.get("versions"))
+    assert grouped["link"] == "counterevidence" and grouped["severity"] == "HIGH"                 # the headline keeps the counterevidence
+    assert [(v["view"], v["link"]) for v in grouped["versions"]] == [("observed", "counterevidence"), ("target", links["rule-b-target"])]
+    assert not next(e for e in same if not e.get("versions")).get("versions")
+    tech = {i["rule_id"]: i for i in out["technical"]["affected"]}
+    assert tech["rule-b-target"]["logical_rule_id"] == "rule-b" and tech["rule-b"]["path"] and tech["rule-b-target"]["path"]   # provenance per version kept
+    assert bi.render(rep, mode="business", can_read_evidence=False)["affected_rules"] == [{k: v for k, v in e.items()} for e in out["affected_rules"]]
+
+
+def test_the_understanding_lists_each_related_rule_once_per_logical_rule_never_merged_by_title():
+    from infra.v2_business_routes import _related_titles
+    result = {"write_scope": ["rule-a"], "read_scope": ["rule-a", "rule-b", "rule-b-target", "rule-c"]}
+    titles = {"rule-a": "A", "rule-b": "Same title", "rule-b-target": "Same title", "rule-c": "Same title"}
+    assert _related_titles(result, titles) == ["Same title (observed in the sources and as the accepted target)", "Same title"]

@@ -49,7 +49,7 @@ def _row(store, tenant_id, workspace_id, variant_id):
             "generated_by": r[14], "created_at": r[15].isoformat()}
 
 
-def request_variant(store, tenant_id, workspace_id, *, artifact_id: str, audience: str, locale: str | None, requested_by: str, limit: int, reservation) -> dict:
+def request_variant(store, tenant_id, workspace_id, *, artifact_id: str, audience: str, locale: str | None, requested_by: str, limit: int, reservation, attempt: int = 1) -> dict:
     """Create (or find) the variant job of one available base document. The caller has already checked the base permissions and `ai.use`."""
     if audience not in dv.AUDIENCES:
         raise BusinessKnowledgeRefused("invalid_audience", f"audience must be one of {', '.join(dv.AUDIENCES)}")
@@ -60,7 +60,7 @@ def request_variant(store, tenant_id, workspace_id, *, artifact_id: str, audienc
     frozen, sha = load_config()
     model_id = pinned_model()
     loc = locale or base["locale"]
-    vid = dv.variant_id_for(artifact_id, audience, loc, sha, model_id)
+    vid = dv.variant_id_for(artifact_id, audience, loc, sha, model_id, attempt=attempt)
     existing = _row(store, tenant_id, workspace_id, vid)
     if existing is None:
         try:

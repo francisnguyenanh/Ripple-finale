@@ -205,6 +205,12 @@ from infra.worker.live_analysis import LiveAnalysisExecutor
 from infra.worker.proposal import ProposalExecutor
 from infra.worker.ma_sandbox import MaSandboxExecutor
 from infra.worker.document_variant import DocumentVariantExecutor
+from infra.worker.advisory_memo import RiskMemoExecutor, SynthesisMemoExecutor
+from infra.worker.ci_semantic_drift import SemanticDriftExecutor
+from infra.worker.source_correspondence import SourceCorrespondenceExecutor
+from infra.worker.code_diff_proposal import CodeDiffProposalExecutor
+from infra.worker.roi_analyst import RoiAnalystExecutor
+from infra.worker.request_assistant import RequestAssistantExecutor
 from infra.worker.knowledge_mining import KnowledgeMiningExecutor
 from infra.worker.gap_interview_question import GapInterviewQuestionExecutor
 from infra.worker.ma_simulate import MaSimulateExecutor
@@ -258,6 +264,13 @@ BUILTIN_EXECUTORS: dict = {
     "ma.simulate": MaSimulateExecutor(),
     # Extension AIX-D1: one audience variant of a generated document through the pinned role document.wording (1 provider call; server-checked wording or labelled fallback)
     "document.variant": DocumentVariantExecutor(),
+    "change.risk_memo": RiskMemoExecutor(),
+    "ma.synthesis_memo": SynthesisMemoExecutor(),
+    "ci.semantic_drift": SemanticDriftExecutor(),
+    "source.correspondence": SourceCorrespondenceExecutor(),
+    "code.diff_proposal": CodeDiffProposalExecutor(),
+    "roi.analyst": RoiAnalystExecutor(),
+    "request.qa": RequestAssistantExecutor(),
     # Extension AIX-K1: one rule group compared for typed conflict hypotheses (pinned role knowledge.mining; 1 provider call; server-verified cases)
     "knowledge.mining": KnowledgeMiningExecutor(),
     # Extension AIX-K2: the model questioner of an interview session (pinned role gap.interview; 1 provider call; server-grounded with a deterministic fallback)
@@ -475,6 +488,19 @@ def _cost_basis(calls_used: int, outcome: ExecutionOutcome | None) -> str:
     return "provider_usage"
 
 
+def _answered_usage(ctx, calls_used: int) -> ExecutionOutcome | None:
+    """The usage every call of this attempt reported before the executor refused its result (recorded by `explain.call_pinned_json`). Only when EACH call used is
+    recorded; otherwise None, and the attempt stays priced fail-closed. A missing token side stays missing (priced at its ceiling)."""
+    rows = (getattr(ctx, "request_context", None) or {}).get("provider_usage") or []
+    if not calls_used or len(rows) != calls_used:
+        return None
+    def total(key):
+        vals = [r.get(key) for r in rows]
+        return None if any(v is None for v in vals) else sum(vals)
+    return ExecutionOutcome(result={}, model_id=rows[-1].get("model_id"), input_tokens=total("input_tokens"), output_tokens=total("output_tokens"),
+                            thought_tokens=total("thought_tokens") if any(r.get("thought_tokens") is not None for r in rows) else None)
+
+
 def _note_failure(attempt: dict, exc: BaseException, calls_used: int, outcome: ExecutionOutcome | None) -> None:
     """Keep the safe provider metadata and the cost basis of a failed attempt on its row (no prompt, no source text)."""
     rc = attempt["request_context"]
@@ -638,6 +664,7 @@ def execute_admitted_claim(store: PostgresV2Store, tenant_id: str, workspace_id:
             tenant_id, workspace_id, job_id, f"{live_prefix}:inflight:{n}", ceiling_usd=per_call_worst if per_call_worst is not None else Decimal("0"),
             context={"outbox_event_id": claim.id, "fencing_token": claim.fencing_token, "claim_attempt": claim.attempts, "worker_id": worker_id, "call": n,
                      "cost_basis": "ceiling_until_usage_is_recorded"})
+    ctx = None
     try:
         ctx = ExecutionContext(store=store, job=job, config=config,
                                lease=(claim.id, worker_id, claim.fencing_token))
@@ -657,7 +684,7 @@ def execute_admitted_claim(store: PostgresV2Store, tenant_id: str, workspace_id:
         return "LEASE_LOST"
     except NonRetryableExecutionError as exc:
         # a result rejected AFTER the provider answered carries the usage the provider reported: settle that, not the worst-case estimate
-        used_outcome = getattr(exc, "usage_outcome", None)
+        used_outcome = getattr(exc, "usage_outcome", None) or _answered_usage(ctx, calls.used)
         estimate, cost = _attempt_cost(config, calls.used, used_outcome, job_kind or job["kind"])
         attempt = _base_attempt(claim, worker_id, job, executor, request, stored)
         attempt.update(outcome="FAILED", reason=str(exc), retryable=False,
@@ -720,7 +747,8 @@ def execute_admitted_claim(store: PostgresV2Store, tenant_id: str, workspace_id:
                    provider_calls=calls.used, input_tokens=outcome.input_tokens,
                    output_tokens=outcome.output_tokens, cost_usd=cost,
                    cost_estimate_usd=estimate, duration_ms=duration_ms)
-    written = _terminal("COMPLETED", None, attempt, result=outcome.result)
+    from infra.worker import ai_outcome
+    written = _terminal("COMPLETED", None, attempt, result=ai_outcome.annotate(job_kind or job["kind"], outcome.result, calls.used))   # what the model contributed (LLM-00)
     if written == "COMPLETED":
         _checks_for_new_readings(store, tenant_id, workspace_id, job)
         return "DONE"

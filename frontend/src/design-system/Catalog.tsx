@@ -2,12 +2,15 @@
 // Add an example here when a new shared variant or component gets its first real consumer (docs/design-system/COMPONENT_GUIDELINES.md).
 import * as React from "react";
 import { Button } from "@/components/ui/button";
-import { Callout, Field, Muted, StatePill, TextArea, TextInput } from "@/components/bits";
+import { Callout, Field, HowItWorks, Muted, StatePill, TextArea, TextInput } from "@/components/bits";
 import { StatusBadge, type Status } from "@/components/StatusBadge";
 import { ResultSummary } from "@/components/decision/ResultSummary";
 import { NextActionPanel } from "@/components/decision/NextActionPanel";
 import { TrustStateSummary } from "@/components/decision/TrustStateSummary";
+import { OriginSection, OriginTag } from "@/components/decision/Origin";
 import { useSession } from "@/session";
+import { TaskFrame } from "@/features/request-assistant/TaskFrame";
+import { AssistantMessage } from "@/features/request-assistant/RequestAssistant";
 
 const STATUSES: Status[] = ["loading", "empty", "queued", "running", "waiting", "stale", "partial", "failed", "success", "info", "simulated"];
 const STATES = ["COMPLETED", "CONFIRMED", "PENDING_APPROVAL", "PARTIAL", "RUNNING", "FAILED", "STALE", "NOT_STARTED", "SOME_NEW_STATE"];
@@ -22,6 +25,39 @@ const noop = () => undefined;
 function Block({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
   return <section aria-labelledby={id} data-testid={`catalog-${id}`} className="grid gap-3"><h2 id={id} className="text-lg font-semibold">{title}</h2>{children}</section>;
 }
+
+// Synthetic task views (contract ripple-request-task/1) and assistant messages: illustrative only, never read from a server.
+const STEPS = (states: Record<string, string>, labels: [string, string][], par: string[] = []) => labels.map(([code, label]) => ({ code, label, state: states[code] ?? "future", ...(par.includes(code) ? { parallel_group: "after_knowledge_decision" } : {}) }));
+const BC_STEPS: [string, string][] = [["understand", "Request understood and confirmed"], ["draft", "Draft of the knowledge change"], ["clarify", "Open questions answered"], ["knowledge_decision", "Knowledge decision"],
+  ["commit", "Knowledge committed"], ["file_decision", "File edits decided"], ["source_apply", "Source edits applied"], ["readback", "Source read back"]];
+const TASK_APPROVER = {
+  title: "Raise the standard manager approval threshold from 1,000,000 to 1,500,000 JPY.", as_of: "2026-10-20T10:00:00Z", request_ref: { family: "business_change", id: "chg-catalog-1" },
+  stage: { code: "AWAITING_DECISION", label: "Waiting for the knowledge decision" }, blockers: [], features: { request_assistant: "off" },
+  input_refs: [{ label: "Rule before / after and the proposed relation updates" }],
+  obligations: [{ code: "decide_knowledge", label: "Decide the knowledge change (approve, reject or request changes)", required: true, holder_label: "an approver (not the person who asked)", eligible_me: true, obligation_me: true, state: "current", step: "knowledge_decision" },
+    { code: "decide_file_writes", label: "Decide the proposed file edits", required: true, holder_label: "an approver", eligible_me: true, obligation_me: false, state: "future", step: "file_decision" }],
+  waiting_on: [], expected_deliverables: [{ code: "knowledge_decision", label: "A recorded knowledge decision (approve, reject or request changes) with a reason; approving does not commit anything" },
+    { code: "later", later: true, label: "Later, by other steps: the commit by a knowledge owner; the decision on the proposed file edits" }],
+  stages: STEPS({ understand: "done", draft: "done", clarify: "done", knowledge_decision: "current" }, BC_STEPS, ["commit", "file_decision"]),
+};
+const TASK_JUDGE = {
+  title: "Manager approval limit: 1,000,000 JPY to 500,000 JPY", as_of: "2026-10-20T10:00:00Z", request_ref: { family: "intent_flow", id: "intent-catalog-2" },
+  stage: { code: "ASK_DRAFT", label: "Confirmed request, no AI draft yet" }, blockers: [], features: { request_assistant: "off" }, input_refs: [{ label: "The confirmed request" }],
+  obligations: [{ code: "ask_draft", label: "Ask for the AI draft of the change", required: true, holder_label: "the requester", eligible_me: true, obligation_me: false, state: "current", step: "draft", reason: "the requester is asked; your role may also do it" }],
+  waiting_on: [{ holder: "requester", holder_label: "the requester", code: "ask_draft", step: "draft" }],
+  expected_deliverables: [{ code: "draft", label: "An AI draft of the change with checked citations" }],
+  stages: STEPS({ conversation: "done", intent: "done", draft: "current" }, [["conversation", "Request stated in a conversation"], ["intent", "Request confirmed"], ["draft", "AI draft"], ["proposal", "Proposal prepared"]]),
+};
+const SAMPLE_MESSAGES: Record<string, unknown>[] = [
+  { message_id: "m1", state: "answered", question: "What should I do next?", current: true,
+    answer: { status: "answered", blocks: [{ kind: "authority", text: "You are asked to do this now: Decide the knowledge change (approve, reject or request changes).", fact_refs: ["F3"] }], checks_version: "request-assistant-checks/4",
+      next_actions: [{ label: "Decide the knowledge change (approve, reject or request changes)" }], limitations: [], rejected: [] },
+    citations: { F3: { kind: "obligation", text: "Decide the knowledge change (approve, reject or request changes) - required, held by you, state current (you may do it: yes).", display: "Decide the knowledge change (approve, reject or request changes): you are asked to do this now." } } },
+  { message_id: "m2", state: "answered", question: "Can you approve it for me?", current: false, as_of: "2026-10-19T09:00:00Z",
+    answer: { status: "answered", blocks: [{ kind: "interpretation", text: "A decision is made only with the request's own controls; nothing was approved here.", fact_refs: ["F7"] }], next_actions: [], limitations: [], rejected: [{ index: 1 }] },
+    citations: { F7: { kind: "action", text: "Action 'Decide the knowledge change': allowed for you and it is the step you are asked to do now.", display: "Decide the knowledge change: your step now." } } },
+  { message_id: "m3", state: "withheld", question: "Who else asked about this?", reason: "Withheld: your access changed since this was asked. Ask again to get an answer under your current access." },
+];
 
 export function Catalog() {
   const s = useSession();
@@ -99,6 +135,31 @@ export function Catalog() {
         </ResultSummary>
         <NextActionPanel reason="Review the open question, then confirm or answer it." actorLabel="You" action={<Button variant="primary" onClick={noop}>Open</Button>} testid="catalog-next" />
         <NextActionPanel reason="A second approver is required; you requested this change." blocked testid="catalog-next-blocked" />
+      </Block>
+
+      <Block id="cat-task" title="Request task frame (TaskFrame): asked vs may-but-not-asked, whole request, parallel steps">
+        <Muted>Synthetic task views passed as `shared` (no request). The launcher is off here because the assistant panel reads the server; its messages are shown below.</Muted>
+        <TaskFrame ws="ws-catalog" family="business_change" id="chg-catalog-1" shared={{ tv: TASK_APPROVER, err: null }} />
+        <TaskFrame ws="ws-catalog" family="intent_flow" id="intent-catalog-2" shared={{ tv: TASK_JUDGE, err: null }} />
+      </Block>
+
+      <Block id="cat-assistant" title="Request assistant answers (AssistantMessage)">
+        <ol className="grid gap-3 text-sm rounded-lg border border-border bg-surface p-4">
+          {SAMPLE_MESSAGES.map((m) => <AssistantMessage key={String(m.message_id)} m={m} technical={s.mode === "technical"} />)}
+        </ol>
+      </Block>
+
+      <Block id="cat-origin" title="Where content comes from (OriginTag, OriginSection): AI vs source vs engine; origin is not validation">
+        <p className="flex flex-wrap items-center gap-2 text-sm"><OriginTag origin="ai" /> <OriginTag origin="source" /> <OriginTag origin="engine" /> <OriginTag origin="source" label="Task record" /> <OriginTag origin="something-else" /></p>
+        <OriginSection origin="engine" title="Engine result (deterministic, seeded; not a forecast)" testid="catalog-origin-engine">
+          <Muted>Baseline 12.0 days, scenario 9.5 days, change -2.5 days (synthetic).</Muted>
+        </OriginSection>
+        <OriginSection origin="ai" title="AI interpretation (every number checked against the engine result)" testid="catalog-origin-ai">
+          <Muted>The shorter approval path removes about 2.5 days of waiting in this sample (synthetic).</Muted>
+        </OriginSection>
+        <p className="text-sm">A file missing from your upload counts as <strong>deleted</strong> from the new version. (A consequence: stays visible.)</p>
+        <HowItWorks testid="catalog-how"><Muted>Routine walkthrough, collapsed by default (synthetic).</Muted></HowItWorks>
+        <Callout tone="info">An AI label never means correct, and a source or engine label never means accepted or approved: checks and human confirmations have their own displays.</Callout>
       </Block>
 
       <Block id="cat-axes" title="Completion axes (TrustStateSummary)">

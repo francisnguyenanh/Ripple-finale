@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 from infra.adapters.v2_postgres import ConcurrencyLimitExceeded, JobCeilingExceeded, PersonQuotaExceeded
 
 # Job kinds that call a model. (apply/review/simulation/impact/proposal/relation/finding are deterministic.)
-AI_KINDS = frozenset({"extraction", "analysis", "change.draft", "gap.answer", "sim.analysis", "explain", "intent.interpret", "impact.judge", "knowledge.qa", "change.understand", "change.impact_deps", "change.draft_guidance", "knowledge.gap_proposals", "gap.answer_interpret", "ma.specialist", "document.variant", "knowledge.mining", "gap.interview_question"})
+AI_KINDS = frozenset({"extraction", "analysis", "change.draft", "gap.answer", "sim.analysis", "explain", "intent.interpret", "impact.judge", "knowledge.qa", "change.understand", "change.impact_deps", "change.draft_guidance", "knowledge.gap_proposals", "gap.answer_interpret", "ma.specialist", "document.variant", "knowledge.mining", "gap.interview_question", "change.risk_memo", "ma.synthesis_memo", "ci.semantic_drift", "source.correspondence", "code.diff_proposal", "roi.analyst", "request.qa"})
 
 
 class ProviderDisarmed(ConcurrencyLimitExceeded):

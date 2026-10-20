@@ -59,6 +59,11 @@ export function BusinessChange({ ws }: { ws: string }) {
     const r = await run(() => api<Rec>("POST", "/v2/business/changes", { workspace_id: ws, request: text.trim() }));
     if (r) { setCid(r.change_id as string); setText(""); setDone(null); }
   };
+  // H-U-03: the person says what an edit of the losing side of a decided conflict means; the same request is sent again with that choice
+  const choose = async (ruleId: string, intent: string) => {
+    const r = await run(() => api<Rec>("POST", "/v2/business/changes", { workspace_id: ws, request: String(data?.request ?? ""), decided_conflict_intent: { rule_id: ruleId, intent } }));
+    if (r) { setCid(r.change_id as string); setDone(null); }
+  };
   const confirm = async () => {
     if (!cid || !u) return;
     const r = await run(() => api<Rec>("POST", `/v2/business/changes/${q(cid)}/confirm`, { workspace_id: ws, preview_hash: u.preview_hash }));
@@ -88,6 +93,21 @@ export function BusinessChange({ ws }: { ws: string }) {
           {((u.refused ?? []) as Rec[]).map((r, i) => <Callout key={i} tone="warn" testid="chg-refused">“{r.quote as string}”: {r.why as string}</Callout>)}
           {((u.already_the_case ?? []) as string[]).length > 0 && <Muted testid="chg-noop">Already the case: {(u.already_the_case as string[]).join("; ")}</Muted>}
           {((u.questions ?? []) as string[]).length > 0 && <div data-testid="chg-questions"><p className="text-sm font-medium">To go on, please say:</p><ul className="list-disc pl-5 text-sm">{(u.questions as string[]).map((t, i) => <li key={i}>{t}</li>)}</ul></div>}
+          {((u.decided_conflict_choices ?? []) as Rec[]).map((c) => (
+            <div key={c.rule_id as string} data-testid="chg-intents" className="rounded-md border border-border p-3 grid gap-2">
+              <p className="text-sm font-medium">What do you mean by “{c.quote as string}”?</p>
+              <ul className="grid gap-2">
+                {((c.options ?? []) as Rec[]).map((o) => (
+                  <li key={o.intent as string} data-testid="chg-intent" data-intent={o.intent as string} data-available={o.available ? "true" : "false"} className="grid gap-1">
+                    <span>{o.label as string}</span>
+                    <Muted>{o.next as string}{o.available ? "" : ` Not handled here: ${String(o.reason ?? "").replace(/^needs_human: /, "")}`}</Muted>
+                    {o.available && canAsk ? <div><Button data-testid="chg-intent-choose" disabled={pending} onClick={() => void choose(c.rule_id as string, o.intent as string)}>Use this</Button></div> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          {((u.retargeted ?? []) as Rec[]).length > 0 && <Callout tone="info" testid="chg-retargeted">You chose to propose changing the decided rule ({((u.retargeted as Rec[]).map((r) => String(r.to))).join(", ")}). The earlier decision stays in force until this change is approved.</Callout>}
           {((u.also_affected_to_check ?? []) as string[]).length > 0 && <Muted testid="chg-affected">Related rules to check: {(u.also_affected_to_check as string[]).join("; ")}</Muted>}
           <Muted>{u.nothing_applied as string}</Muted>
           {tech && <Tech><div data-testid="chg-technical" className="rounded-md border border-border p-3 text-sm grid gap-1">

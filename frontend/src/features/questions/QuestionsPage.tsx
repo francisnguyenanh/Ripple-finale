@@ -4,7 +4,7 @@ import * as React from "react";
 import { CheckCircle2, ChevronDown, ChevronRight, Quote } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Denied, Callout, Card, ClaimLabel, ClaimTitle, Field, Muted, Path, StatePill, Tech, TechField, TextArea, Select } from "@/components/bits";
+import { Denied, Callout, Card, ClaimLabel, ClaimTitle, Field, HowItWorks, Muted, Path, StatePill, Tech, TechField, TextArea, Select } from "@/components/bits";
 import { basename, humanize, newId, ruleTitle, scopeText, valueText } from "@/lib/fmt";
 import { useAction } from "@/lib/useAction";
 import { useNotify } from "@/lib/notify";
@@ -19,6 +19,7 @@ import { BusinessGaps } from "./BusinessGaps";
 import { BusinessAsk } from "./BusinessAsk";
 import { BusinessChange } from "./BusinessChange";
 import { BusinessRules } from "./BusinessRules";
+import { BusinessUnlinked } from "./BusinessUnlinked";
 import { SectionNav } from "@/components/SectionNav";
 import { ALL_SECTIONS, GROUP_LABEL, SECTIONS, selectedSection, visible, type SectionId } from "./sections";
 
@@ -220,9 +221,13 @@ function Versions({ ws, data, onDone }: { ws: string; data: Data; onDone: () => 
       <Card title="Where the knowledge stands" testid="knowledge-explain">
         <ul className="list-disc pl-5 text-sm grid gap-1">
           <li data-testid="km-read"><strong>{claimsN} rule(s) read by the AI from your files.</strong> {decided} confirmed by a person, {Math.max(claimsN - decided, 0)} waiting.{claimsN ? "" : " Nothing has been read yet: analyse a file first."}</li>
-          <li data-testid="km-decisions"><strong>{decided} decision(s) by people.</strong> A decision is one person confirming one rule or answer. It changes no document.</li>
-          <li data-testid="km-accepted"><strong>{h.knowledge_revision_id ? "A knowledge version is accepted." : "No knowledge version is accepted yet."}</strong> Accepting a version is a separate step: it says "this confirmed set is what the system answers from". Confirming rules does not accept a version by itself.</li>
+          <li data-testid="km-decisions"><strong>{decided} decision(s) by people.</strong></li>
+          <li data-testid="km-accepted"><strong>{h.knowledge_revision_id ? "A knowledge version is accepted." : "No knowledge version is accepted yet."}</strong> Confirming rules does not accept a version by itself.</li>
         </ul>
+        <HowItWorks testid="knowledge-how">
+          <p>A decision is one person confirming one rule or answer. It changes no document.</p>
+          <p>Accepting a version is a separate step: it says "this confirmed set is what the system answers from".</p>
+        </HowItWorks>
         <TechField label="knowledge revision" value={h.knowledge_revision_id ?? "none"} />
         <TechField label="decision epoch" value={h.decision_epoch ?? ""} />
       </Card>
@@ -322,6 +327,7 @@ export function QuestionsPage() {
         <section aria-labelledby="q-rules" hidden={!visible(sel, "rules")} data-testid="qsection-rules" className="grid gap-4">
           <h2 id="q-rules" className="text-lg font-semibold">Business rules</h2>
           <BusinessRules ws={ws} />
+          <BusinessUnlinked ws={ws} />
         </section>
         <section aria-labelledby="q-biz" hidden={!visible(sel, "gaps")} data-testid="qsection-gaps" className="grid gap-4">
           <h2 id="q-biz" className="text-lg font-semibold">Business questions</h2>

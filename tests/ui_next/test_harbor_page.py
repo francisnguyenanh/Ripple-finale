@@ -1,4 +1,4 @@
-"""Harbor try-out page (browser; no provider): one requisition through the pinned Harbor code under two versions of the configuration, side by side."""
+"""Sample process trial page (Harbor example) (browser; no provider): one requisition through the pinned Harbor code under two versions of the configuration, side by side."""
 from __future__ import annotations
 
 import pytest
@@ -40,7 +40,7 @@ def test_a_requisition_is_routed_by_the_pinned_code_and_the_page_says_what_it_is
                 assert "app/routing.py" in page.get_by_test_id("harbor-code-rev").inner_text()
             else:
                 assert page.get_by_test_id("harbor-tech-before").count() == 0
-                assert_business_clean(page, "Harbor try-out")
+                assert_business_clean(page, "Sample process trial")
             ctx.close()
     finally:
         server.stop()

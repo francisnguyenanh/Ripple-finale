@@ -6,13 +6,15 @@ type Rec = Record<string, any>;
 export interface Summary {
   files: number | null; coveragePartial: boolean | null; rules: number | null; confirmed: number | null;
   questions: number | null; openFindings: number | null; events: Rec[] | null;
+  /** Rules of the ACCEPTED business knowledge (a different read model from the rules the AI read from files): 0 when none is accepted, null when unreadable. */
+  businessRules?: number | null;
 }
 
 /** `undefined` for a part means its read failed. */
-export interface Parts { head: Rec; rev?: Rec | null; overview?: Rec; queue?: Rec; audit?: Rec }
+export interface Parts { head: Rec; rev?: Rec | null; overview?: Rec; queue?: Rec; audit?: Rec; business?: Rec }
 
 export function buildSummary(p: Parts, recent: (t: string) => boolean): Summary {
-  const { head, rev, overview, queue, audit } = p;
+  const { head, rev, overview, queue, audit, business } = p;
   const claims = overview ? ((overview.claims ?? []) as Rec[]) : null;
   return {
     files: !head.source_revision_id ? 0 : rev ? (rev.artifacts ?? []).length : null,
@@ -22,6 +24,7 @@ export function buildSummary(p: Parts, recent: (t: string) => boolean): Summary 
     questions: queue ? new Set(((queue.items ?? []) as Rec[]).map((i) => i.question_id)).size : null,
     openFindings: overview ? ((overview.findings ?? []) as Rec[]).filter((f) => !f.decision).length : null,
     events: audit ? ((audit.events ?? []) as Rec[]).filter((e) => recent(e.event_type)).slice(-5).reverse() : null,
+    businessRules: business ? (typeof business.accepted?.rules === "number" ? business.accepted.rules : 0) : null,
   };
 }
 
@@ -37,7 +40,9 @@ export function nextStep(sum: Summary | null, work: { count: number; first?: str
   if (!sum || inbox === "loading") return { kind: "loading", text: "Loading what to do next...", to: "", label: "" };
   if (sum.files === 0) return { kind: "add-files", text: "No files have been added yet. Add the documents, code or workbooks this workspace should know about.", to: "sources", label: "Add files" };
   if (sum.files === null || sum.rules === null) return unknown;
-  if (sum.rules === 0) return { kind: "analyze", text: "Files are loaded but the AI has not read rules from them yet. Open a file and choose Analyze.", to: "sources", label: "Open Sources" };
+  // "nothing has been read" only when there is no accepted business knowledge either: the two read models are different and both are said
+  if (sum.rules === 0 && !(sum.businessRules && sum.businessRules > 0))
+    return { kind: "analyze", text: "Files are loaded but the AI has not read rules from them yet. Open a file and choose Analyze.", to: "sources", label: "Open Sources" };
   if (sum.questions === null) return unknown;
   if (sum.questions > 0) return { kind: "questions", text: `${plural(sum.questions, "question is", "questions are")} waiting for a person to confirm or answer.`, to: "questions", label: "Review questions" };
   // Starting something new is only suggested when "nothing is waiting" is actually known.

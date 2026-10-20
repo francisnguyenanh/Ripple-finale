@@ -28,8 +28,8 @@ TEXT_ACTOR = "Only the finance director approves these, except during audit seas
 TEXT_COND = "It applies when the amount is at least 500000 JPY and the category is CAPEX."
 
 
-def mobj(kind=None, text=None, condition=None, quote=None, uncovered=(), status="OK", message=None):
-    return {"status": status, "kind": kind, "text": text, "condition": condition, "quote": quote, "uncovered": list(uncovered), "message": message}
+def mobj(kind=None, text=None, condition=None, quote=None, uncovered=(), status="OK", message=None, ruled_out=()):
+    return {"status": status, "kind": kind, "text": text, "condition": condition, "quote": quote, "uncovered": list(uncovered), "ruled_out": list(ruled_out), "message": message}
 
 
 def resolve(obj, text, gap=ACTOR_GAP):
@@ -67,7 +67,7 @@ def test_a_nested_condition_is_kept_only_with_offered_fields_and_values_from_the
     assert resolve(mobj("condition", None, wrong_number, quote=TEXT_COND), TEXT_COND, COND_GAP)["reasons"] == ["value_not_in_text"]
     foreign_field = {"field": "supplier.is_new", "op": "eq", "value": "true"}
     out = resolve(mobj("condition", None, foreign_field, quote=TEXT_COND), TEXT_COND, COND_GAP)
-    assert out["reasons"][0].startswith("field_not_used_by_any_shown_rule:supplier.is_new")
+    assert out["reasons"][0].startswith("field_not_used_by_any_rule:supplier.is_new")
     bad_grammar = {"field": "request.net_amount_jpy", "op": "between", "value": [1, 2]}
     out = resolve(mobj("condition", None, bad_grammar, quote=TEXT_COND), TEXT_COND, COND_GAP)
     assert out["status"] == "UNSUPPORTED" and out["reasons"][0].startswith("unsupported_grammar")
@@ -225,3 +225,154 @@ def test_a_pronoun_or_two_alternative_actors_is_never_a_ready_actor(text, value,
     plain = resolve(mobj("actor", "the plant manager", quote="The plant manager approves them"), "The plant manager approves them.")
     assert plain["status"] == "READY" and plain["answer"] == {"actor": "the plant manager"}                     # an article is not a pronoun
 
+
+
+# ---- development regressions from gate set v2 (2026-10-18; the gate items are seen now: these are new wordings of the same failure classes, not the gate texts) ------
+NEG = "Purchases in an emergency are not handled by the buying office; the shift lead handles them."
+
+
+def test_a_phrase_that_only_rules_out_a_party_is_covered_by_the_actor_read():
+    out = resolve(mobj("actor", "shift lead", quote="the shift lead handles them", uncovered=["Purchases in an emergency are not handled by the buying office"], ruled_out=["the buying office"]), NEG)
+    assert out["status"] == "READY" and out["answer"] == {"actor": "shift lead"} and out["uncovered"] == [] and out["ruled_out"] == ["the buying office"]
+    tail = resolve(mobj("actor", "area supervisor", quote="the area supervisor", ruled_out=["the store manager"]), "It is the area supervisor, not the store manager.")
+    assert tail["status"] == "READY" and tail["uncovered"] == []
+
+
+@pytest.mark.parametrize("text, ruled_out, left", [
+    ("The shift lead handles them, not on public holidays.", ["on public holidays"], "not on public holidays"),          # a time limit is never a party
+    ("The shift lead handles them, but not above 2,000,000 JPY.", ["above 2,000,000 JPY"], "but not above 2,000,000 JPY"),  # an amount limit stays uncovered
+    ("The shift lead handles them, not the buying office during audits.", ["the buying office"], "not the buying office during audits"),   # extra words stay
+    ("The shift lead handles them, not the shift lead's deputy.", [], "not the shift lead's deputy"),                     # nothing ruled out by the model: stays
+])
+def test_a_negation_that_limits_when_or_how_stays_uncovered_whatever_the_model_labels(text, ruled_out, left):
+    out = resolve(mobj("actor", "shift lead", quote="The shift lead handles them", ruled_out=ruled_out), text)
+    assert out["status"] == "NEEDS_CLARIFICATION" and any(left in u or u in left for u in out["uncovered"]), out
+
+
+def test_the_actor_read_can_never_be_ruled_out_and_function_words_alone_may_differ():
+    contradiction = resolve(mobj("actor", "shift lead", quote="the shift lead handles them", ruled_out=["the shift lead"]), "Not the shift lead; the shift lead handles them.")
+    assert contradiction["ruled_out"] == []
+    reordered = resolve(mobj("actor", "lead of the night shift", quote="The night shift lead approves them."), "The night shift lead approves them.")
+    assert reordered["status"] == "READY" and reordered["answer"] == {"actor": "lead of the night shift"}
+    invented = resolve(mobj("actor", "chief night shift lead", quote="The night shift lead approves them."), "The night shift lead approves them.")
+    assert invented["answer"] is None and invented["reasons"] == ["value_not_in_text"] and invented["rejected_reading"] == {"kind": "actor", "text": "chief night shift lead"}
+
+
+def test_a_ruled_out_party_through_the_real_worker_gives_a_confirmable_reading_and_the_rejected_value_is_recorded(qa_env):
+    q = qa_env
+    g = actor_gap(q)
+    use(q, lambda p: mobj("actor", "shift lead", quote="the shift lead handles them", uncovered=["Purchases in an emergency are not handled by the buying office"], ruled_out=["the buying office"]))
+    got, _ = run(q, q.admin, g["gap_id"], NEG)
+    r = got["reading"]
+    assert r["status"] == "READY" and r["proposed_answer"] == {"actor": "shift lead"} and r["uncovered"] == [] and r["preview"]["preview_hash"]
+    use(q, lambda p: mobj("actor", "chief shift lead", quote="the shift lead handles them"))
+    got, jid = run(q, q.admin, g["gap_id"], "The shift lead handles them.")
+    rec = q.admin.get(f"/v2/jobs/{jid}", params={"workspace_id": q.env.ws}).json()
+    res = rec.get("execution_result") or rec.get("result") or {}
+    assert got["reading"]["status"] == "NEEDS_CLARIFICATION" and res.get("rejected_reading") == {"kind": "actor", "text": "chief shift lead"}
+    assert res["ai_outcome"]["contribution"] == "rejected" and res["ai_outcome"]["model_attempted"] is True                    # LLM-00: called, nothing kept
+
+
+def test_the_same_words_under_a_changed_prompt_are_read_again_never_replayed(qa_env, monkeypatch):
+    """LHA-00 (2026-10-18): the reading's job id carries the frozen prompt/schema and pinned model, so a prompt change after a fix is a new reading (the old one stays
+    as history under its own id)."""
+    from infra.worker import gap_answer_interpret as gai
+    q = qa_env
+    g = actor_gap(q)
+    model = use(q, lambda p: mobj("actor", "shift lead", quote="The shift lead handles them."))
+    first, j1 = run(q, q.admin, g["gap_id"], "The shift lead handles them.")
+    assert model.calls == 1 and interpret(q, q.admin, g["gap_id"], "The shift lead handles them.").json()["job_id"] == j1
+    real = gai.load_config
+    monkeypatch.setattr(gai, "load_config", lambda: (real()[0], "a" * 64))
+    second, j2 = run(q, q.admin, g["gap_id"], "The shift lead handles them.")
+    assert j2 != j1 and model.calls == 2                                                                 # a new job, a new model call, the old reading untouched
+
+
+# ---- reading context: relevance-ranked rules, the whole field vocabulary, every cut reported (findings V4-IF-04 / V3-IV-07) ------------------------------------
+# Synthetic rules generated here (no v4 ids, no booking.guests): the needed rule sorts LAST by id, among distractors that share words but not the field.
+
+def _rule(rid, title, field=None, value=1, concepts=("c-main",), scope=None):
+    return {"rule_id": rid, "title": title, "condition": {"field": field, "op": "gt", "value": value} if field else None, "actor_ref": "role-x", "outcome": {"kind": "review_required"},
+            "exceptions": [], "concept_ids": list(concepts), "scope": scope or {}, "status": "OBSERVED"}
+
+
+def _knowledge(n_distractors=25):
+    rules = {"rule-a-target": _rule("rule-a-target", "Extra stewards are booked", None)}
+    for i in range(n_distractors):                                                                              # ids that sort before the needed rule; similar words
+        rules[f"rule-m{i:02d}"] = _rule(f"rule-m{i:02d}", f"Event item {i} is ordered for the hall", f"hall.item_{i}_count", i + 1, concepts=(f"c-{i}",))
+    rules["rule-zz-headcount"] = _rule("rule-zz-headcount", "Large events need a fire marshal", "event.attendee_headcount", 500, concepts=("c-safety",))
+    return rules
+
+
+def test_the_field_the_answer_needs_is_offered_even_when_its_rule_sorts_last_and_distractors_do_not_push_it_out():
+    rules = _knowledge()
+    gap = dict(COND_GAP, affected_rule_ids=["rule-a-target"], question="When are extra stewards booked?")
+    text = "When the attendee headcount is above 300."
+    shown, fields, cov = bai.select_context(gap, rules, text, LIMITS)
+    ids = [r["rule_id"] for r in shown]
+    assert ids[0] == "rule-a-target" and "rule-zz-headcount" in ids and len(ids) == LIMITS["max_known_rules"]       # before: the last 13 by id were cut, this one among them
+    assert "event.attendee_headcount" in fields and len(fields) == cov["fields_total"] == 26                         # the whole vocabulary of the version
+    assert cov["rules_total"] == 27 and cov["rules_truncated"] and cov["cut_by"] == "max_known_rules" and cov["affected_rules_not_shown"] == []
+    assert cov["fields_truncated"] is False and set(cov["fields_offered_without_shown_rule"]) == fields - bai.condition_fields(shown)
+    cond = {"field": "event.attendee_headcount", "op": "gt", "value": 300}
+    out = bai.resolve(mobj("condition", None, cond, quote=text), text, gap, {r["rule_id"]: r for r in shown}, LIMITS, known_fields=fields)
+    assert out["status"] == "READY" and out["answer"] == {"condition": cond}
+    invented = bai.resolve(mobj("condition", None, {"field": "event.guest_total", "op": "gt", "value": 300}, quote=text), text, gap, {r["rule_id"]: r for r in shown}, LIMITS, known_fields=fields)
+    assert invented["answer"] is None and invented["reasons"] == ["field_not_used_by_any_rule:event.guest_total"]      # a field no rule uses is still refused
+    prompt = bai.build_prompt({"prompt_template": "{fields}|{coverage}|{rules}|{text}"}, gap, shown, text, max_chars=LIMITS["max_prompt_chars"], fields=fields, coverage=cov)
+    assert "Rules shown: 12 of 27" in prompt and "never invent it" in prompt and "event.attendee_headcount" in prompt and "id=rule-zz-headcount" in prompt
+
+
+def test_dependencies_counter_evidence_and_scope_rank_before_unrelated_rules_and_every_cut_is_reported():
+    rules = _knowledge(10)
+    rules["rule-a-target"] = _rule("rule-a-target", "Extra stewards are booked", "event.attendee_headcount", 200, concepts=("c-stewards",), scope={"site": "north"})
+    rules["rule-b-conflict"] = _rule("rule-b-conflict", "Stewards from 250 attendees", "event.attendee_headcount", 250, concepts=("c-other",))   # same field: counter-evidence
+    rules["rule-c-same-concept"] = _rule("rule-c-same-concept", "Steward briefing", "brief.minutes", 10, concepts=("c-stewards",))
+    rules["rule-d-same-scope"] = _rule("rule-d-same-scope", "North site parking", "parking.spaces", 5, concepts=("c-x",), scope={"site": "north"})
+    gap = dict(COND_GAP, affected_rule_ids=["rule-a-target"], question="When exactly?")
+    shown, _, cov = bai.select_context(gap, rules, "It depends on the season.", dict(LIMITS, max_known_rules=5))
+    assert [r["rule_id"] for r in shown] == ["rule-a-target", "rule-b-conflict", "rule-c-same-concept", "rule-zz-headcount", "rule-d-same-scope"]   # shared field / concept, then scope
+    assert cov["rules_shown"] == 5 and cov["rules_truncated"]
+    tight = dict(LIMITS, max_known_rules=40, max_prompt_chars=len(bai._rule_line(rules["rule-a-target"])) + 10, max_fields=3)
+    shown, fields, cov = bai.select_context(gap, rules, "headcount", tight)
+    assert [r["rule_id"] for r in shown] == ["rule-a-target"] and cov["cut_by"] == "prompt_chars" and cov["fields_truncated"] and len(fields) == 3
+    assert "event.attendee_headcount" in fields and "partial" in bai.coverage_note(cov)
+    many = dict(COND_GAP, affected_rule_ids=sorted(rules)[:6])
+    shown, _, cov = bai.select_context(many, rules, "x", dict(LIMITS, max_known_rules=3))
+    assert len(shown) == 3 and len(cov["affected_rules_not_shown"]) == 3 and "did not fit" in bai.coverage_note(cov)   # never a silent cut of the question's own rules
+    with pytest.raises(ValueError):
+        bai.build_prompt({"prompt_template": "{rules}"}, gap, list(rules.values()), "x", max_chars=50)                # a cut after selection fails, never hides
+
+
+def test_the_worker_offers_a_field_whose_rule_sorted_last_and_reports_a_truncated_context(qa_env, monkeypatch):
+    """Real caller (route -> job -> worker -> resolve -> preview) on the fixture (more than 12 active rules): `rule-travel-limit` was cut by the alphabetical selection."""
+    from infra.worker import gap_answer_interpret as gai
+    q = qa_env
+    g = next(x for x in gaps(q, q.admin)["gaps"] if x["kind"] == "missing_condition")
+    text = "It applies when the travel expenses are above 300000 JPY."
+    cond = {"field": "expense.travel_jpy", "op": "gt", "value": 300000, "unit": "JPY"}
+    model = use(q, lambda p: mobj("condition", None, cond, quote=text))
+    got, jid = run(q, q.admin, g["gap_id"], text)
+    r = got["reading"]
+    assert r["status"] == "READY" and r["proposed_answer"] == {"condition": cond} and r["preview"]["resulting_rule"]["condition"] == cond, r
+    prompt = model.prompts[0]
+    total = r["context"]["rules_total"]
+    assert total > 12 and r["context"]["rules_truncated"] and r["context"]["fields_truncated"] is False
+    assert "expense.travel_jpy" in prompt and "id=rule-travel-limit" in prompt and f"Context coverage: Rules shown: 12 of {total}" in prompt
+    real = gai.load_config
+    frozen = real()[0]
+    monkeypatch.setattr(gai, "load_config", lambda: ({**frozen, "limits": {**frozen["limits"], "max_known_rules": 2, "max_fields": 2}}, "b" * 64))
+    use(q, lambda p: mobj(status="UNSUPPORTED", message="the needed field is not listed"))
+    got, _ = run(q, q.admin, g["gap_id"], "It applies to purchases from new suppliers.")
+    r = got["reading"]
+    assert r["status"] == "UNSUPPORTED" and "context_truncated" in r["reasons"] and r["context"]["fields_truncated"] and r["context"]["fields_offered"] == 2
+
+
+def test_a_condition_refused_by_the_grammar_is_kept_for_diagnosis_and_never_applied():
+    """v5 V5-IF-04 (live): the grammar refused the model's condition and the refused form was not recorded. It is now kept (bounded JSON + the refusal detail)."""
+    text = "When the group is larger than 30 pupils."
+    out = resolve(mobj("condition", None, {"field": "request.net_amount_jpy", "op": "gt", "value": 30.0}, quote=text), text, COND_GAP)
+    assert out["answer"] is None and out["reasons"] == ["unsupported_grammar:unsupported_expression"]
+    assert out["rejected_reading"]["kind"] == "condition" and "30.0" in out["rejected_reading"]["condition_json"] and "floats are not allowed" in out["rejected_reading"]["detail"]
+    ok = resolve(mobj("condition", None, {"field": "request.net_amount_jpy", "op": "gt", "value": 30}, quote=text), text, COND_GAP)
+    assert ok["rejected_reading"] is None

@@ -4,6 +4,8 @@ policy, mixed, category missing, other scope, an exception. No provider, no DB."
 import json
 import pathlib
 
+import pytest
+
 from core.change_intelligence.v2 import business_qa as qa
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -177,3 +179,108 @@ def test_capex_question_finance_rule_applies_and_the_threshold_conflict_is_kept_
     assert "rule-capex-finance-policy" not in by                                                                 # policy: 5M not reached by 4M -> not asserted
     assert final["status"] != "ABSTAINED"
 
+
+
+# ---- omission the server can see (2026-10-18): an approval gate that reaches the stated case but that no kept claim cites. Diagnostic finding H-QA-01 (spent item, Gemini 3.5
+# Flash-Lite cited only a passage on Finance and left out the manager rule that applies to a 3,000,000 JPY standard OPEX purchase). SYNTHETIC replays; no provider, no DB.
+H01 = "An OPEX purchase of 3,000,000 JPY on the standard process: does Finance have to review it?"
+FIN_PASSAGE = {"text": "Finance reviews CAPEX of 2,000,000 JPY or more; this purchase is OPEX.", "refs": ["obs-finance-guide"], "basis": "observed"}
+H01_PACK = ("rule-standard-manager-review", "rule-capex-finance-config", "rule-travel-limit", "rule-free-freight", "rule-maker-checker")
+
+
+def test_an_applicable_approval_gate_left_out_by_the_model_is_added_as_a_server_claim_and_the_answer_is_partial():
+    final, kept, dropped = run(H01, [FIN_PASSAGE], *H01_PACK, observation=GUIDE)
+    added = [c for c in final["claims"] if c.get("origin") == "server_applicability"]
+    assert [c["refs"] for c in added] == [["rule-standard-manager-review"]] and added[0]["applicability"] == "applies" and added[0]["basis"] == "observed"
+    assert "1,000,000 JPY or more need manager approval" in added[0]["text"] and added[0]["text"] in final["answer"]
+    assert final["status"] == "PARTIAL" and "applicable_rule_not_cited" in final["reasons"] and dropped == []
+    # not added: the travel rule (its field is not stated; the case amount never stands in for it here), CAPEX (the case is OPEX), free freight (not an approval gate),
+    # maker-checker (whether the approver is the requester is not stated)
+    assert {r for c in added for r in c["refs"]} == {"rule-standard-manager-review"}
+
+
+def test_nothing_is_added_when_the_gate_needs_a_pinned_default_or_is_already_cited_or_the_model_abstained():
+    no_process = "An OPEX purchase of 3,000,000 JPY: does Finance have to review it?"                      # STANDARD only by the pinned default -> not stated
+    final, _, _ = run(no_process, [FIN_PASSAGE], *H01_PACK, observation=GUIDE)
+    assert not [c for c in final["claims"] if c.get("origin")] and "applicable_rule_not_cited" not in final["reasons"]
+    manager = {"text": "Purchases of 1,000,000 JPY or more need manager approval.", "refs": ["rule-standard-manager-review"], "basis": "observed"}
+    final, _, _ = run(H01, [FIN_PASSAGE, manager], *H01_PACK, observation=GUIDE)
+    assert not [c for c in final["claims"] if c.get("origin")] and "applicable_rule_not_cited" not in final["reasons"]     # PARTIAL only because the passage is unevaluable
+    final, _, _ = run(H01, [], *H01_PACK, status="ABSTAINED", observation=GUIDE)
+    assert final["status"] == "ABSTAINED" and final["claims"] == []                                         # the server never answers on its own
+
+
+def test_a_second_gate_the_question_states_is_added_and_a_rule_in_a_disagreement_is_left_to_the_conflict_disclosure():
+    q = "A standard purchase of 6,000,000 JPY from a supplier on the high-risk register, category CAPEX: who must approve it?"
+    manager = {"text": "Purchases of 1,000,000 JPY or more need manager approval.", "refs": ["rule-standard-manager-review"], "basis": "observed"}
+    p = pack(q, "rule-standard-manager-review", "rule-high-risk-director", "rule-capex-finance-config", "rule-capex-finance-policy")
+    p["counterevidence"] = [{"kind": "conflicting_rule", "rule_id": "rule-capex-finance-policy", "with": "rule-capex-finance-config", "title": "CAPEX threshold", "text": "x", "authority": "OBSERVED"}]
+    m = model("ANSWERED", [manager])
+    kept, dropped = qa.judge_claims(m["claims"], p, q, FROZEN, can_read_evidence=True)
+    final = qa.finalize(m, kept, dropped, p, FROZEN)
+    added = {c["refs"][0] for c in final["claims"] if c.get("origin") == "server_applicability"}
+    assert added == {"rule-high-risk-director"}                                                            # both CAPEX rules reach 6,000,000 but disagree: no side is chosen here
+    assert final["status"] == "PARTIAL" and "applicable_rule_not_cited" in final["reasons"]
+
+
+# ---- audit of the server claim (2026-10-18): only settled, unquestioned, fully stated rules; never filling a gap -------------------------------------------------------
+def _h01(mutate=None, question=H01, extra_counter=()):
+    p = pack(question, *H01_PACK, observation=GUIDE)
+    if mutate:
+        mutate({i["item_id"]: i for i in p["items"]}["rule-standard-manager-review"])
+    p["counterevidence"] = list(extra_counter)
+    m = model("ANSWERED", [FIN_PASSAGE])
+    kept, dropped = qa.judge_claims(m["claims"], p, question, FROZEN, can_read_evidence=True)
+    final = qa.finalize(m, kept, dropped, p, FROZEN)
+    return final, [c for c in final["claims"] if c.get("origin") == "server_applicability"]
+
+
+def test_an_unconfirmed_rule_is_never_a_server_claim():
+    for status in ("DRAFT", "PENDING_HUMAN"):
+        final, added = _h01(lambda it: it.update(status=status))
+        assert added == [] and "applicable_rule_not_cited" not in final["reasons"], status
+    _, added = _h01(lambda it: it.update(status="CONFIRMED"))
+    assert [c["refs"] for c in added] == [["rule-standard-manager-review"]]
+
+
+def test_a_rule_with_an_unknown_field_or_an_open_question_is_left_unknown():
+    final, added = _h01(lambda it: it.update(unknown_fields=["unit:request.net_amount_jpy"]))
+    assert added == [] and "applicable_rule_not_cited" not in final["reasons"]                           # an unknown unit is never filled in
+    q = {"kind": "open_question", "gap_id": "gap-x", "question": "Who approves?", "priority": "critical", "affected_rule_ids": ["rule-standard-manager-review"]}
+    final, added = _h01(extra_counter=[q])
+    assert added == []
+
+
+def test_an_undecided_exception_or_an_amount_in_another_currency_adds_nothing():
+    exc = [{"exception_id": "exc-1", "text": "except catalogue purchases", "condition": {"field": "catalogue.approved", "op": "eq", "value": "true"}}]
+    final, added = _h01(lambda it: it.update(exceptions=exc))
+    assert added == []                                                                                    # the exception's fact is not stated: conditional, not applies
+    final, added = _h01(question="An OPEX purchase of 3,000,000 JPY (about 20,000 USD) on the standard process: does Finance have to review it?")
+    assert added == []
+
+
+def test_the_server_claim_carries_the_authority_of_the_version_the_view_serves():
+    _, added = _h01()
+    assert added[0]["basis"] == "observed" and added[0]["authority_labels"] == ["what the sources say"] and added[0]["uses_evidence"] is False
+    _, added = _h01(lambda it: it.update(authority="TARGET", versions=[{"item_id": "rule-standard-manager-review-observed", "authority": "OBSERVED", "status": "VALIDATED"}]))
+    assert added[0]["basis"] == "target" and added[0]["authority_labels"] == ["decided by a person"]
+    _, added = _h01(lambda it: it.update(versions=[{"item_id": "rule-standard-manager-review-target", "authority": "TARGET", "status": "CONFIRMED"}]))
+    assert added[0]["basis"] == "observed"                                                                # a TARGET version behind it does not lend its authority
+
+
+MANAGER_ONLY = [{"text": "Purchases of 1,000,000 JPY or more need manager approval.", "refs": ["rule-standard-manager-review"], "basis": "observed"}]
+
+
+def test_an_answer_that_needs_the_pinned_default_is_partial_and_asks_for_the_fact_owner_decision_g2_qa_10():
+    """Owner decision G2-QA-10 (option B): the default was needed to reach the case, so the missing fact could change the result."""
+    final, kept, _ = run("Who approves a consulting services contract of 1,800,000 JPY?", MANAGER_ONLY, "rule-standard-manager-review")
+    assert kept[0]["applicability"] == "applies" and kept[0]["assumptions"] == ["process=STANDARD"]
+    assert final["status"] == "PARTIAL" and {"assumed_defaults", "assumed_default_needs_fact"} <= set(final["reasons"])
+    assert final["clarifying_questions"][0] == "Is this a standard purchase or an emergency purchase?" and "Assumed: a standard purchase." in final["uncertainty"]
+
+
+@pytest.mark.parametrize("question", ["Who approves a standard purchase of consulting services of 1,800,000 JPY?",                    # a fact the asker states
+                                      "If it were a standard purchase, who approves a consulting contract of 1,800,000 JPY?"])     # a hypothetical the asker sets
+def test_a_fact_or_hypothetical_the_question_states_is_not_an_assumption_and_the_answer_stays_complete(question):
+    final, kept, _ = run(question, MANAGER_ONLY, "rule-standard-manager-review")
+    assert kept[0]["assumptions"] == [] and final["status"] == "ANSWERED" and "assumed_default_needs_fact" not in final["reasons"]

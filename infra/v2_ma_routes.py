@@ -5,6 +5,8 @@ GET  /v2/ma/runs/{run_id}            ?workspace_id=                          sta
 POST /v2/ma/runs/{run_id}/advance    {workspace_id}                          idempotent coordinator step (recovery after a lost join job)                 ma.run
 POST /v2/ma/runs/{run_id}/cancel     {workspace_id, reason}                  stop admissions, cancel pending children, release the root reservation      ma.run
 GET  /v2/business/changes/{id}/ma    ?workspace_id=                          the runs of a change                                                         project.read (+ change visibility)
+POST /v2/ma/runs/{run_id}/synthesis-memo {workspace_id, attempt}            SUR-08 advisory synthesis memo over a finished review-board report           ai.use, human actor (+ change visibility)
+GET  /v2/ma/runs/{run_id}/synthesis-memo ?workspace_id=                      the latest memo for the run's current report (reads only)                    project.read (+ change visibility)
 Nothing here approves, commits or applies; the report is read by a person in the review.
 """
 from __future__ import annotations
@@ -110,6 +112,47 @@ async def cancel_run(request: Request, run_id: str):
         _visible_run(store, tenant, body["workspace_id"], run_id, authority)
         return v2_ma.cancel(store, tenant, body["workspace_id"], run_id, actor_id=authority["account_id"], reason=reason.strip())
     return _shell(request, body.get("workspace_id"), v2_ma.CAPABILITY, action)
+
+
+def _finished_board(run):
+    if run["workflow"] != "review_board":
+        raise v2_ma.MaRefused("not_a_review_board", "a synthesis memo is written over a review-board run")
+    if run["status"] not in ("REVIEW_READY", "INCOMPLETE") or run["report_hash"] is None:
+        raise v2_ma.MaRefused("board_not_finished", "the review-board run has no final report yet")
+    return run["report_hash"]
+
+
+@router.post("/v2/ma/runs/{run_id}/synthesis-memo")
+async def request_synthesis_memo(request: Request, run_id: str):
+    """SUR-08: a model's synthesis memo over a finished review-board report; every minority / unresolved finding stays listed by the server. Changes no verdict."""
+    body = await _json_body(request)
+    attempt = body.get("attempt", 1)
+    if isinstance(attempt, bool) or not isinstance(attempt, int) or not 1 <= attempt <= 3:
+        return _error("attempt (1-3) required", 400)
+
+    def action(store, tenant, authority):
+        from infra.adapters import v2_advisory_memo
+        from infra.v2_business_routes import _quota_for
+        run = _visible_run(store, tenant, body["workspace_id"], run_id, authority)
+        report_hash = _finished_board(run)
+        jid = v2_advisory_memo.job_id("ma.synthesis_memo", run_id, attempt, report_hash)
+        return {"run_id": run_id, **v2_advisory_memo.request(store, tenant, body["workspace_id"], "ma.synthesis_memo", jid,
+                                                              {"run_id": run_id, "attempt": attempt, "board_report_hash": report_hash}, authority, quota=_quota_for)}
+    try:
+        return _shell(request, body.get("workspace_id"), "ai.use", action)
+    except Exception as exc:                                                            # provider disarmed / budget refusals carry their own explained 409
+        from infra.v2_business_routes import _refusal
+        return _refusal(exc)
+
+
+@router.get("/v2/ma/runs/{run_id}/synthesis-memo")
+def read_synthesis_memo(request: Request, run_id: str, workspace_id: str):
+    def action(store, tenant, authority):
+        from infra.adapters import v2_advisory_memo
+        run = _visible_run(store, tenant, workspace_id, run_id, authority)
+        report_hash = _finished_board(run)
+        return {"run_id": run_id, **v2_advisory_memo.latest(store, tenant, workspace_id, "ma.synthesis_memo", run_id, report_hash)}
+    return _shell(request, workspace_id, "project.read", action, mutating=False)
 
 
 @router.get("/v2/business/changes/{change_id}/ma")

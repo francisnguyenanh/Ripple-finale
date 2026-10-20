@@ -9,6 +9,7 @@ import { Markdown } from "@/lib/markdown";
 import { useParam } from "@/lib/param";
 import { PageHeader } from "@/pages/Page";
 import { filterTopics } from "./topicFilter";
+import { AudienceVariants } from "./AudienceVariants";
 import { useSession } from "@/session";
 import type { Rec } from "@/features/changes/types";
 
@@ -201,6 +202,9 @@ export function DocumentsPage() {
                 </div>
               </Tech>
             </section>
+          )}
+          {state && doc && (state.freshness === "available" || state.freshness === "stale") && (
+            <AudienceVariants key={doc} ws={ws} artifactId={doc} baseAvailable={state.freshness === "available"} canUseAi={s.can("ai.use")} />
           )}
         </div>
       </div>

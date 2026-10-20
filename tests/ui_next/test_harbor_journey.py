@@ -123,6 +123,7 @@ def test_full_harbor_loop_in_the_new_interface_with_a_clean_business_view(env, c
         expect(tid(requester, "sim-runner")).to_contain_text("NOT a security boundary")
         expect(tid(requester, "preview-simulation")).to_have_attribute("data-state", "RAN")
         assert_business_clean(requester, "impact and simulation")
+        assert tid(requester, "prep-manifest").count() == 0                     # EUI-08 guided preparation is off by default: the manual flow is unchanged
         tid(requester, "action-prepare-proposal-from-draft").click()
         expect(tid(requester, "state-proposal")).not_to_have_attribute("data-state", "NONE", timeout=WAIT)
         _pump(admin, env)

@@ -236,6 +236,10 @@ class SemanticAdapter:
         for _attempt in range(1 + caps["max_retries"]):
             if state["calls"] >= caps["max_calls"]:
                 raise cap_reached()
+            budget_left = state["budget"].remaining() if state.get("budget") is not None and hasattr(state["budget"], "remaining") else None
+            left = caps["max_calls"] - state["calls"] if budget_left is None else min(caps["max_calls"] - state["calls"], budget_left)
+            if last is not None and left - 1 < state.get("layers_after", 0):
+                raise last                                       # a retry never takes the call a later layer needs (the judge is the one that can say "insufficient")
             budget = state.get("budget")
             if budget is not None:                               # the job's own per-attempt call budget: reserved and journaled BEFORE the call, never after
                 try:
@@ -243,6 +247,9 @@ class SemanticAdapter:
                 except Exception as exc:                         # ProviderCallCeilingExceeded or a journal refusal: no call is made
                     raise cap_reached(exc)
             state["calls"] += 1
+            state["attempts"][layer] = state["attempts"].get(layer, 0) + 1
+            if last is not None:                                 # a retry: why it was needed stays visible even when it then succeeds (it used a slot of a later layer)
+                state["retried_after"][layer] = {"reason": str(last), **({"detail": last.detail} if getattr(last, "detail", None) else {})}
             started = self.clock()
             try:
                 response, usage = provider.call(layer, request, caps["timeout_seconds"])
@@ -251,9 +258,8 @@ class SemanticAdapter:
                 if str(exc) in ("disarmed", "no_replay_record"):
                     raise                                  # retrying cannot help
                 continue
-            if self.clock() - started > caps["timeout_seconds"]:
-                last = ProviderTimeout("timeout")
-                continue
+            late = self.clock() - started > caps["timeout_seconds"]
+            # usage is booked BEFORE a late answer is discarded: the provider charged for it (live finding FNL-LIVE-20261018-03, a discarded expand call went unbooked)
             if usage is None and caps["fail_closed_on_missing_usage"]:
                 raise ProviderUnavailable("usage_unknown")
             if usage is not None:
@@ -262,8 +268,20 @@ class SemanticAdapter:
                 state["tokens"] += int(usage.get("input_tokens", 0)) + int(usage.get("output_tokens", 0))
                 if state["tokens"] > caps["max_tokens"]:
                     raise ProviderUnavailable("token_cap_reached")
+            if late:
+                last = ProviderTimeout("timeout")
+                continue
             return response
         raise last or ProviderUnavailable("unavailable")
+
+    @staticmethod
+    def _attempts(layer, state) -> dict:
+        """Calls this layer made and, after a retry, the reason of the failure that caused it (safe words only); empty for a single clean call."""
+        n = state["attempts"].get(layer, 0)
+        out = {"attempts": n} if n > 1 or layer in state["retried_after"] else {}
+        if layer in state["retried_after"]:
+            out["retried_after"] = state["retried_after"][layer]
+        return out
 
     def run(self, query: str, items: list, *, snapshot_id, view: str, index_version: str, access_scope: str, lexical_candidates: Iterable[str] = (),
             budget=None, allow_external: bool = False) -> dict:
@@ -291,7 +309,7 @@ class SemanticAdapter:
         offered, truncated = offered_items(items, max_chars=self.caps["max_payload_chars"])
         result["payload_truncated"] = truncated
         offered_ids = {i["item_id"] for i in offered}
-        state = {"calls": 0, "tokens": 0, "tokens_in": 0, "tokens_out": 0, "budget": budget if self.provider.external else None}
+        state = {"calls": 0, "tokens": 0, "tokens_in": 0, "tokens_out": 0, "budget": budget if self.provider.external else None, "attempts": {}, "retried_after": {}}
         stop = None
         # layer 1: candidate expansion
         out = {}
@@ -308,22 +326,23 @@ class SemanticAdapter:
                     result["layers"][layer] = {"status": "skipped", "reason": "no_candidates"}
                     continue
                 req = build_request(layer, query, offered, candidates=cands)
+            state["layers_after"] = len([l for l in LAYERS[LAYERS.index(layer) + 1:]])
             try:
                 raw = self._call(layer, req, state)
                 valid = VALIDATORS[layer](raw, {i["item_id"] for i in req["items"]} if layer != "expand" else offered_ids, self.caps)
             except InvalidOutput as exc:
-                result["layers"][layer] = {"status": "fallback", "reason": "invalid_output", "detail": str(exc)}
+                result["layers"][layer] = {"status": "fallback", "reason": "invalid_output", "detail": str(exc), **self._attempts(layer, state)}
                 continue
             except ProviderUnavailable as exc:
                 reason = str(exc) or "unavailable"
-                result["layers"][layer] = {"status": "fallback", "reason": reason}
+                result["layers"][layer] = {"status": "fallback", "reason": reason, **self._attempts(layer, state)}
                 for extra in ("first_reason", "detail"):          # safe diagnostics only (reason words, exception class, sizes): no prompt, no response text
                     if getattr(exc, extra, None):
                         result["layers"][layer][extra] = getattr(exc, extra)
                 if reason in ("call_cap_reached", "token_cap_reached", "usage_unknown", "provider_switch_off", "disarmed"):
                     stop = reason
                 continue
-            result["layers"][layer] = {"status": "applied"}
+            result["layers"][layer] = {"status": "applied", **self._attempts(layer, state)}
             if layer == "expand":
                 result["terms"], result["candidate_ids"] = valid["terms"], valid["candidate_ids"]
             elif layer == "rank":

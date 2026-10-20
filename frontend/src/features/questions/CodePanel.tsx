@@ -9,6 +9,7 @@ import { Callout, Field, Muted, Select, StatePill, Tech, TechField, TextArea } f
 import { humanize } from "@/lib/fmt";
 import { refusalOf, refusalWords } from "@/lib/refusal";
 import type { Rec } from "@/features/changes/types";
+import { useSession } from "@/session";
 
 const q = encodeURIComponent;
 const short = (h: unknown) => (typeof h === "string" && h ? `${h.slice(0, 12)}…` : "none");
@@ -48,6 +49,7 @@ function Act({ label, testid, hint, busy, onClick, variant }: { label: string; t
 
 // ---------------------------------------------------------------------------------------------------------------- X1a
 export function CodeRecommendations({ ws, cid }: { ws: string; cid: string }) {
+  const s = useSession();
   const [rec, setRec] = React.useState<Rec | null>(null);
   const [err, setErr] = React.useState<ReturnType<typeof refusalOf> | null>(null);
   React.useEffect(() => {
@@ -78,7 +80,7 @@ export function CodeRecommendations({ ws, cid }: { ws: string; cid: string }) {
             ))}
           </ul>
           {rec.withheld ? <Muted testid="code-recs-withheld">Hidden for your role: {String(rec.withheld)}.</Muted> : null}
-          <Muted testid="code-recs-apply">{String((rec.apply as Rec)?.reason ?? "")}</Muted>
+          <Muted testid="code-recs-apply">{s.mode === "technical" ? String((rec.apply as Rec)?.reason ?? "") : "Ripple does not edit, patch, run or deploy code. A developer implements the recommendation; Ripple then reads the changed file back."}</Muted>
         </>
       )}
     </section>

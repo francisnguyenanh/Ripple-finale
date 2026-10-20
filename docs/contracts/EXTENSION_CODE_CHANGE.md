@@ -62,6 +62,19 @@ or `UNCERTAIN` are listed as **not implemented** in the candidate; they are neve
   plus the unified diff bytes as an immutable blob.
 - **Refusals:** `repo_not_declared`, `base_mismatch`, `path_outside_allowlist`, `protected_file`, `mapping_unresolved`, `patch_does_not_apply`, `model_output_invalid`.
 
+## 4a. Model-written code proposal, proposal-only (SUR-03, added 2026-10-19)
+- `POST /v2/business/changes/{change_id}/code/proposal {workspace_id, repo_id, base?, attempt 1-3}` (human actor, `code.patch` + `ai.use` + `evidence.read`, change visibility,
+  a visible declared repository; `base` defaults to the repository's HEAD and is resolved to a commit SHA now; 409 `not_confirmed`, `unknown_reference`, `provider_disarmed`,
+  `budget_exceeded`); `GET .../code/proposal?repo_id=&base=` (`project.read` + `evidence.read`; reads only). One job (`code.diff_proposal`, pinned role of the same name) per
+  change, repository, base commit, recommendation hash, attempt and frozen config + pinned model.
+- Offered files: SUPPORTED / UNCERTAIN recommendation paths that resolve to exactly one tracked file at the base commit, inside the allowlist, not protected and not a test
+  file; read with `git show <base>:<path>` (no clone, no write); the rest listed with the reason.
+- The model explains the change and proposes `find` / `replace` edits with the recommendation ref they implement and suggests tests in words. The server keeps an edit only
+  if its file was offered, it is allowed, not protected and not a test file, its ref was offered and its `find` occurs exactly once; it builds the unified diff in memory and
+  parses each changed file (Python, JSON, YAML; other types `no_parser_for_type`); a parse failure is reported per file (`static_checks_passed: false`), never hidden.
+- **Proposal only:** `applied: false`, `executed: false` on every result. Nothing is written to a checkout or run; the proposal is not a candidate patch and cannot be
+  approved, published or promoted; the literal candidate path above stays the only way to a patch. Executing model-written code needs a VM-class sandbox (not granted).
+
 ## 5. Validation (FEX-04)
 
 - **Input:** `patch_hash`, `base_sha`, the declared command list of the repository (from the extension config; never from the patch or a model), resource caps.
@@ -94,6 +107,19 @@ is never in argv, job results, logs or knowledge. `POST /v2/sources/git/sync` on
 minute; response `{job_id, kind: "git.fetch", created, status}`); the job fetches only the declared branch into the mirror and creates the existing `git.sync` job for that
 commit (its result names `sync_job_id`). Failure reasons: `no_read_grant`, `remote_auth_refused`, `remote_not_found`, `remote_branch_missing`, `remote_unreachable`,
 `remote_token_missing`, `mirror_not_managed`, `stale_base`, `branch_conflict`. A failed job is retried by a new request. Webhook intake is not built (poll by request).
+
+## 6b. Proposed correspondence on a source refresh (SUR-05, added 2026-10-19)
+- `POST /v2/sources/refresh/{refresh_id}/correspondence {workspace_id, attempt 1-3}` (human actor, `source.import` + `ai.use` + `evidence.read`; the refresh must be PREPARED or
+  COMMITTED and not a no-op, else 409 `refresh_not_open`; 409 `provider_disarmed`, `budget_exceeded`); `GET .../correspondence` (`project.read` + `evidence.read`; reads only).
+  One job (`source.correspondence`, pinned role of the same name) per refresh, refresh digest, attempt and frozen config + pinned model.
+- Old side = deleted and changed artifacts (content before, with the rules of the working knowledge bound to them); new side = added and changed artifacts (content after);
+  renamed artifacts already carry a proof and are not sent; binary content is never sent (listed as withheld); excerpts are bounded (cut ones listed).
+- The model proposes `moved_same_content | moved_rewritten | split | merged | obligation_changed | no_counterpart` with one verbatim quote per side and the bound rule ids
+  concerned. The server keeps a proposal only if its paths were offered, both quotes are verbatim in the excerpts, its rule ids are bound to the old artifact and its numbers
+  come from the quotes or those rules; it adds `bytes_identical` and `proof_possible` (`content_hash` only for identical bytes; otherwise `human_confirmed_with_reason`;
+  `none_needed` for the same path). Old artifacts no kept proposal covers are listed (`unmatched_old`).
+- Every proposal is `PROPOSED` with `is_rename_proof: false`. The refresh, its rename proofs, artifact identities, rules and implementation statuses are never changed; a
+  rename is linked only by the existing commit path with a proof (a person's `human_confirmed` proof needs a reason). A failed proposal concludes nothing.
 
 ## 7. Promotion, verification, recovery (FEX-06..08)
 

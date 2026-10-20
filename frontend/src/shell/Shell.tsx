@@ -98,7 +98,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         return (
           <a key={n.id} href={ws ? hashFor(ws, n.id, undefined, { mode: s.mode === "technical" ? "technical" : undefined }) : "#"} aria-current={active ? "page" : undefined} data-testid={`nav-${n.id}`}
             onClick={(e) => { if (active) { e.preventDefault(); setMenu(false); s.reload(); } }}
-            className={cn("flex items-center gap-3 rounded-md px-3 py-2 text-sm min-h-10", active ? "bg-surface-2 font-semibold text-text" : "text-muted hover:bg-surface-2 hover:text-text", !ws && "pointer-events-none opacity-50")}>
+            className={cn("flex items-center gap-3 rounded-md border-l-4 px-3 py-2 text-sm min-h-10", active ? "border-primary bg-surface-2 font-semibold text-text" : "border-transparent text-muted hover:bg-surface-2 hover:text-text", !ws && "pointer-events-none opacity-50")}>
             <Icon size={18} aria-hidden="true" />
             {n.label}
           </a>

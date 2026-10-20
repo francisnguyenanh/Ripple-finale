@@ -106,6 +106,15 @@ def condition_text(cond) -> str:
     return "not (" + condition_text(cond["not"]) + ")"
 
 
+def _leaf_fields(cond) -> list:
+    """The measured field names of a condition in words (no values)."""
+    if not isinstance(cond, Mapping):
+        return []
+    if "field" in cond:
+        return [str(cond["field"]).replace("_", " ").replace(".", " ")]
+    return [f for key in ("all", "any") for c in cond.get(key, []) for f in _leaf_fields(c)] + (_leaf_fields(cond["not"]) if "not" in cond else [])
+
+
 def _scope_text(scope: Mapping) -> str:
     return "; ".join(f"{k}: {', '.join(map(str, v)) if isinstance(v, list) else v}" for k, v in sorted(scope.items()))
 

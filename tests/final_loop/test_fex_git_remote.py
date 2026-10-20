@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import time
 
@@ -305,3 +306,46 @@ def test_without_a_pull_request_grant_publishing_stays_refused_and_a_missing_tok
     rec = _settle_job(q, pub.json()["job_id"])
     assert rec["execution_status"] == "FAILED" and "remote_token_missing" in (rec.get("execution_reason") or "")
     assert q.req.post(f"/v2/business/changes/{cid}/code/candidate/publish", json={"workspace_id": q.env.ws, "candidate_job_id": cand_id}).status_code == 403
+
+
+@pytest.mark.skipif(os.environ.get("RIPPLE_GIT_SANDBOX_PUBLISH") != "1" or not os.environ.get("RIPPLE_GIT_SANDBOX_REPO") or not os.environ.get("RIPPLE_SANDBOX_GIT_TOKEN"),
+                    reason="opt-in, owner decision D-GIT-01 (2026-10-18): ONE product pull request on the private sandbox through the real GitHub API")
+def test_d_git_01_one_product_pull_request_on_the_sandbox_through_the_real_github_api(code_env, tmp_path, monkeypatch):
+    """The real route -> worker -> publish_pr against GitHub (no FakeGitHub): fetch of the sandbox `main`, the freight change committed as decided knowledge, a candidate
+    patch, its validation, a distinct approver, ONE publication. Then: the same publication again is not a new job; a direct retry of publish_pr reuses the branch and the
+    pull request; the sandbox has exactly one product pull request, open and not merged; PR #1 untouched. Refuses to run if a product PR already exists (one PR only)."""
+    q = code_env
+    repo = os.environ["RIPPLE_GIT_SANDBOX_REPO"]
+    probe = gr.GitHubApi(gr.remote_spec({"path": str(tmp_path / "probe"), "allowlist": ["app/"],
+                                         "remote": {"provider": "github", "repository": repo, "branch": "main", "grants": ["read"], "token_env": "RIPPLE_SANDBOX_GIT_TOKEN"}}))
+    st, before = probe.call("GET", f"/repos/{repo}/pulls?state=all&per_page=100")
+    assert st == 200
+    product_before = [p for p in before if str(p["head"]["ref"]).startswith("ripple/")]
+    assert not product_before, f"a product pull request already exists ({[p['number'] for p in product_before]}); D-GIT-01 allows one"
+    pr1 = next((p for p in before if p["number"] == 1), None)
+    entry = {"path": str(tmp_path / "mirror"), "allowlist": ["app/"], "validate": [["{python}", "-m", "py_compile", "app/calculations.py"]],
+             "remote": {"provider": "github", "repository": repo, "branch": "main", "grants": ["read", "pull_request"], "token_env": "RIPPLE_SANDBOX_GIT_TOKEN"}}
+    cid, cand_id, c, val, appr = _approved(q, entry, monkeypatch)
+    pub = appr.post(f"/v2/business/changes/{cid}/code/candidate/publish", json={"workspace_id": q.env.ws, "candidate_job_id": cand_id})
+    assert pub.status_code == 200, pub.text
+    job = pub.json()
+    assert job["created"] is True and job["branch"] == f"ripple/{cid}-{c['patch_hash'][:12]}"
+    assert appr.post(f"/v2/business/changes/{cid}/code/candidate/publish", json={"workspace_id": q.env.ws, "candidate_job_id": cand_id}).json()["created"] is False
+    rec = _settle_job(q, job["job_id"])
+    assert rec["execution_status"] == "COMPLETED", rec.get("execution_reason")
+    res = rec["execution_result"]
+    assert res["base_sha"] == c["base_sha"] and res["merged"] is False and res["pr_state"] == "open" and res["pr_url"].endswith(f"/pull/{res['pr_number']}")
+    spec = gr.remote_spec(entry)
+    files = gr._patched_files(entry["path"], c["base_sha"], q.admin.get(f"/v2/business/changes/{cid}/code/candidate", params={"workspace_id": q.env.ws}).json()["candidate"]["diff"])
+    again = gr.publish_pr(gr.GitHubApi(spec), spec, base_sha=c["base_sha"], files=files, branch=job["branch"], title="t", body="b", message="m")
+    assert again["reused_branch"] is True and again["reused_pr"] is True and again["pr_number"] == res["pr_number"] and again["commit_sha"] == res["commit_sha"]
+    st, after = probe.call("GET", f"/repos/{repo}/pulls?state=all&per_page=100")
+    product_after = [p for p in after if str(p["head"]["ref"]).startswith("ripple/")]
+    assert [p["number"] for p in product_after] == [res["pr_number"]] and product_after[0]["merged_at"] is None
+    st, files_changed = probe.call("GET", f"/repos/{repo}/pulls/{res['pr_number']}/files")
+    assert [f["filename"] for f in files_changed] == ["app/calculations.py"]
+    if pr1 is not None:
+        now1 = next(p for p in after if p["number"] == 1)
+        assert (now1["state"], now1["head"]["sha"], now1["merged_at"]) == (pr1["state"], pr1["head"]["sha"], pr1["merged_at"])
+    print("D-GIT-01", json.dumps({"pr_number": res["pr_number"], "pr_url": res["pr_url"], "branch": res["branch"], "commit_sha": res["commit_sha"], "tree_sha": res["tree_sha"],
+                                  "base_sha": res["base_sha"], "patch_hash": c["patch_hash"], "validation_hash": val["validation_hash"], "change_id": cid}))

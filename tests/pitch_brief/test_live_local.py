@@ -362,7 +362,7 @@ def test_18_a_valid_tunnel_origin_becomes_the_only_accepted_origin_and_unset_mea
 def test_19_the_reviewer_account_is_a_reviewer_and_a_viewer_stays_read_only():
     from infra.adapters.v2_policy import ROLE_PERMISSIONS
     from tools.judge_local import live_local as L
-    assert dict(L.ACCOUNTS)["live-reviewer"] == ("reviewer",) and ROLE_PERMISSIONS["viewer"] == frozenset({"project.read"})
+    assert dict(L.ACCOUNTS)["live-reviewer"] == ("reviewer",) and ROLE_PERMISSIONS["viewer"] == frozenset({"project.read", "request.assistant.ask"})
     for p in ("source.import", "intent.create", "change.approve", "change.apply", "knowledge.confirm", "source.restore", "membership.manage",
               "verification.contract.set"):
         assert p not in ROLE_PERMISSIONS["reviewer"] and p not in ROLE_PERMISSIONS["viewer"]

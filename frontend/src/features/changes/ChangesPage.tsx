@@ -17,6 +17,8 @@ import { ReviewStage } from "./ReviewStage";
 import { StageProvider, useStages } from "./StageCard";
 import { WhatIfStage } from "./WhatIfStage";
 import { WorkInbox } from "@/features/inbox/WorkInbox";
+import { TaskFrame } from "@/features/request-assistant/TaskFrame";
+import { TaskViewContext, useTaskView } from "@/features/request-assistant/taskView";
 
 function Unavailable() {
   const { ws } = useFlow();
@@ -36,6 +38,8 @@ function ExpandAll() {
 
 function Flow() {
   const { data, failed, loadError, refresh, ids, ws } = useFlow();
+  const reqId = ids.intent || ids.chat ? String(ids.intent ?? ids.chat) : null;
+  const task = useTaskView(ws, "intent_flow", reqId, data);                // one read, shared by the task frame, the journey and the next step
   if (loadError) {
     if (loadError.status === 403 || loadError.status === 404) return <Unavailable />;
     return (
@@ -49,6 +53,7 @@ function Flow() {
   const hasIntent = !!data.intent;
   const noRequest = !Object.values(ids).some(Boolean);
   return (
+    <TaskViewContext.Provider value={reqId ? task : null}>
     <div className="grid gap-4" data-testid="change-flow">
       {failed && (
         <Callout tone="warn" testid="job-refresh-failed">
@@ -63,6 +68,7 @@ function Flow() {
         </div>
       )}
       <SupersededCard />
+      {reqId && <TaskFrame key={`${ws}|${reqId}`} ws={ws} family="intent_flow" id={reqId} refreshKey={data} shared={task} detail={task.tv ? <NextCard inline /> : undefined} />}
       <Journey />
       <NextCard />
       <ExpandAll />
@@ -86,6 +92,7 @@ function Flow() {
       <QueryStage />
       <WhatIfStage />
     </div>
+    </TaskViewContext.Provider>
   );
 }
 

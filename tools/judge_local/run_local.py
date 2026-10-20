@@ -64,7 +64,11 @@ def main() -> int:
     from tests.pitch_brief import conftest as C
     # the real candidate budget config, plus the Final knowledge-loop roles pinned to the lite model so their (SIMULATED) jobs are admitted; written to a temp copy, never edited in place
     import tempfile
-    _final_roles = "".join(f"  {r}: gemini-3.5-flash-lite\n" for r in ("knowledge.qa", "change.understand", "change.impact_deps", "change.draft_guidance", "knowledge.gap_proposals", "gap.answer_interpret"))
+    _final_roles = "".join(f"  {r}: gemini-3.5-flash-lite\n" for r in ("knowledge.qa", "change.understand", "change.impact_deps", "change.draft_guidance", "knowledge.gap_proposals", "gap.answer_interpret",
+                                                                        # extension screens (2026-10-19): their SIMULATED jobs decline with a labelled note (sim_final.EXTRA)
+                                                                        "knowledge.mining", "document.wording", "document.variant", "gap.interview", "gap.interview_question",
+                                                                        "ma.specialist", "change.risk_memo", "ma.synthesis_memo",
+                                                                        "request.assistant", "request.qa"))      # request assistant: SIMULATED decline (sim_final.EXTRA)
     _cfg = C.REAL_BUDGET_PATH.read_text(encoding="utf-8").replace("role_model_ids:\n", "role_model_ids:\n" + _final_roles, 1)
     _cfg_path = pathlib.Path(tempfile.gettempdir()) / "ripple_rehearsal_budget.yaml"
     _cfg_path.write_text(_cfg, encoding="utf-8")

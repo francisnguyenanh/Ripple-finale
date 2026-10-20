@@ -274,3 +274,38 @@ def test_a_new_value_only_has_to_come_from_the_request_not_from_the_knowledge(qa
     own = dict(lower, condition=dict(lower["condition"], value=900000), text="Emergency purchases up to 900,000 JPY may be approved by the plant manager without Finance.")
     got, _ = understand(q, "Please " + request[0].lower() + request[1:], model_obj(ops=[op("set_exception", "rule-emergency-routing", [own], quote)]), mode="technical")
     assert got["understanding"]["status"] == "CLARIFY" and got["understanding"]["technical"]["operations"] == []                                                            # 900,000 is the model's own: refused
+
+
+# ---- owner decision H-U-03 (2026-10-18): an edit of the losing side of a decided conflict offers three intents; the person's choice decides ----------------------
+POLICY_REQ = "Change the CAPEX Finance threshold written in the procurement policy from 5,000,000 to 4,000,000 JPY."
+OP_POLICY = op("set_value", "rule-capex-finance-policy", {"value": 4000000, "unit": "JPY"}, POLICY_REQ.rstrip("."))
+
+
+def _choose(q, intent, client=None):
+    client = client or q.req
+    use(q, lambda p: model_obj(ops=[OP_POLICY]))
+    r = client.post("/v2/business/changes", json={"workspace_id": q.env.ws, "request": POLICY_REQ, "decided_conflict_intent": {"rule_id": "rule-capex-finance-policy", "intent": intent}})
+    return r
+
+
+def test_editing_the_losing_policy_rule_offers_three_intents_and_only_an_explicit_choice_changes_the_decided_rule(qa_env):
+    q = qa_env
+    got, _ = understand(q, POLICY_REQ, model_obj(ops=[OP_POLICY]), mode="technical")
+    u = got["understanding"]
+    assert u["status"] == "CLARIFY" and u["can_confirm"] is False and u["technical"]["operations"] == []
+    opts = u["decided_conflict_choices"][0]["options"]
+    assert [o["intent"] for o in opts] == ["fix_observed_record", "sync_source_to_decision", "change_decision"] and [o["available"] for o in opts] == [False, False, True]
+    r = _choose(q, "change_decision")
+    assert r.status_code == 200 and r.json()["change_id"] != got["change_id"]                                     # a new request, the first one is untouched
+    chosen = settle(q, q.req, r.json()["change_id"], "technical")["understanding"]
+    assert chosen["status"] == "READY" and chosen["can_confirm"] is True and [o["rule_id"] for o in chosen["technical"]["operations"]] == ["rule-capex-finance-config-target"]
+    assert chosen["retargeted"][0]["intent"] == "change_decision"
+    ok = q.req.post(f"/v2/business/changes/{r.json()['change_id']}/confirm", json={"workspace_id": q.env.ws, "preview_hash": chosen["preview_hash"]})
+    assert ok.status_code == 200, ok.text                                                                          # the ordinary flow continues (impact, draft, approval)
+    for intent in ("fix_observed_record", "sync_source_to_decision"):
+        r = _choose(q, intent)
+        u2 = settle(q, q.req, r.json()["change_id"])["understanding"]
+        assert u2["status"] == "UNSUPPORTED" and u2["can_confirm"] is False and u2["refused"] and "needs_human" not in u2["refused"][0]["why"][:12], intent
+        assert ("follows the sources" in u2["refused"][0]["why"]) if intent == "fix_observed_record" else ("no file proposal" in u2["refused"][0]["why"])
+    bad = q.req.post("/v2/business/changes", json={"workspace_id": q.env.ws, "request": POLICY_REQ, "decided_conflict_intent": {"rule_id": "rule-capex-finance-policy", "intent": "flip"}})
+    assert bad.status_code == 400

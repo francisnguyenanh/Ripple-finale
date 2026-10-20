@@ -19,6 +19,21 @@ export function asksMe(me: Actor, perm: string): boolean {
 
 const iAsked = (me: Actor, job: Job | null) => !!job && !!job.requested_by && job.requested_by === me.account;
 
+/** The server projection's view of the current step for this reader (see `request-assistant/taskView.ts`); null when it could not be read. */
+export interface Held { mine: boolean; holder: string | null; step: string | null; eligible: boolean; reason: string | null }
+
+const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+
+/** "You" only where the projection says this person is asked to do the current step. A permission alone gives "you may also do this, but you are not asked to",
+ *  never "your action". Without a projection (not readable) the client wording stands; a finished request (no current step anywhere) keeps it too. */
+export function alignNext(n: Next, held: Held | null): Next {
+  if (!held || held.mine || !/^You/.test(n.who) || n.kind === "wait") return n;
+  if (!held.holder) return n;
+  const step = held.step ? `${held.step}.` : "the current step.";
+  const also = held.eligible ? " You may also do this, but you are not asked to." : "";
+  return { who: cap(held.holder), text: `holds the next step: ${step}${also}`, kind: "wait" };
+}
+
 export function nextAction(d: FlowData, me: Actor): Next {
   const it = d.intent;
   const chat = d.chat && !d.chat.unavailable ? d.chat : null;

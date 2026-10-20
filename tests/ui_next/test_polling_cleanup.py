@@ -89,7 +89,7 @@ def test_a_waiting_page_polls_at_its_interval_a_bounded_number_of_times_and_stop
         page, ctx = _page(pw_browser, server, (env.req, f"cred-r-{env.nonce}"))
         select_workspace(page, env.ws)
         page.goto(f"{server.url}/app-next/#/ws/{env.ws}/changes?intent={c.intent}&draft={c.draft}&impact={c.impact}&simulation={c.simulation}&proposal={c.proposal}")
-        expect(tid(page, "next-action")).to_contain_text("approver", timeout=WAIT)             # waiting for a different person
+        expect(tid(page, "task-not-yours")).to_contain_text("approver", timeout=WAIT)          # waiting for a different person (the task frame's one summary)
         page.wait_for_timeout(1500)
         mark = time.monotonic()
         page.wait_for_timeout(13000)

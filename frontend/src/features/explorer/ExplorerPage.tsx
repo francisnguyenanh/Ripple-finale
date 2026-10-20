@@ -217,17 +217,42 @@ export function ExplorerPage() {
             </div>
           )}
         </div>
-        <ul data-testid="explorer-summary" aria-label="Summary of what was read" className="flex flex-wrap gap-2 text-sm">
-          {([["Files", T.files], ["Rules", T.rules], ["Confirmed by a person", T.confirmed], ["Not yet confirmed", T.pending],
-            ["Out of date", g.nodes.filter((n) => n.state === "stale" && n.type === "candidate").length], ["Issues", T.issues], ["Decisions", T.decisions]] as [string, number][]).map(([label, n]) => (
-            <li key={label} data-label={label} className="rounded-md border border-border px-2 py-0.5">{label}: <strong>{n}</strong></li>
-          ))}
+        <div data-testid="explorer-summary" aria-label="Summary of what was read" className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          {/* EUI-04: separate typed metrics, each with its own unit and denominator; overlapping counts are never segments of one bar */}
+          <section data-testid="metric-rules" aria-label="Rules" className="rounded-md border border-border px-3 py-2 grid gap-1">
+            <p className="font-medium" data-label="Rules">Rules: <strong>{T.rules}</strong> <span className="text-muted font-normal">read by the AI</span></p>
+            <label className="grid gap-0.5" data-label="Confirmed by a person">
+              <span>Confirmed by a person: <strong>{T.confirmed}</strong> of {T.rules} rules</span>
+              {T.rules > 0 && <meter className="rp-meter" min={0} max={T.rules} value={T.confirmed} data-testid="metric-confirmed-bar" />}
+            </label>
+            <p data-label="Not yet confirmed">Not yet confirmed: <strong>{T.pending}</strong> of {T.rules} rules</p>
+          </section>
+          <section data-testid="metric-currentness" aria-label="Rule currentness" className="rounded-md border border-border px-3 py-2 grid gap-1">
+            <p className="font-medium" data-label="Out of date">Out of date: <strong>{g.nodes.filter((n) => n.state === "stale" && n.type === "candidate").length}</strong> rules</p>
+            <Muted>Counted separately: an out-of-date rule can also be confirmed or not yet confirmed.</Muted>
+          </section>
+          <section data-testid="metric-files" aria-label="Files and open work" className="rounded-md border border-border px-3 py-2 grid gap-1">
+            <p className="font-medium" data-label="Files">Files: <strong>{T.files}</strong></p>
+            <p data-label="Issues">Issues: <strong>{T.issues}</strong></p>
+            <p data-label="Decisions">Decisions: <strong>{T.decisions}</strong></p>
+          </section>
           {(unanalysed.length > 0 || cov.truncated) && (
-            <li data-testid="explorer-incomplete" className="rounded-md border border-warning px-2 py-0.5">
+            <p data-testid="explorer-incomplete" className="rounded-md border border-warning px-2 py-0.5 sm:col-span-2 lg:col-span-3">
               Incomplete: {unanalysed.length} file{unanalysed.length === 1 ? "" : "s"} not analysed{cov.truncated ? ", graph cut at its size limit" : ""}; what is missing is unknown, not zero
-            </li>
+            </p>
           )}
-        </ul>
+        </div>
+        {states.length > 0 && (                                                          // EUI-04: the same state filter as the select, as pills with the loaded counts
+          <div className="flex flex-wrap items-center gap-1 text-sm" role="group" aria-label="Filter by state" data-testid="explorer-pills">
+            <Button size="sm" variant={state === "" ? "primary" : "ghost"} aria-pressed={state === ""} data-testid="explorer-pill" data-state="" onClick={() => setState("")}>All</Button>
+            {states.map((x) => {
+              const n = g.nodes.filter((nd) => (nd.type === "artifact" || nd.type === "candidate" || nd.type === "finding") && nd.state === x).length;
+              return <Button key={x} size="sm" variant={state === x ? "primary" : "ghost"} aria-pressed={state === x} data-testid="explorer-pill" data-state={x}
+                onClick={() => setState(state === x ? "" : x)}>{nodePhrase(x)} <span className="text-xs">({n})</span></Button>;
+            })}
+            <span className="text-xs text-muted">Counts are of what is loaded here (files, rules and issues), not of the whole workspace when the graph was cut.</span>
+          </div>
+        )}
         {vis && s.mode !== "technical" && <p data-testid="explorer-showing" className="text-sm">Showing {shownRules} matching rule{shownRules === 1 ? "" : "s"}.</p>}
         <details data-testid="explorer-counts-more" open={s.mode === "technical"} className="text-sm">
         <summary className="cursor-pointer w-fit text-primary">{s.mode === "technical" ? "Counts and revisions" : "What these numbers mean"}</summary>

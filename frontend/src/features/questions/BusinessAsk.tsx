@@ -38,15 +38,15 @@ function AnswerCard({ data, mode }: { data: Rec; mode: string }) {
       {a.newer_knowledge_exists && <Callout tone="warn" testid="qa-newer">The business knowledge has changed since this answer. Ask again to use the latest version.</Callout>}
       <p data-testid="qa-text" className="text-base">{a.answer as string}</p>
       {((a.conflicts ?? []) as Rec[]).map((c, i) => (
-        <Callout key={i} tone="warn" testid="qa-conflict">The sources disagree: {((c.titles ?? []) as string[]).map((t) => `“${t}”`).join(" and ")}. No winner was chosen; a person has to decide which one is the business rule.</Callout>
+        <Callout key={i} tone={c.decided ? "info" : "warn"} testid="qa-conflict">The sources disagree: {((c.titles ?? []) as string[]).map((t) => `“${t}”`).join(" and ")}. {c.decided ? `A person decided the business rule (${(c.decided_title as string) ?? "the decided rule"}); the other source still says otherwise until it is corrected.` : "No winner was chosen; a person has to decide which one is the business rule."}</Callout>
       ))}
       {((a.claims ?? []) as Rec[]).length > 0 && (
         <ul className="grid gap-2">
           {(a.claims as Rec[]).map((c, i) => (
-            <li key={i} data-testid="qa-claim" data-basis={c.basis} className="rounded-md border border-border p-3 grid gap-1">
+            <li key={i} data-testid="qa-claim" data-basis={c.basis} data-origin={(c.origin as string) ?? "model"} className="rounded-md border border-border p-3 grid gap-1">
               <span>{c.text as string}</span>
-              <Muted>{((c.authority_labels ?? []) as string[]).join(", ")}{((c.sources ?? []) as string[]).length ? ` - ${(c.sources as string[]).join("; ")}` : ""}</Muted>
-              <Tech><Muted>refs {((c.refs ?? []) as string[]).map((r) => r).join(", ") || "withheld"} - basis <code>{c.basis as string}</code></Muted></Tech>
+              <Muted>{((c.authority_labels ?? []) as string[]).join(", ")}{((c.sources ?? []) as string[]).length ? ` - ${(c.sources as string[]).join("; ")}` : ""}{c.origin === "server_applicability" ? " - added by the rule check, not written by the AI" : ""}</Muted>
+              <Tech><Muted>refs {((c.refs ?? []) as string[]).map((r) => r).join(", ") || "withheld"} - basis <code>{c.basis as string}</code> - origin <code>{(c.origin as string) ?? "model"}</code></Muted></Tech>
             </li>
           ))}
         </ul>

@@ -31,7 +31,8 @@ def load_config() -> tuple[dict, str]:
 
 
 def job_id_for(snapshot_id: str, gap_id: str, text: str) -> str:
-    return "gai-" + hashlib.sha256(json.dumps([snapshot_id, gap_id, _norm(text)]).encode("utf-8")).hexdigest()[:24]
+    from infra.worker import job_binding
+    return "gai-" + hashlib.sha256(json.dumps([snapshot_id, gap_id, _norm(text), job_binding.fingerprint(KIND), bai.COMPLETENESS_VERSION]).encode("utf-8")).hexdigest()[:24]   # a changed prompt/model or completeness rule is a new reading
 
 
 def validate_payload(payload) -> str | None:
@@ -72,25 +73,28 @@ class GapAnswerInterpretExecutor:
         if gap is None or gap["status"] not in ("OPEN", "REOPENED"):
             raise NonRetryableExecutionError("gap_not_open", "this question is not open in the current knowledge version")
         rules = {r["rule_id"]: r for r in base["rules"] if r["status"] not in ("SUPERSEDED", "REJECTED")}
-        affected = [rules[rid] for rid in gap["affected_rule_ids"] if rid in rules]
-        others = [r for rid, r in sorted(rules.items()) if rid not in gap["affected_rule_ids"]]
-        shown = (affected + others)[: frozen["limits"]["max_known_rules"]]
-        prompt = bai.build_prompt(frozen, gap, shown, payload["text"], max_chars=frozen["limits"]["max_prompt_chars"])
+        shown, fields, coverage = bai.select_context(gap, rules, payload["text"], frozen["limits"])    # relevance-ranked, every cut reported (V4-IF-04)
+        prompt = bai.build_prompt(frozen, gap, shown, payload["text"], max_chars=frozen["limits"]["max_prompt_chars"], fields=fields, coverage=coverage)
         from infra.worker import extraction
         if extraction._input_token_bound(prompt, frozen["output_schema"]) > config.max_input_tokens_per_call:
             raise NonRetryableExecutionError("budget_exceeded", "the answer and the rules exceed the input ceiling")
-        ctx.request_context.update(ai_frozen=frozen, ai_sha=sha, ai_gap=gap, ai_rules={r["rule_id"]: r for r in shown}, ai_base_hash=base["snapshot"]["content_hash"])
+        ctx.request_context.update(ai_frozen=frozen, ai_sha=sha, ai_gap=gap, ai_rules={r["rule_id"]: r for r in shown}, ai_fields=sorted(fields), ai_coverage=coverage,
+                                   ai_base_hash=base["snapshot"]["content_hash"])
         return ExecutionRequest(prompt=prompt, schema=frozen["output_schema"], provider_calls_planned=1, external=True)
 
     def execute(self, ctx: ExecutionContext, request: ExecutionRequest, calls: ProviderCallBudget) -> ExecutionOutcome:
         rc = ctx.request_context
-        obj, model_id, actual, in_t, out_t, th_t = call_pinned_json(ctx, request, calls, ROLE, bai.MODEL_KEYS)
+        obj, model_id, actual, in_t, out_t, th_t = call_pinned_json(ctx, request, calls, ROLE, bai.MODEL_KEYS, bai.OPTIONAL_MODEL_KEYS)
         try:
             model = bai.validate_model_object(obj, rc["ai_frozen"]["limits"])
         except ValueError as exc:
             raise NonRetryableExecutionError("schema_violation", str(exc)) from exc
         payload = ctx.job["payload"]
-        out = bai.resolve(model, payload["text"], rc["ai_gap"], rc["ai_rules"], rc["ai_frozen"]["limits"])
+        out = bai.resolve(model, payload["text"], rc["ai_gap"], rc["ai_rules"], rc["ai_frozen"]["limits"], known_fields=set(rc["ai_fields"]))
+        coverage = rc["ai_coverage"]
+        if out["status"] != "READY" and (coverage["rules_truncated"] or coverage["fields_truncated"]):
+            out = dict(out, reasons=list(out["reasons"]) + ["context_truncated"])        # the model saw part of the knowledge: said, never hidden
+        out = bai.completeness(out, payload["text"])                       # server completeness validation, separate from the model's reading (DEC-0006)
         preview = None
         if out["answer"] is not None:
             try:                                                     # the same preview the structured controls would show; read-only
@@ -100,5 +104,6 @@ class GapAnswerInterpretExecutor:
                            message="The reading could not be previewed against the current knowledge; please answer with the controls.")
         result = {"executor_id": EXECUTOR_ID, "config_sha256": rc["ai_sha"], "gap_id": payload["gap_id"], "snapshot_id": payload["snapshot_id"], "text": payload["text"],
                   "status": out["status"], "proposed_answer": out["answer"], "quote": out["quote"], "uncovered": out["uncovered"], "reasons": out["reasons"], "message": out["message"],
+                  "ruled_out": out.get("ruled_out", []), "rejected_reading": out.get("rejected_reading"), "completeness": out.get("completeness"), "model_uncertainty": out.get("model_uncertainty"), "context": coverage,
                   "preview": preview, "model_status": model["status"], "provider_calls": 1, "applies_nothing": True, "model": {"pinned": model_id, "served": actual}}
         return ExecutionOutcome(result=json.loads(_canon_json(result)), model_id=actual, input_tokens=in_t, output_tokens=out_t, thought_tokens=th_t)

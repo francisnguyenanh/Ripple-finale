@@ -33,6 +33,14 @@ def _violations(page):
     return res
 
 
+def scoped_violations(page, selector):
+    """axe on ONE component (owner request 2026-10-21: targeted checks of the new controls inside their real journeys); all impacts count."""
+    if not AXE.is_file():
+        pytest.skip("run `npm ci` in frontend/ first")
+    page.evaluate(AXE.read_text(encoding="utf-8"))
+    return page.evaluate("async ([sel, tags]) => (await axe.run(document.querySelector(sel), {runOnly: {type: 'tag', values: tags}})).violations.map(v => ({id: v.id, impact: v.impact, nodes: v.nodes.slice(0, 3).map(n => n.target.join(' '))}))", [selector, TAGS])
+
+
 @pytest.mark.parametrize("scheme,w,h", [("light", 1280, 800), ("dark", 1280, 800), ("light", 390, 844)])
 def test_pages_have_no_axe_violations(env, ch, pw_browser, scheme, w, h):
     server = ServerThread().start()
@@ -44,7 +52,7 @@ def test_pages_have_no_axe_violations(env, ch, pw_browser, scheme, w, h):
         login(page, env.admin, f"cred-a-{env.nonce}")
         select_workspace(page, env.ws)
         found = {}
-        for view in ("Overview", "Sources", "Explorer", "Questions", "Changes", "Impact & Simulation", "Harbor try-out", "History", "Knowledge Documents", "Support"):
+        for view in ("Overview", "Sources", "Explorer", "Questions", "Changes", "Impact & Simulation", "Sample process trial", "History", "Knowledge Documents", "Support"):
             if w < 1024:
                 tid(page, "menu-button").click()
             goto_view(page, view)

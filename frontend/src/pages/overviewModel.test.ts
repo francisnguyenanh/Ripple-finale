@@ -17,7 +17,7 @@ describe("buildSummary", () => {
   });
   it("keeps a failed read as unknown, never as zero", () => {
     const s = buildSummary({ head, rev: null, overview: undefined, queue: undefined, audit: undefined }, recent);
-    expect(s).toEqual({ files: null, coveragePartial: null, rules: null, confirmed: null, questions: null, openFindings: null, events: null });
+    expect(s).toEqual({ files: null, coveragePartial: null, rules: null, confirmed: null, questions: null, openFindings: null, events: null, businessRules: null });
   });
   it("a workspace with no source revision really has zero files", () => {
     expect(buildSummary({ head: {}, overview, queue, audit }, recent).files).toBe(0);
@@ -42,6 +42,8 @@ describe("nextStep", () => {
   it("does not say no rules were read when the rules read failed", () => {
     expect(nextStep({ ...ready, rules: null }, none, "ready").kind).not.toBe("analyze");
     expect(nextStep({ ...ready, rules: 0 }, none, "ready").kind).toBe("analyze");
+    expect(nextStep({ ...ready, rules: 0, businessRules: 0 }, none, "ready").kind).toBe("analyze");
+    expect(nextStep({ ...ready, rules: 0, businessRules: 27 }, none, "ready").kind).not.toBe("analyze");     // accepted business knowledge exists: not "nothing was read"
   });
   it("routes questions and empty workspaces", () => {
     expect(nextStep({ ...ready, questions: 2 }, none, "ready")).toMatchObject({ kind: "questions", to: "questions" });

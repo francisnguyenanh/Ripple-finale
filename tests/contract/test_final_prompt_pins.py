@@ -10,7 +10,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 PLAN = ROOT / "docs" / "evaluation" / "FINAL_AI_QUALITY_PLAN.md"
 ROW = re.compile(r"^\| (?P<role>[a-z][\w.]*) \| (?P<path>[\w./-]+) \| (?P<sha>[0-9a-f]{64}) \| (?P<evidence>.+?) \|$", re.M)
 REQUIRED_ROLES = {"knowledge.qa", "change.understand", "change.impact_deps", "change.draft_guidance", "change.draft", "extraction", "retrieval.lexicon", "retrieval.semantic",
-                  "knowledge.gap_proposals", "gap.answer_interpret", "document.wording", "knowledge.mining", "gap.interview"}
+                  "knowledge.gap_proposals", "gap.answer_interpret", "document.wording", "knowledge.mining", "gap.interview",
+                  "change.risk_memo", "ma.synthesis_memo", "ci.semantic_drift", "source.correspondence", "code.diff_proposal", "roi.analyst"}
 
 
 def pinned_sha(path: pathlib.Path) -> str:

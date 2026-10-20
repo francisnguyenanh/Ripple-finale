@@ -17,7 +17,7 @@ from tests.pitch_brief.chain import build  # noqa: E402
 SHOTS = os.environ.get("UI_NEXT_SHOTS")
 WAIT = 30000
 PAGES = [("Overview", "overview"), ("Sources", "sources"), ("Explorer", "explorer"), ("Questions", "questions"), ("Changes", "changes"),
-         ("Impact & Simulation", "impact"), ("Harbor try-out", "harbor"), ("History", "history"), ("Knowledge Documents", "documents"), ("Support", "support")]
+         ("Impact & Simulation", "impact"), ("Sample process trial", "harbor"), ("History", "history"), ("Knowledge Documents", "documents"), ("Support", "support")]
 # what shows that a page has its real data (not its loading state)
 READY = {"overview": "overview-cta", "sources": "artifact-row", "explorer": "explorer-summary", "questions": "questions-note", "changes": "chat-turns",
          "impact": "flow-whatif", "harbor": "harbor-versions", "history": "history-activity", "documents": "docs-topics", "support": "support-matrix"}

@@ -20,11 +20,20 @@ Light and dark values are in `index.css`. Token `--x` becomes the Tailwind class
 | `--danger` | failed, rejected, destructive | `text-danger`, `bg-danger` |
 | `--on-danger` | text and icon on `--danger` | `text-on-danger` |
 | `--info` | in progress, informational | `text-info` |
-| `--sim` | SIMULATED (no real effect) marker | `text-sim` |
+| `--sim` | SIMULATED (no real effect) marker; never used for "AI" | `text-sim` |
+| `--origin-ai` | origin marker of model-written content (AI interpretation, proposal, suggestion); paired with a dashed border, a sparkle icon and the text "AI" | `text-origin-ai`, `border-origin-ai` |
+| `--origin-ai-surface` | tinted surface of a section whose content a model wrote | `bg-origin-ai-surface` |
+| `--origin-evidence` | origin marker of source observations and engine computations (solid border; document or gauge icon; text "Source" / "Engine") | `text-origin-evidence`, `border-origin-evidence` |
+| `--origin-evidence-surface` | tinted surface of a source or engine section | `bg-origin-evidence-surface` |
 | `--focus` | focus outline | used by `:focus-visible` |
 | `--overlay-backdrop` | modal backdrop | used by `.rp-dialog::backdrop` |
 
 Colour is never the only carrier of state: pair it with text and an icon. The contrast target is WCAG 2.2 AA; pairings must be measured in a real browser, not assumed.
+
+Origin tokens (EUI-01, 2026-10-20) mark WHERE content comes from, never whether it is correct, checked or approved. Their values were chosen by computed WCAG contrast
+from the token values (not copied from a review): marker on `--surface` / `--surface-2` / `--bg` / its own surface, light 6.4-8.1:1, dark 7.8-10.2:1; `--text` on the
+origin surfaces 13.7-15.7:1; `--text-muted` 5.6-6.6:1; `--primary` links 5.5-5.7:1. The AI marker is close to `--sim` and `--danger` in lightness, so the label, icon and
+dashed border are required, not optional.
 
 ## Other tokens
 - Typography: Inter Variable (sans), JetBrains Mono Variable (mono, 13px). Body 16/24; page title 24/32; section 18/26; metadata 12-14.

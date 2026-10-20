@@ -40,7 +40,7 @@ def validate_payload(payload) -> str | None:
 
 
 def result_hash(result: dict) -> str:
-    body = {k: v for k, v in result.items() if k != "result_hash"}
+    body = {k: v for k, v in result.items() if k not in ("result_hash", "ai_outcome")}          # ai_outcome is added by the worker after the hash: counts, not content
     return hashlib.sha256(_canon_json(body).encode()).hexdigest()
 
 

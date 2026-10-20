@@ -77,7 +77,7 @@ class DocumentVariantExecutor:
         except ValueError as exc:
             raise NonRetryableExecutionError("schema_violation", str(exc)) from exc
         cfg = frozen["audiences"][p["audience"]]
-        checked = dv.check(model, rc["dv_pack"], cfg)
+        checked = dv.check(model, rc["dv_pack"], cfg, frozen.get("fidelity"), frozen["limits"]["max_paragraphs_per_section"], frozen["limits"])
         from core.change_intelligence.v2.serialize import canonical_hash
         checked["fact_coverage"]["facts_hash"] = canonical_hash(da.facts_view(rc["dv_doc"]))          # every audience variant of one base is checked against the SAME facts (consistency across audiences)
         base_text = None
@@ -93,5 +93,5 @@ class DocumentVariantExecutor:
             raise NonRetryableExecutionError(exc.code, str(exc)) from exc
         result = {"executor_id": EXECUTOR_ID, "config_sha256": rc["dv_sha"], "variant_id": p["variant_id"], "artifact_id": p["artifact_id"], "audience": p["audience"], "status": row["status"],
                   "content_hash": row["content_hash"], "fact_coverage": checked["fact_coverage"], "rejected": checked["rejected"], "missing_mandatory": checked["missing_mandatory"],
-                  "omitted": checked["omitted"], "model_status": model["status"], "replayed": row["replayed"], "model": {"pinned": model_id, "served": actual}, "provider_calls": 1, "applies_nothing": True}
+                  "omitted": checked["omitted"], "omitted_exceptions": checked["omitted_exceptions"], "model_status": model["status"], "replayed": row["replayed"], "model": {"pinned": model_id, "served": actual}, "provider_calls": 1, "applies_nothing": True}
         return ExecutionOutcome(result=result, model_id=actual, input_tokens=in_t, output_tokens=out_t, thought_tokens=th_t)

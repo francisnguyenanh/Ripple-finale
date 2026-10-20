@@ -8,10 +8,12 @@ import { humanize, intentPhrase } from "@/lib/fmt";
 import { useAction } from "@/lib/useAction";
 import { useSession } from "@/session";
 import { useFlow } from "./flow";
-import { nextAction } from "./next";
+import { alignNext, nextAction } from "./next";
+import { TaskViewContext, responsibility } from "@/features/request-assistant/taskView";
 
 export { fmtForm } from "./fmtForm";
-import { fmtForm } from "./fmtForm";
+import { fmtForm, scopeGap } from "./fmtForm";
+import type { Intent } from "./types";
 
 export function RequestCard() {
   const { ws, data, shareLink, refresh } = useFlow();
@@ -55,6 +57,7 @@ export function RequestCard() {
     <Card title="Your request" testid="request-card" data={{ saved: "true" }}>
       <p data-testid="request-summary" className="text-xl font-semibold">{f.title}: {f.from} <span aria-hidden="true">→</span><span className="sr-only">to</span> {f.to}</p>
       <Muted>Applies to: {f.scope}. Orders you expect it to cover: {f.applies}.</Muted>
+      <ScopeGap it={it} />
       {((it.exclusions ?? []).length > 0 || !!it.effective_time) && (
         <Callout tone="warn" testid="request-recorded-only">
           <strong>Recorded only, not used by the draft or the simulation</strong>
@@ -106,14 +109,21 @@ export function SupersededCard() {
   );
 }
 
-export function NextCard() {
+/** The next step of the change, aligned with the server's task projection ("You" only where this person is asked now). `inline` = shown inside the task frame
+ *  (the page's one responsibility summary); standalone only where no task frame is shown (a new request, or the projection could not be read). */
+export function NextCard({ inline = false }: { inline?: boolean }) {
   const { data, waitExhausted, checkNow } = useFlow();
   const s = useSession();
+  const shared = React.useContext(TaskViewContext);
   if (!data) return null;
-  const n = nextAction(data, { account: s.account, can: s.can, roles: s.roles });
+  if (!inline && shared?.tv) return null;                                  // the task frame carries it
+  const n = alignNext(nextAction(data, { account: s.account, can: s.can, roles: s.roles }), responsibility(shared?.tv));
   return (
-    <div data-testid="next-action" data-who={n.who} data-kind={n.kind} className={`rounded-lg border bg-surface p-4 grid gap-2 ${n.kind === "wait" ? "border-info" : n.kind === "stop" ? "border-danger" : "border-primary"}`}>
-      <p className="text-sm"><strong>{n.kind === "wait" ? "Waiting for: " : "Next: "}{n.who}</strong>{/^[A-Z"']/.test(n.text) ? ": " : " "}<span>{n.text}</span></p>
+    <div data-testid="next-action" data-who={n.who} data-kind={n.kind} data-inline={String(inline)}
+      className={inline ? "grid gap-1 text-sm border-t border-border pt-2 mt-1" : `rounded-lg border bg-surface p-4 grid gap-2 ${n.kind === "wait" ? "border-info" : n.kind === "stop" ? "border-danger" : "border-primary"}`}>
+      {inline && n.kind === "wait" ? null                                   /* waiting: the task frame above already names who holds the step */
+        : inline ? <p className="text-sm" data-testid="next-how"><strong>How: </strong><span>{n.text}</span></p>
+        : <p className="text-sm"><strong>{n.kind === "wait" ? "Waiting for: " : "Next: "}{n.who}</strong>{/^[A-Z"']/.test(n.text) ? ": " : " "}<span>{n.text}</span></p>}
       {n.kind === "wait" && (
         <>
           <Muted testid="wait-note">{waitExhausted ? 'Automatic checking has stopped. Press "Check now" to look again.' : "This page checks by itself every few seconds; you do not need to create the request again."}</Muted>
@@ -121,5 +131,18 @@ export function NextCard() {
         </>
       )}
     </div>
+  );
+}
+
+/** Shown next to every decision on the request (confirm, approve): the stated scope does not name every case the requester expects it to cover. */
+export function ScopeGap({ it, where }: { it: Intent; where?: string }) {
+  const gap = scopeGap(it);
+  if (!gap.length) return null;
+  const f = fmtForm(it);
+  return (
+    <Callout tone="warn" testid="scope-gap">
+      <strong>The scope does not cover everything you expect</strong>
+      <span>The change applies to {f.scope}, but the request also expects it to cover: {gap.join(", ")}. Those cases would not change.{where ? ` ${where}` : ""}</span>
+    </Callout>
   );
 }

@@ -5,6 +5,7 @@ Read in this order if you want to judge what Ripple is, what was verified and wh
 | Read | What it settles |
 |---|---|
 | [`../README.md`](../README.md) | what Ripple is, how to try it, supported scope, limits, setup and tests |
+| [`product/AI_SYSTEM_PRINCIPLES.md`](product/AI_SYSTEM_PRINCIPLES.md) | enterprise future-of-work objective; when LLM reasoning is required, deterministic responsibilities, model selection and task acceptance policy; design intent, not delivery evidence |
 | [`contracts/FINAL_KNOWLEDGE_LOOP.md`](contracts/FINAL_KNOWLEDGE_LOOP.md) | the Final knowledge loop: shapes, grammar, lifecycle, permissions, limits, retrieval adapter, carry-over, model suggestions and readings |
 | [`evaluation/FINAL_AI_QUALITY_PLAN.md`](evaluation/FINAL_AI_QUALITY_PLAN.md) | what AI quality would be measured, the pinned prompts, the one-case live pilot of 2026-10-17 (a self-check, not a gate) and the not-approved set-sized pilot; no pin carries gate evidence on this build |
 | [`runbooks/FINAL_RECOVERY.md`](runbooks/FINAL_RECOVERY.md) | operator recovery steps of the Final loop |

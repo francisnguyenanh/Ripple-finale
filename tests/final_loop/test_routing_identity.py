@@ -143,6 +143,10 @@ def test_the_vertex_provider_runs_only_under_a_job_budget_and_the_env_selection_
     prov = vbi.semantic_adapter().provider
     assert isinstance(prov, VertexSemanticProvider) and prov.model_id == "gemini-3.8-flash" and prov.external is True
     vbi.set_semantic_adapter(None)
+    from infra.worker import job_quota
+    timeout = job_quota.load_worker_budget_config().request_timeout_seconds
+    assert timeout and vbi.semantic_adapter().caps["timeout_seconds"] == float(timeout)                               # the paid provider's latency bound = the approved request timeout (live finding -03)
+    vbi.set_semantic_adapter(None)
 
 
 # ---- F-07: a second change on a rule that already has a decided version -----------------------------------------------------------------------------------------

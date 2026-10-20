@@ -57,7 +57,13 @@ def semantic_adapter() -> sr.SemanticAdapter:
                     provider = VertexSemanticProvider(model_for_role(config, "retrieval.semantic"))
             if not isinstance(provider, VertexSemanticProvider):
                 provider = sr.DisarmedProvider()                  # no pinned, priced role: stay disarmed rather than guess a model
-        _ADAPTER = sr.SemanticAdapter(provider, gate=provider_gate.is_disarmed)
+        caps = None
+        if type(provider).__name__ == "VertexSemanticProvider" and os.environ.get("RIPPLE_BUDGET_CONFIG_PATH"):
+            from infra.worker import job_quota
+            timeout = job_quota.load_worker_budget_config().request_timeout_seconds
+            if timeout:
+                caps = {"timeout_seconds": float(timeout)}        # a paid provider's latency bound is the approved request timeout; 8 s discarded paid live answers
+        _ADAPTER = sr.SemanticAdapter(provider, caps=caps, gate=provider_gate.is_disarmed)
     return _ADAPTER
 
 
@@ -168,6 +174,7 @@ def context_pack(store, tenant_id, workspace_id, query, *, view="target", can_re
                 pack["notes"].append(f"The business index is {state['status']}; this answer was read directly from the stored snapshot.")
             if view == "observed":
                 items = [i for i in items if i["kind"] == "rule" and i["authority"] == "OBSERVED"]
+            pack["corpus"] = {"items": len(items)}                       # the authorized universe of this view: an empty search over a non-empty corpus is not proof
             ranked = bi.rank_items(items, query, top_k=top_k, max_chars=max_chars, lexicon=_lexicon(), relations=snap["relations"])
             pack["semantic"] = {"status": "off", "reason": "off_by_request"}
             if semantic:

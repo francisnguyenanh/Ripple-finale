@@ -48,6 +48,40 @@ def business_graph(request: Request, workspace_id: str, focus: str | None = None
     return _read(request, workspace_id, lambda store, tenant: v2_business.graph_view(store, tenant, workspace_id, focus=focus))
 
 
+@router.get("/v2/business/unbound-values")
+def business_unbound_values(request: Request, workspace_id: str):
+    """Numbers in the structured sources of the current knowledge that no rule is linked to, grouped by file. A disclosure for a person, never a gap or a rule.
+    The values and their locations come from source text: only a reader with `evidence.read` sees them; others see the file and the count."""
+    identity, store = _identity_store(), _v2_store()
+    if identity is None or store is None:
+        return _error("v2 unavailable", 503)
+    try:
+        authority = _authority(identity, request, workspace_id)
+        require(authority, "project.read")
+        tenant = authority["tenant_id"]
+        working = v2_business._working(v2_business.business_view(store, tenant, workspace_id))
+        if working is None:
+            return JSONResponse({"snapshot_id": None, "files": [], "values_withheld": False}, headers=_NO_STORE)
+        found = v2_business._unbound_values(store, tenant, workspace_id, working["snapshot"]["source_revision_id"], working["rules"])
+        can = "evidence.read" in permissions_for(authority.get("roles"))
+        files: dict = {}
+        for v in found["values"]:
+            g = files.setdefault(v["file"], {"file": v["file"], "count": 0, "values": []})
+            g["count"] += 1
+            if can:
+                g["values"].append({k: v.get(k) for k in ("location", "value", "sheet", "cell", "header", "row_label")})
+        return JSONResponse({"snapshot_id": working["snapshot"]["snapshot_id"], "total": found["count"], "truncated": found["truncated"], "values_withheld": not can,
+                             "files": [files[k] for k in sorted(files)],
+                             "statement": "Not linked to any rule. A listed value may be metadata or a rule nobody extracted; a person decides. Nothing here is a rule or a question."},
+                            headers=_NO_STORE)
+    except IdentityDenied as exc:
+        return _denied(exc)
+    except PermissionDenied as exc:
+        return _error(f"permission denied: {exc}", 403)
+    except TenantScopeError as exc:
+        return _error(str(exc), 404)
+
+
 @router.get("/v2/business/gaps")
 def business_gaps(request: Request, workspace_id: str):
     return _read(request, workspace_id, lambda store, tenant: v2_business.gap_queue(store, tenant, workspace_id))
@@ -255,7 +289,8 @@ def business_gap_interpret_result(request: Request, gap_id: str, job_id: str, wo
         out = {"gap_id": gap_id, "job_id": job_id, **_qa_state(rec), "reading": None}
         if out["status"] == "done" and rec.get("execution_result"):
             res = rec["execution_result"]
-            out["reading"] = {k: res[k] for k in ("status", "proposed_answer", "quote", "uncovered", "message", "preview", "text")}
+            out["reading"] = {**{k: res[k] for k in ("status", "proposed_answer", "quote", "uncovered", "message", "preview", "text")},
+                              **{k: res.get(k) for k in ("reasons", "completeness", "context")}}   # context: what part of the knowledge the model saw (V4-IF-04)
             out["reading"]["statement"] = ("This is how a model read the answer; the preview shows exactly what confirming it would change. Confirming records the person's own words, "
                                            "not the model's reading, as the decision.")
         elif out["status"] == "failed":
@@ -369,20 +404,13 @@ async def business_context(request: Request):
 def _config_fingerprint(kind: str) -> str:
     """What a stored result is bound to besides its inputs: the frozen prompt/schema of the role and the pinned model (and the semantic adapter identity for QA). The same
     inputs under a changed configuration are a NEW job, never a replay of the old answer; a retry of the same job keeps its binding (the job id does not change)."""
-    import hashlib
-    from infra.worker import budget_config as _bc, job_quota
-    sha = {"knowledge.qa": lambda: __import__("infra.worker.knowledge_qa", fromlist=["load_config"]).load_config()[1],
-           "change.understand": lambda: __import__("infra.worker.change_understand", fromlist=["load_config"]).load_config()[1]}[kind]()
-    model = None
-    if os.environ.get("RIPPLE_BUDGET_CONFIG_PATH"):
-        config = job_quota.load_worker_budget_config()
-        model = {"model": _bc.model_for_role(config, kind), "thinking": _bc.thinking_level_for_role(config, kind)}
+    from infra.worker import job_binding
     extra = None
     if kind == "knowledge.qa":
         from infra.adapters import v2_business_index
         adapter = v2_business_index.semantic_adapter()
         extra = {"provider": adapter.provider.provider_id, "config_version": adapter.provider.config_version} if getattr(adapter.provider, "external", False) else None
-    return hashlib.sha256(json.dumps({"config": sha, "model": model, "semantic": extra}, sort_keys=True).encode("utf-8")).hexdigest()[:12]
+    return job_binding.fingerprint(kind, extra)
 
 
 def _qa_job_id(workspace_id, snapshot_id, view, question, evidence, follow_up) -> str:
@@ -540,14 +568,14 @@ async def request_business_change(request: Request):
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
     body = await _json_body(request)
-    workspace_id, text = body.get("workspace_id"), body.get("request")
+    workspace_id, text, choice = body.get("workspace_id"), body.get("request"), body.get("decided_conflict_intent")
     try:
         authority = _authority(identity, request, workspace_id if isinstance(workspace_id, str) else "")
         require_human_actor(authority)
         require(authority, "intent.create")
         require(authority, "ai.use")
         from infra.worker import change_understand
-        err = change_understand.validate_payload({"request": text, "snapshot_id": "x"})
+        err = change_understand.validate_payload({"request": text, "snapshot_id": "x", **({"decided_conflict_intent": choice} if choice is not None else {})})
         if not isinstance(workspace_id, str) or err:
             return _error(f"change.understand: {err or 'workspace_id required'}", 400)
         tenant = authority["tenant_id"]
@@ -556,7 +584,8 @@ async def request_business_change(request: Request):
             return JSONResponse({"error": "There is no accepted business knowledge to change yet.", "code": "no_knowledge"}, status_code=409, headers=_NO_STORE)
         snapshot_id = view["accepted"]["snapshot"]["snapshot_id"]
         import hashlib
-        jid = "chg-" + hashlib.sha256(json.dumps([workspace_id, snapshot_id, " ".join(text.lower().split()), authority["account_id"], _config_fingerprint("change.understand")]).encode("utf-8")).hexdigest()[:24]
+        jid = "chg-" + hashlib.sha256(json.dumps([workspace_id, snapshot_id, " ".join(text.lower().split()), authority["account_id"], _config_fingerprint("change.understand")]
+                                                 + ([choice] if choice is not None else [])).encode("utf-8")).hexdigest()[:24]
         try:
             rec = store.job_record(tenant, workspace_id, jid)
         except TenantScopeError:
@@ -566,7 +595,7 @@ async def request_business_change(request: Request):
             provider_gate.require_provider("change.understand")
             limit, reservation = _quota_for("change.understand")
             head = store.head(tenant, workspace_id)
-            store.create_job(tenant, workspace_id, jid, "change.understand", {"request": text.strip(), "snapshot_id": snapshot_id}, expected_version=head.version,
+            store.create_job(tenant, workspace_id, jid, "change.understand", {"request": text.strip(), "snapshot_id": snapshot_id, **({"decided_conflict_intent": choice} if choice is not None else {})}, expected_version=head.version,
                              idempotency_key=f"job-create-{jid}", max_concurrent_jobs=limit, budget_reservation=reservation, requested_by=authority["account_id"])
             from infra import ai_admission
             ai_admission.admit(store, tenant, workspace_id, jid, "change.understand", authority)
@@ -609,10 +638,12 @@ def read_business_change(request: Request, change_id: str, workspace_id: str, mo
             out["understanding"] = {"status": result["status"], "message": result["message"], "descriptions": result["descriptions"], "questions": result["questions"],
                                     "refused": [{"quote": r["quote"], "why": r["why"]} for r in result["refused"]], "uncovered_parts": result["uncovered_parts"],
                                     "already_the_case": [titles.get(n["rule_id"], n["rule_id"]) for n in result["noops"]], "assumptions": result["assumptions"],
-                                    "changes": [titles.get(r, r) for r in result["write_scope"]], "also_affected_to_check": [titles.get(r, r) for r in result["read_scope"] if r not in result["write_scope"]],
+                                    "changes": [titles.get(r, r) for r in result["write_scope"]], "also_affected_to_check": _related_titles(result, titles),
                                     "preview_hash": result["preview_hash"], "can_confirm": result["status"] == "READY" and not result["questions"] and not result["refused"] and not result["uncovered_parts"],
                                     "knowledge_moved": bool(current and current["snapshot"]["snapshot_id"] != result["pin"]["snapshot_id"]),
-                                    "nothing_applied": "Confirming records your request only. No rule, file or code is changed by it."}
+                                    "nothing_applied": "Confirming records your request only. No rule, file or code is changed by it.",
+                                    "decided_conflict_choices": [{"rule_id": c["rule_id"], "quote": c["quote"], "options": c["options"]} for c in result.get("decided_conflict_choices", [])],
+                                    "retargeted": [{"from": titles.get(r["from"], r["from"]), "to": titles.get(r["to"], r["to"]), "intent": r["intent"]} for r in result.get("retargeted", [])]}
             if mode == "technical":
                 out["understanding"]["technical"] = {"pin": result["pin"], "operations": result["operations"], "rejected": result["rejected"], "offered_rule_ids": result["offered_rule_ids"],
                                                      "write_scope": result["write_scope"], "read_scope": result["read_scope"], "config_sha256": result["config_sha256"], "model": result.get("model")}
@@ -700,7 +731,7 @@ def read_business_change_impact(request: Request, change_id: str, workspace_id: 
 
 def _dep_job_id(change_id: str, attempt: int) -> str:
     import hashlib
-    return "dep-" + hashlib.sha256(json.dumps([change_id, attempt]).encode("utf-8")).hexdigest()[:24]
+    return "dep-" + hashlib.sha256(json.dumps([change_id, attempt, _config_fingerprint("change.impact_deps")]).encode("utf-8")).hexdigest()[:24]
 
 
 _DEP_REASON_WORDS = {"authority_revoked": "the person who asked no longer has permission", "budget_exceeded": "the change and the rules were too large to check",
@@ -843,11 +874,89 @@ async def request_change_dependencies(request: Request, change_id: str):
         return _refusal(exc)
 
 
+def _risk_memo_board(store, tenant, workspace_id, change_id, board_run_id):
+    """The review-board run a risk memo may read: a finished review_board run of this change, or None. -> (run_id, report_hash)."""
+    if board_run_id is None:
+        return None, None
+    from infra.adapters import v2_ma
+    run = v2_ma._run(store, tenant, workspace_id, board_run_id) if isinstance(board_run_id, str) else None
+    if run is None or run["change_id"] != change_id or run["workflow"] != "review_board":
+        raise TenantScopeError("review-board run not found for this change")
+    if run["status"] not in ("REVIEW_READY", "INCOMPLETE") or run["report_hash"] is None:
+        raise v2_business.BusinessKnowledgeRefused("board_not_finished", "the review-board run has no final report yet")
+    return board_run_id, run["report_hash"]
+
+
+@router.post("/v2/business/changes/{change_id}/impact/risk-memo")
+async def request_change_risk_memo(request: Request, change_id: str):
+    """SUR-06: ask a model for an advisory risk / trade-off memo over the impact report of a CONFIRMED change (and, optionally, a finished review-board run of it). One job
+    per change, attempt, board report and frozen config + pinned model; the same request again makes no new call. The memo changes no severity, review or change."""
+    if not _origin_ok(request):
+        return _error("origin refused", 403)
+    identity, store = _identity_store(), _v2_store()
+    if identity is None or store is None:
+        return _error("v2 unavailable", 503)
+    body = await _json_body(request)
+    workspace_id, attempt, board_run_id = body.get("workspace_id"), body.get("attempt", 1), body.get("board_run_id")
+    try:
+        authority = _authority(identity, request, workspace_id if isinstance(workspace_id, str) else "")
+        require_human_actor(authority)
+        require(authority, "ai.use")
+        if not isinstance(workspace_id, str) or not change_id.startswith("chg-") or isinstance(attempt, bool) or not isinstance(attempt, int) or not 1 <= attempt <= 3:
+            return _error("workspace_id and attempt (1-3) required", 400)
+        tenant = authority["tenant_id"]
+        _change_record_for(store, tenant, workspace_id, change_id, authority)
+        from infra.adapters import v2_advisory_memo, v2_business_change
+        if v2_business_change.read_intent(store, tenant, workspace_id, change_id) is None:
+            return JSONResponse({"error": "Confirm the request first.", "code": "not_confirmed"}, status_code=409, headers=_NO_STORE)
+        run_id, report_hash = _risk_memo_board(store, tenant, workspace_id, change_id, board_run_id)
+        jid = v2_advisory_memo.job_id("change.risk_memo", change_id, attempt, report_hash)
+        payload = {"intent_id": change_id, "attempt": attempt, "board_run_id": run_id, "board_report_hash": report_hash}
+        out = v2_advisory_memo.request(store, tenant, workspace_id, "change.risk_memo", jid, payload, authority, quota=_quota_for)
+        return JSONResponse({"change_id": change_id, **out}, headers=_NO_STORE)
+    except IdentityDenied as exc:
+        return _denied(exc)
+    except PermissionDenied as exc:
+        return _error(f"permission denied: {exc}", 403)
+    except TenantScopeError as exc:
+        return _error(str(exc), 404)
+    except v2_business.BusinessKnowledgeRefused as exc:
+        return JSONResponse({"error": str(exc), "code": exc.code}, status_code=409, headers=_NO_STORE)
+    except Exception as exc:
+        return _refusal(exc)
+
+
+@router.get("/v2/business/changes/{change_id}/impact/risk-memo")
+def read_change_risk_memo(request: Request, change_id: str, workspace_id: str, board_run_id: str | None = None):
+    """The latest risk memo of a change (for the given board run, or the memo without one): state, kept statements, the items it did not address. Reads only."""
+    identity, store = _identity_store(), _v2_store()
+    if identity is None or store is None:
+        return _error("v2 unavailable", 503)
+    try:
+        authority = _authority(identity, request, workspace_id)
+        require(authority, "project.read")
+        if not change_id.startswith("chg-"):
+            return _error("a change id required", 400)
+        tenant = authority["tenant_id"]
+        _change_record_for(store, tenant, workspace_id, change_id, authority)
+        from infra.adapters import v2_advisory_memo
+        _run_id, report_hash = _risk_memo_board(store, tenant, workspace_id, change_id, board_run_id)
+        return JSONResponse({"change_id": change_id, **v2_advisory_memo.latest(store, tenant, workspace_id, "change.risk_memo", change_id, report_hash)}, headers=_NO_STORE)
+    except IdentityDenied as exc:
+        return _denied(exc)
+    except PermissionDenied as exc:
+        return _error(f"permission denied: {exc}", 403)
+    except TenantScopeError as exc:
+        return _error(str(exc), 404)
+    except v2_business.BusinessKnowledgeRefused as exc:
+        return JSONResponse({"error": str(exc), "code": exc.code}, status_code=409, headers=_NO_STORE)
+
+
 # ---- structured draft of a confirmed change (CHG-03) --------------------------------------------------------------------------------------------------------
 
 def _guidance_job_id(change_id: str, attempt: int) -> str:
     import hashlib
-    return "drg-" + hashlib.sha256(json.dumps([change_id, attempt]).encode("utf-8")).hexdigest()[:24]
+    return "drg-" + hashlib.sha256(json.dumps([change_id, attempt, _config_fingerprint("change.draft_guidance")]).encode("utf-8")).hexdigest()[:24]
 
 
 _GUIDE_REASON_WORDS = {"authority_revoked": "the person who asked no longer has permission", "budget_exceeded": "the draft was too large to send",
@@ -918,6 +1027,16 @@ def _merge_guidance_state(draft, store, tenant, workspace_id, change_id, *, can_
     out.pop("draft_hash", None)
     out["draft_hash"] = canonical_hash(out)
     return out, False
+
+
+def _related_titles(result, titles) -> list:
+    """Rules to check besides the changed ones, one line per logical rule: the observed rule and its accepted target version are grouped (never merged by title)."""
+    from core.change_intelligence.v2.business_impact import logical_rule_id
+    groups: dict = {}
+    for r in result["read_scope"]:
+        if r not in result["write_scope"]:
+            groups.setdefault(logical_rule_id(r), []).append(r)
+    return [titles.get(rs[0], rs[0]) + (" (observed in the sources and as the accepted target)" if len(rs) > 1 else "") for rs in groups.values()]
 
 
 def _change_record_for(store, tenant, workspace_id, change_id, authority):
@@ -1121,6 +1240,90 @@ def read_business_change_code(request: Request, change_id: str, workspace_id: st
         out = code_recommendation.render(rec, can_read_evidence="evidence.read" in perms)
         out.update({"change_id": change_id, "request": parts["intent"]["request"]})
         return JSONResponse(out, headers=_NO_STORE)
+    except IdentityDenied as exc:
+        return _denied(exc)
+    except PermissionDenied as exc:
+        return _error(f"permission denied: {exc}", 403)
+    except TenantScopeError as exc:
+        return _error(str(exc), 404)
+    except v2_business.BusinessKnowledgeRefused as exc:
+        return JSONResponse({"error": str(exc), "code": exc.code}, status_code=409, headers=_NO_STORE)
+
+
+def _code_proposal_binding(store, tenant, workspace_id, change_id, repo_id, authority, base_ref):
+    """(repo, base_sha, recommendation_hash) for a SUR-03 proposal request or read; a hidden or undeclared repository is 'not found'."""
+    from infra.adapters import v2_code_change
+    from infra.worker import code_change, code_diff_proposal
+    from infra.worker.execution_types import NonRetryableExecutionError
+    if not isinstance(repo_id, str) or not v2_code_change.repo_visible(workspace_id, repo_id, authority.get("roles")):
+        raise TenantScopeError("repository not found")
+    try:
+        repo = code_change.repo_config(workspace_id, repo_id)
+    except NonRetryableExecutionError as exc:
+        raise TenantScopeError("repository not found") from exc
+    got = code_diff_proposal.recommendations(store, tenant, workspace_id, change_id)
+    if got is None:
+        raise v2_business.BusinessKnowledgeRefused("not_confirmed", "Confirm the request first.")
+    from infra.v2_governance_routes import _resolve_commit
+    base = _resolve_commit(repo["path"], base_ref or "HEAD")
+    if base is None:
+        raise v2_business.BusinessKnowledgeRefused("unknown_reference", "base must name a commit of the repository")
+    return repo, base, got[0]["recommendation_hash"]
+
+
+@router.post("/v2/business/changes/{change_id}/code/proposal")
+async def request_code_proposal(request: Request, change_id: str):
+    """SUR-03 proposal-only: a model explains the code change a CONFIRMED change needs and proposes edits on the recommended files of a declared repository at a pinned base
+    commit; the server builds the diff in memory and parses the changed files. Nothing is applied or run. Human actor, `code.patch` + `ai.use` + `evidence.read`."""
+    if not _origin_ok(request):
+        return _error("origin refused", 403)
+    identity, store = _identity_store(), _v2_store()
+    if identity is None or store is None:
+        return _error("v2 unavailable", 503)
+    body = await _json_body(request)
+    workspace_id, repo_id, attempt = body.get("workspace_id"), body.get("repo_id"), body.get("attempt", 1)
+    try:
+        authority = _authority(identity, request, workspace_id if isinstance(workspace_id, str) else "")
+        require_human_actor(authority)
+        for perm in ("code.patch", "ai.use", "evidence.read"):
+            require(authority, perm)
+        if not isinstance(workspace_id, str) or not change_id.startswith("chg-") or isinstance(attempt, bool) or not isinstance(attempt, int) or not 1 <= attempt <= 3:
+            return _error("workspace_id, repo_id and attempt (1-3) required", 400)
+        tenant = authority["tenant_id"]
+        _change_record_for(store, tenant, workspace_id, change_id, authority)
+        _repo, base, rec_hash = _code_proposal_binding(store, tenant, workspace_id, change_id, repo_id, authority, body.get("base"))
+        from infra.adapters import v2_code_proposal
+        jid = v2_code_proposal.job_id(change_id, repo_id, base, rec_hash, attempt)
+        out = v2_code_proposal.request(store, tenant, workspace_id, jid, {"change_id": change_id, "repo_id": repo_id, "base_sha": base, "recommendation_hash": rec_hash,
+                                                                          "attempt": attempt}, authority, quota=_quota_for)
+        return JSONResponse({"change_id": change_id, **out}, headers=_NO_STORE)
+    except IdentityDenied as exc:
+        return _denied(exc)
+    except PermissionDenied as exc:
+        return _error(f"permission denied: {exc}", 403)
+    except TenantScopeError as exc:
+        return _error(str(exc), 404)
+    except v2_business.BusinessKnowledgeRefused as exc:
+        return JSONResponse({"error": str(exc), "code": exc.code}, status_code=409, headers=_NO_STORE)
+    except Exception as exc:
+        return _refusal(exc)
+
+
+@router.get("/v2/business/changes/{change_id}/code/proposal")
+def read_code_proposal(request: Request, change_id: str, workspace_id: str, repo_id: str, base: str | None = None):
+    """The latest SUR-03 proposal for this change, repository, base commit (default HEAD) and the current recommendations. Reads only; `evidence.read` (diffs are code)."""
+    identity, store = _identity_store(), _v2_store()
+    if identity is None or store is None:
+        return _error("v2 unavailable", 503)
+    try:
+        authority = _authority(identity, request, workspace_id)
+        require(authority, "project.read")
+        require(authority, "evidence.read")
+        tenant = authority["tenant_id"]
+        _change_record_for(store, tenant, workspace_id, change_id, authority)
+        _repo, base_sha, rec_hash = _code_proposal_binding(store, tenant, workspace_id, change_id, repo_id, authority, base)
+        from infra.adapters import v2_code_proposal
+        return JSONResponse({"change_id": change_id, **v2_code_proposal.latest(store, tenant, workspace_id, change_id, repo_id, base_sha, rec_hash)}, headers=_NO_STORE)
     except IdentityDenied as exc:
         return _denied(exc)
     except PermissionDenied as exc:

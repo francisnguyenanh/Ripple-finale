@@ -3,7 +3,7 @@
 // One registry gives every stage its number, so the numbers can never skip (the old hard-coded titles jumped from 6 to 8).
 // Pure functions: unit-tested without a browser. The wording of "who acts now" comes from `nextAction` (one source of truth for the current step).
 import { fmtForm } from "./fmtForm";
-import { nextAction, type Actor } from "./next";
+import { alignNext, nextAction, type Actor, type Held } from "./next";
 import type { FlowData, Job } from "./types";
 import { isDone, isTerminal, jobState } from "./types";
 
@@ -98,10 +98,10 @@ const TODO_TEXT: Record<StepKey, string> = {
 };
 
 /** Every step with its state. The active step carries the "who acts, what, why" of `nextAction`; the rest say what they are or what they wait for. */
-export function journey(d: FlowData, me: Actor): JStep[] {
+export function journey(d: FlowData, me: Actor, held: Held | null = null): JStep[] {
   const f = facts(d);
   const active = activeKey(d);
-  const n = nextAction(d, me);
+  const n = alignNext(nextAction(d, me), held);                       // "You" only where the server projection says this person is asked now
   const out: JStep[] = [];
   let seenActive = false;
   JOURNEY.forEach((s, i) => {
@@ -122,7 +122,7 @@ export function journey(d: FlowData, me: Actor): JStep[] {
         const km = d.change?.dto?.knowledge;
         const kmPending = !!km && !km.accepted && !!km.candidate_revision_id;
         const tail = kmPending ? ' First a knowledge owner presses "Accept knowledge candidate"; then a person with result permission presses "Accept result" (or asks for changes / rejects).' : ' A person with result permission presses "Accept result" (or asks for changes / rejects).';
-        if (me.can("change.accept_result") || (kmPending && me.can("knowledge.confirm"))) { state = "current"; who = "You"; mine = true; text = `Read the verification result below.${tail} The change is not complete until a person decides.`; }
+        if ((me.can("change.accept_result") || (kmPending && me.can("knowledge.confirm"))) && (!held || held.mine || !held.holder)) { state = "current"; who = "You"; mine = true; text = `Read the verification result below.${tail} The change is not complete until a person decides.`; }
         else { state = "waiting"; who = WHO_DEFAULT.accept; mine = false; text = `must read the verification result and decide.${tail} The change is not complete until then.`; }
       }
       if (s.key === "query") {

@@ -34,6 +34,17 @@ export function Callout({ tone = "info", children, testid, role }: { tone?: "inf
   return <div role={role} data-testid={testid} className={cn("rounded-md border bg-surface-2 px-3 py-2 text-sm grid gap-1", border)}>{children}</div>;
 }
 
+/** Routine explanation (how a screen works, repeated definitions), collapsed by default and reachable by keyboard / touch (native details). Never put a blocker, a
+ *  consequence of the next action, a paid-use note or a stale / partial warning in here: those stay visible beside the action (CONTENT_AND_STATES). */
+export function HowItWorks({ children, testid, title = "How this works" }: { children: React.ReactNode; testid?: string; title?: string }) {
+  return (
+    <details data-testid={testid} className="text-sm rounded-md border border-border px-3 py-2">
+      <summary className="cursor-pointer w-fit text-primary">{title}</summary>
+      <div className="mt-2 grid gap-1">{children}</div>
+    </details>
+  );
+}
+
 /** A state: business wording in Business view, the raw state name in Technical view. data-state keeps the machine value. */
 export function StatePill({ state, label, testid, data, detail }: { state: string; label: string; testid?: string; data?: Record<string, string>; detail?: React.ReactNode }) {
   const { mode } = useSession();

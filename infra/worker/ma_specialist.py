@@ -46,6 +46,10 @@ def build_prompt(frozen: dict, context: dict, role: str, rebuttal_claims: list |
             lines.append(f"[{a['role']}] status {a.get('status')}")
             lines += [f"  - [{f['category']}/{f['severity']}] {f['statement']} (evidence: {', '.join(f.get('evidence_refs', []))})" for f in a.get("findings", [])]
             lines += [f"  note: {n}" for n in a.get("notes", [])]
+            if a.get("simulation"):                                                      # LLM-S1: the engine's KPI table, one metric per line, the only numbers to state
+                lines += [f"  scenario {k}: {v['label']} (policy {v['policy']})" for k, v in ma.scenario_labels(a["simulation"].get("comparison")).items()]
+                lines += [f"  metric {k} = {v}" for k, v in sorted(ma.metric_table(a["simulation"].get("comparison")).items())]
+                lines += [f"  limitation: {x}" for x in (a["simulation"].get("comparison") or {}).get("limitations", [])]
         analyses = frozen["analyses_template"].replace("{analyses}", "\n".join(lines) or "(none)")
     code = "\n".join(f"- id={c['ref']} rule={c.get('rule_id')} status={c['status']} path={c.get('path') or '?'}" + (f" module={c.get('module')} functions={', '.join(c.get('functions') or [])}" if c.get("module") else "") + f" binding={c.get('binding_status')}: {c.get('why')}"
                      + (f" | literals: {', '.join(l['literal'] + ' (line ' + str(l['line']) + ')' for l in c.get('literals') or [])}" if c.get("literals") else "")
@@ -134,7 +138,7 @@ class MaSpecialistExecutor:
         tenant, ws = ctx.job["tenant_id"], ctx.job["workspace_id"]
         try:
             keys = (ma.MISMATCH_KEYS if rc.get("ma_kind") in ("drift", "mismatch") else ma.TESTS_KEYS if rc.get("ma_kind") == "tests" else ma.SCENARIOS_KEYS if rc.get("ma_kind") == "scenarios"
-                    else ma.REPAIR_KEYS if rc.get("ma_kind") == "repair" else ma.SPECIALIST_KEYS)
+                    else ma.REPAIR_KEYS if rc.get("ma_kind") == "repair" else ma.INTERPRETATION_KEYS if rc.get("ma_kind") == "interpretation" else ma.SPECIALIST_KEYS)
             obj, model_id, actual, in_t, out_t, th_t = call_pinned_json(ctx, request, calls, v2_ma.ROLE, keys)
             try:
                 if rc.get("ma_kind") == "repair":
@@ -144,6 +148,12 @@ class MaSpecialistExecutor:
                 elif rc.get("ma_kind") == "tests":
                     run = v2_ma._run(ctx.store, ctx.job["tenant_id"], ctx.job["workspace_id"], p["run_id"])
                     validated = ma.validate_tests_object(obj, run["context"].get("allowed_modules") or [], run["context"].get("allowed_functions") or [], limits=rc["ma_frozen"]["limits"])
+                elif rc.get("ma_kind") == "interpretation":
+                    metrics = {}
+                    for a in p.get("synthesis_inputs") or []:
+                        metrics.update(ma.metric_table((a.get("simulation") or {}).get("comparison")))
+                    validated = ma.validate_interpretation_object(obj, metrics, limits=rc["ma_frozen"]["limits"])
+                    validated.update(findings=[], disputes=[], rejected_disputes=[])
                 elif rc.get("ma_kind") == "scenarios":
                     run = v2_ma._run(ctx.store, ctx.job["tenant_id"], ctx.job["workspace_id"], p["run_id"])
                     validated = ma.validate_scenarios_object(obj, run["context"].get("approver_roles") or [], limits=rc["ma_frozen"]["limits"])
@@ -164,6 +174,7 @@ class MaSpecialistExecutor:
                   "sites": validated.get("sites", []), "rationale": validated.get("rationale"), "new_candidate_job_id": new_candidate,
                   "status": validated["status"], "findings": validated["findings"], "rejected": validated["rejected"], "disputes": validated["disputes"],
                   "rejected_disputes": validated["rejected_disputes"], "notes": validated["notes"], "rows": validated.get("rows", []), "cases": validated.get("cases", []), "scenarios": validated.get("scenarios", []), "kind": rc.get("ma_kind", "findings"),
+                  "statements": validated.get("statements", []),
                   "model": {"pinned": model_id, "served": actual}, "provider_calls": 1, "applies_nothing": True}
         v2_ma.record_child_result(ctx.store, tenant, ws, p["child_id"], status="COMPLETED", result=result)
         self._enqueue_join(ctx.store, tenant, ws, p["run_id"], p["child_id"])

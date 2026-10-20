@@ -10,6 +10,7 @@ import { replaceHash } from "@/lib/route";
 import { useSession } from "@/session";
 import { ChatPanel } from "./ChatPanel";
 import { useFlow } from "./flow";
+import { ScopeGap } from "./RequestCard";
 import type { Intent, Rec } from "./types";
 
 function AdvancedInput() {
@@ -131,9 +132,10 @@ export function IntentStage() {
       <TechField label="target rule" value={it.target ?? "none grounded"} />
       {(it.questions ?? []).map((q, i) => <Callout key={i} tone="warn">{String(q)}</Callout>)}
       {it.status === "PARSED" && canConfirm && (
-        <div>
-          <Button variant="primary" data-testid="action-confirm-intent" disabled={pending}
-            onClick={async () => { if (await run(() => api("POST", "/v2/intent/confirm", { workspace_id: ws, intent_id: it.intent_id }), { stale: true })) await refresh(); }}>Confirm intent</Button>
+        <div className="grid gap-2">
+          <ScopeGap it={it} where="Confirm only if that is what you mean; otherwise edit the scope first." />
+          <div><Button variant="primary" data-testid="action-confirm-intent" disabled={pending}
+            onClick={async () => { if (await run(() => api("POST", "/v2/intent/confirm", { workspace_id: ws, intent_id: it.intent_id }), { stale: true })) await refresh(); }}>Confirm intent</Button></div>
         </div>
       )}
       {it.status === "PARSED" && !canConfirm && <Muted testid="intent-owner-only">Only {it.created_by ?? "the person who made this request"} can confirm this request before analysis.</Muted>}

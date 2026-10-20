@@ -6,7 +6,7 @@ import { FileCode2, FileSpreadsheet, FileText, Search } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/dialog";
-import { Denied, Callout, Card, Field, Muted, Name, Path, StatePill, Tech, TechField, TextInput } from "@/components/bits";
+import { Denied, Callout, Card, Field, HowItWorks, Muted, Name, Path, StatePill, Tech, TechField, TextInput } from "@/components/bits";
 import { StatusBadge } from "@/components/StatusBadge";
 import { downloadArtifact } from "@/lib/download";
 import { basename, humanize, newId } from "@/lib/fmt";
@@ -19,6 +19,7 @@ import { jobState, isTerminal, type Job, type Rec } from "@/features/changes/typ
 import { AnalysisButtons, FileStages, LifeSummary } from "./Lifecycle";
 import { filterFiles } from "./fileFilter";
 import { RepoSync } from "./RepoSync";
+import { RefreshCorrespondence, type HumanProof } from "./RefreshCorrespondence";
 
 const q = encodeURIComponent;
 
@@ -37,6 +38,7 @@ const KIND_WORDS: Record<string, string> = {
   "application/yaml": "Settings file (YAML)", "text/markdown": "Document (Markdown)", "text/x-python": "Program code (Python)",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "Excel workbook",
 };
+const REFRESH_WORDS: Record<string, string> = { PREPARED: "reviewed, not published yet", COMMITTED: "published", PUBLISHED: "published", NOOP: "no change, nothing published" };
 const sizeText = (n: number) => (n >= 1024 ? `${Math.round(n / 102.4) / 10} KB` : `${n} bytes`);
 const KindIcon = ({ mt }: { mt: string }) => (mt.includes("spreadsheet") ? <FileSpreadsheet size={18} aria-hidden="true" /> : mt.includes("python") ? <FileCode2 size={18} aria-hidden="true" /> : <FileText size={18} aria-hidden="true" />);
 
@@ -201,6 +203,9 @@ function ImportPanel({ ws, onDone }: { ws: string; onDone: () => Promise<void> }
 // ---------------------------------------------------------------- refresh
 function RefreshPanel({ ws, onDone }: { ws: string; onDone: () => Promise<void> }) {
   const notify = useNotify();
+  const sess = useSession();
+  const [proofs, setProofs] = React.useState<HumanProof[]>([]);                  // the person's own rename decisions (SUR-05 adjudication), sent with the next review
+  const [corrRefresh, setCorrRefresh] = React.useState<string | null>(null);     // the refresh the proposal was made for (a re-review with a proof keeps it)
   const { run, pending } = useAction();
   const files = React.useRef<HTMLInputElement>(null);
   const [view, setView] = React.useState<Rec | null>(null);
@@ -216,6 +221,14 @@ function RefreshPanel({ ws, onDone }: { ws: string; onDone: () => Promise<void> 
     const t = window.setTimeout(() => { void getStatus(view.refresh_id); void onDone(); }, 2000);
     return () => window.clearTimeout(t);
   }, [committed, pendingWorker, view, status, getStatus, onDone]);
+  const prepare = async (withProofs: HumanProof[]): Promise<Rec | null> => {
+    const list = Array.from(files.current?.files ?? []);
+    if (!list.length) { notify.status("Choose the whole changed source first."); return null; }
+    const r = await run(async () => api<Rec>("POST", "/v2/sources/refresh/prepare", { workspace_id: ws, idempotency_key: newId("ref"), files: await fileEntries(list),
+      ...(withProofs.length ? { rename_proofs: withProofs } : {}) }));
+    if (r) { setView(r); setStatus(null); setCommitted(false); setAck(false); }
+    return r ?? null;
+  };
   const d = (view?.diff ?? {}) as Rec;
   const deleted = ((d.deleted ?? []) as Rec[]).map((x) => x.logical_path);
   const row = (kind: string, item: Rec, text: string) => (
@@ -226,20 +239,21 @@ function RefreshPanel({ ws, onDone }: { ws: string; onDone: () => Promise<void> 
   return (
     <Card title="Update source files" testid="refresh-panel">
       <p className="text-sm">Use this when the real files <strong>changed outside Ripple</strong>. It is not a screen reload.</p>
-      <ol className="list-decimal pl-5 text-sm grid gap-1" data-testid="refresh-steps">
-        <li>Upload the <strong>whole</strong> current set of source files.</li>
-        <li>Review what was added, changed or deleted.</li>
-        <li>Publish the new version on purpose. Nothing changes before this step.</li>
-        <li>Ripple then marks what became out of date and shows whether the files need to be analysed again.</li>
-      </ol>
-      <Muted>A person starts every update; Ripple does not watch a repository, and an update never approves anything. A file missing from your upload counts as deleted from the new version.</Muted>
+      <p className="text-sm" data-testid="refresh-consequence">Upload the <strong>whole</strong> current set: a file missing from your upload counts as <strong>deleted</strong> from the new version. Nothing changes until you publish, and publishing approves nothing.</p>
+      <HowItWorks testid="refresh-how">
+        <ol className="list-decimal pl-5 grid gap-1" data-testid="refresh-steps">
+          <li>Upload the <strong>whole</strong> current set of source files.</li>
+          <li>Review what was added, changed or deleted.</li>
+          <li>Publish the new version on purpose. Nothing changes before this step.</li>
+          <li>Ripple then marks what became out of date and shows whether the files need to be analysed again.</li>
+        </ol>
+        <Muted>A person starts every update; Ripple does not watch a repository.</Muted>
+      </HowItWorks>
       <Field label="Changed source files"><input ref={files} id="refresh-files" data-testid="field-refresh-files" type="file" multiple className="text-sm w-full max-w-full min-w-0" /></Field>
       <div>
         <Button data-testid="action-refresh-prepare" disabled={pending} onClick={async () => {
-          const list = Array.from(files.current?.files ?? []);
-          if (!list.length) { notify.status("Choose the whole changed source first."); return; }
-          const r = await run(async () => api<Rec>("POST", "/v2/sources/refresh/prepare", { workspace_id: ws, idempotency_key: newId("ref"), files: await fileEntries(list) }));
-          if (r) { setView(r); setStatus(null); setCommitted(false); setAck(false); }
+          const r = await prepare([]);
+          if (r) { setProofs([]); setCorrRefresh(String(r.refresh_id)); }
         }}>Review the changes</Button>
       </div>
       {view && (
@@ -250,10 +264,20 @@ function RefreshPanel({ ws, onDone }: { ws: string; onDone: () => Promise<void> 
           {((d.deleted ?? []) as Rec[]).map((x) => row("deleted", x, x.logical_path))}
           {((d.renamed ?? []) as Rec[]).map((x) => row("renamed", x, `${x.from_path} -> ${x.to_path}`))}
           <Muted>Unchanged: {d.unchanged_count ?? 0}{view.noop ? " - no change: nothing would be published." : ""}</Muted>
-          <p data-testid="refresh-provenance" data-value={view.provenance?.kind ?? "external_observation"} className="text-sm text-muted">Provenance: {view.provenance?.kind ?? "external_observation"} (an observation of a source changed outside Ripple; it is not an approval)</p>
+          {!view.noop && corrRefresh && (
+            <RefreshCorrespondence ws={ws} refreshId={corrRefresh} open={!committed && String(view.status ?? "PREPARED") === "PREPARED"} proofs={proofs}
+              canRequest={sess.can("source.import") && sess.can("ai.use") && sess.can("evidence.read")} canRead={sess.can("evidence.read")}
+              onAdjudicate={async (proof) => {
+                const next = [...proofs.filter((x) => !(x.from_path === proof.from_path && x.to_path === proof.to_path)), proof];
+                const r = await prepare(next);
+                if (!r) throw new Error("The changes could not be reviewed again with your decision; nothing was linked.");
+                setProofs(next);
+              }} />
+          )}
+          <p data-testid="refresh-provenance" data-value={view.provenance?.kind ?? "external_observation"} className="text-sm text-muted">{sess.mode === "technical" ? `Provenance: ${view.provenance?.kind ?? "external_observation"}` : "Recorded as a change made outside Ripple"} (an observation, not an approval)</p>
           {!view.noop && (
             <>
-              {deleted.length > 0 && <Callout tone="warn" testid="refresh-deleted-warning">{deleted.length} file{deleted.length === 1 ? " is" : "s are"} missing from your upload, so {deleted.length === 1 ? "it" : "they"} will be <strong>deleted from the new version</strong>. If you only meant to update some files, upload the whole source again instead.</Callout>}
+              {deleted.length > 0 && <Callout tone="warn" testid="refresh-deleted-warning"><span>{deleted.length} file{deleted.length === 1 ? " is" : "s are"} missing from your upload, so {deleted.length === 1 ? "it" : "they"} will be <strong>deleted from the new version</strong>. If you only meant to update some files, upload the whole source again instead.</span></Callout>}
               {deleted.length > 0 && <label className="flex items-center gap-2 text-sm"><input type="checkbox" data-testid="refresh-ack" checked={ack} onChange={(e) => setAck(e.target.checked)} />I acknowledge the deleted files listed above</label>}
               <div>
                 <Button variant="primary" data-testid="action-refresh-commit" disabled={committed || (deleted.length > 0 && !ack) || pending} onClick={async () => {
@@ -263,7 +287,7 @@ function RefreshPanel({ ws, onDone }: { ws: string; onDone: () => Promise<void> 
               </div>
             </>
           )}
-          <p data-testid="refresh-status" data-state={status?.status ?? view.status ?? "PREPARED"} className="text-sm">Refresh status: {humanize(status?.status ?? view.status ?? "PREPARED")}</p>
+          <p data-testid="refresh-status" data-state={status?.status ?? view.status ?? "PREPARED"} className="text-sm">Refresh status: {REFRESH_WORDS[String(status?.status ?? view.status ?? "PREPARED")] ?? humanize(String(status?.status ?? view.status ?? "")).toLowerCase()}</p>
           {status && (
             <div className="grid gap-1">
               <h3 className="font-semibold">What became out of date</h3>
@@ -383,7 +407,7 @@ export function SourcesPage() {
                 <Muted testid="files-filter-count">Showing {shownFiles.length} of {allFiles.length} files.</Muted>
               </div>
             )}
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2">{/* owner decision D6 (2026-10-18): file cards, no worklist / detail panel this round */}
               {shownFiles.map((a) => (
                 <article key={a.artifact_id} data-testid="artifact-row" data-logical-path={a.logical_path} data-artifact-id={a.artifact_id} className="rounded-lg border border-border bg-surface p-4 grid gap-2 min-w-0">
                   <h3 className="font-semibold flex items-center gap-2 break-all"><KindIcon mt={a.media_type} /><Path p={a.logical_path} /></h3>
@@ -392,7 +416,7 @@ export function SourcesPage() {
                   <TechField label="artifact id" value={a.artifact_id} />
                   {rowOf(a) && <FileStages row={rowOf(a)!} provider={life?.provider as Rec} />}
                   <div className="flex flex-wrap gap-2 items-center">
-                    {rowOf(a) ? <AnalysisButtons ws={ws} row={rowOf(a)!} canRun={s.can("source.import")} busy={starting === a.artifact_id} onStart={() => void analyze(a)} />
+                    {rowOf(a) ? <AnalysisButtons ws={ws} row={rowOf(a)!} canRun={s.can("source.import")} busy={starting === a.artifact_id} onStart={() => void analyze(a)} provider={life?.provider as Rec} />
                       : s.can("source.import") && <Button disabled={s.aiOff} title={s.aiOff ? "AI actions are switched off on this server" : undefined} onClick={() => void analyze(a)}>Analyze</Button>}
                     {s.can("evidence.read") && <Button onClick={() => setArt(a)}><Search size={14} aria-hidden="true" />Evidence</Button>}
                     {s.can("evidence.read") && <a role="link" tabIndex={0} data-testid="export-link-source" className="text-primary underline cursor-pointer text-sm"

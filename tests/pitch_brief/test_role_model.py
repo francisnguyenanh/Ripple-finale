@@ -50,11 +50,12 @@ def test_role_bundles_match_the_production_model():
     assert "change.review" not in p("requester") and "knowledge.confirm" not in p("requester")
     assert "change.approve" not in p("requester") and "change.approve" not in p("requester", "ai_suspended")      # the requester creates, the approver decides
     rev = p("reviewer")
-    assert rev == {"project.read", "evidence.read", "ai.use", "change.review", "ma.run"}   # ma.run: start a multi-agent review board (read-only report), never approve
+    assert rev == {"project.read", "evidence.read", "ai.use", "change.review", "ma.run", "request.assistant.ask"}   # ma.run: start a multi-agent review board (read-only report), never approve
     assert not rev & {"change.approve", "change.apply", "source.import", "intent.create", "knowledge.confirm", "verification.contract.set"}
     assert "ai.use" in p("change_approver") and "change.review" not in p("change_approver") and "change.apply" not in p("change_approver")
     assert "evidence.read" not in p("change_approver")                      # redaction of raw quotes is unchanged for the approver
-    assert p("viewer") == {"project.read"}                                  # a viewer is not a reviewer
+    assert p("viewer") == {"project.read", "request.assistant.ask"}         # a viewer is not a reviewer; it may only ASK the read-only request assistant (RQA)
+    assert not p("viewer", "ai_suspended") & {"ai.use", "request.assistant.ask"}
     assert "ai.use" not in p("requester", "ai_suspended") and "intent.create" in p("requester", "ai_suspended")
     assert "ai.use" in p("admin") and "change.review" not in p("admin")    # the admin is not a default reviewer
 

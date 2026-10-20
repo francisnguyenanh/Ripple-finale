@@ -74,8 +74,9 @@ def verify_text(text, facts: dict, max_chars: int) -> str:
     return t
 
 
-def call_pinned_json(ctx: ExecutionContext, request: ExecutionRequest, calls: ProviderCallBudget, role: str, key_set: set):
-    """One pinned-role provider call returning a JSON object with exactly `key_set` keys. -> (obj, pinned_model, served_model, in, out, thought)."""
+def call_pinned_json(ctx: ExecutionContext, request: ExecutionRequest, calls: ProviderCallBudget, role: str, key_set: set, optional_keys: frozenset = frozenset()):
+    """One pinned-role provider call returning a JSON object with exactly `key_set` keys (`optional_keys` of them may be absent: a key added to a role later, so a
+    recorded answer from before still replays; the executor decides what an absent key means). -> (obj, pinned_model, served_model, in, out, thought)."""
     config = ctx.config
     if role not in (getattr(config, "role_model_ids", None) or {}):
         raise NonRetryableExecutionError("role_model_not_pinned", f"role_model_ids has no {role!r} entry")
@@ -107,7 +108,13 @@ def call_pinned_json(ctx: ExecutionContext, request: ExecutionRequest, calls: Pr
             raise ProviderRateLimitError("provider rate limited") from exc
         if is_timeout_exception(exc, code):
             raise ProviderTimeoutError("provider timed out") from exc
-        raise ProviderExecutionError("provider request failed") from exc
+        err = ProviderExecutionError("provider request failed")
+        # safe diagnostics for a refused request (live smoke LHA-SMOKE-20261018-03: an HTTP 400 left no reason on the attempt): status, class and the provider's short
+        # message; the message is dropped if it echoes the prompt. No usage was reported, so the attempt stays priced fail-closed.
+        msg = " ".join(str(exc).split())[:240]
+        err.diagnostics = {"stage": "request", "status_code": code if isinstance(code, int) else None, "error_class": type(exc).__name__,
+                           "message": None if (request.prompt or "")[:60] and (request.prompt or "")[:60] in str(exc) else msg}
+        raise err from exc
     actual = _field(response, "model_version") or model_id
     if not isinstance(actual, str) or actual not in config.model_prices:
         raise NonRetryableExecutionError("unpriced_model")
@@ -131,11 +138,13 @@ def call_pinned_json(ctx: ExecutionContext, request: ExecutionRequest, calls: Pr
         attach_after_answer(exc, response, model_id=model_id, requested_cap=cap, stage="json")
         exc.diagnostics["json_shape"] = _json_shape(text)
         raise
-    if set(obj) != key_set:
+    if not (set(key_set) - set(optional_keys) <= set(obj) <= set(key_set)):
         exc = NonRetryableExecutionError("schema_violation", "keys")
         attach_after_answer(exc, response, model_id=model_id, requested_cap=cap, stage="keys")
         exc.diagnostics["keys"] = sorted(str(k) for k in obj)[:20]
         raise exc
+    # the reported usage of this answered call, for the worker: a result the executor refuses AFTER this point (schema, guards) is settled at this usage, not at the ceiling
+    ctx.request_context.setdefault("provider_usage", []).append({"model_id": actual, "input_tokens": in_t, "output_tokens": out_t, "thought_tokens": th_t})
     return obj, model_id, actual, in_t, out_t, th_t
 
 

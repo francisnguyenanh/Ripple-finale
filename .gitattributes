@@ -1,3 +1,7 @@
+# EOL policy (2026-10-20): text files are stored and checked out with LF on every platform, whatever core.autocrlf says, so an export and a Git snapshot of it
+# have the same raw bytes. Binary files are detected and never converted (text=auto). Later, more specific lines override this default: the reference seed
+# and the Harbor sample input keep their exact bytes (-text) and the Harbor sample data keeps CRLF on purpose (eol=crlf). Check: export_submission.py eol-check.
+* text=auto eol=lf
 # The reference seed is content-addressed: baseline_id is a hash of these
 # bytes (reference_system/reset/baseline.py). A Windows checkout with
 # core.autocrlf=true rewrote LF to CRLF and produced a different baseline_id

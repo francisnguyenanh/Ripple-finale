@@ -142,12 +142,33 @@ def describe(op: Mapping, title: str) -> str:
     return f"Change where “{title}” applies to: " + "; ".join(f"{a}: {', '.join(v) if isinstance(v, list) else v}" for a, v in sorted(d.items())) + "."
 
 
-def resolve(obj: Mapping, request: str, rules: Mapping[str, Mapping], relations: Iterable[Mapping], limits: Mapping, *, pin: Mapping) -> dict:
-    """The server's understanding. `rules` = offered stored rules by id (the only ids an operation may name)."""
+DECIDED_CONFLICT_INTENTS = ("fix_observed_record", "sync_source_to_decision", "change_decision")
+
+
+def decided_conflict_options(rule: Mapping, decided: Mapping) -> list:
+    """The three things an edit of the losing side of a decided conflict can mean (owner decision H-U-03, 2026-10-18), in plain words, with what happens next.
+    Only `change_decision` is handled by this product's change flow; the other two are honest hand-offs to a person."""
+    return [
+        {"intent": "fix_observed_record", "label": f"The record of what the sources say is wrong (“{rule['title']}” was read incorrectly)",
+         "next": "A person corrects the source document (or reports the misreading); a source refresh then re-reads the record.", "available": False,
+         "reason": "needs_human: an observed record always follows the sources; this product does not edit it directly."},
+        {"intent": "sync_source_to_decision", "label": f"Bring the source text in line with the decided rule (“{decided['title']}”)",
+         "next": "A person edits the source text to say what was decided, then refreshes the sources; the record then shows as aligned.", "available": False,
+         "reason": "needs_human: this decision came from resolving a conflict, not from a change request, so there is no file proposal to review for it yet."},
+        {"intent": "change_decision", "label": f"Propose changing the decided rule itself (“{decided['title']}”)",
+         "next": "A new change request on the decided rule: impact, draft, review and approval as for any change; the earlier decision stays in force until then.",
+         "available": True, "reason": None},
+    ]
+
+
+def resolve(obj: Mapping, request: str, rules: Mapping[str, Mapping], relations: Iterable[Mapping], limits: Mapping, *, pin: Mapping,
+            choices: Optional[Mapping] = None) -> dict:
+    """The server's understanding. `rules` = offered stored rules by id (the only ids an operation may name). `choices` = {observed rule id: intent} the person picked
+    for an edit of the losing side of a decided conflict (one of DECIDED_CONFLICT_INTENTS); nothing is retargeted without it."""
     req_norm = _norm(request)
     req_numbers = numbers_in(request)
     questions, refused, rejected, noops, ops = [], [], [], [], []
-    quotes = []
+    quotes, conflict_choices, retargeted = [], [], []
     if len(obj["operations"]) > bk.MAX_OPERATIONS_PER_REQUEST:
         questions.append(f"The request holds more than {bk.MAX_OPERATIONS_PER_REQUEST} changes. Please split it into several smaller changes.")
         obj = dict(obj, operations=[])
@@ -187,11 +208,21 @@ def resolve(obj: Mapping, request: str, rules: Mapping[str, Mapping], relations:
         if not rid.endswith("-target") and winners:
             # A person decided this conflict for the other side. Editing the losing observed rule is not a reversal of that decision: the person says which change is meant;
             # nothing is remapped and no authority changes silently.
-            questions.append(f"“{quote}”: “{rule['title']}” is the side of a conflict a person already decided against (decided: “{rules[winners[0]]['title']}”). "
-                             "Do you want to correct what the sources say for this observed rule, bring the source text in line with the decided rule, or propose changing "
-                             "the decision itself? Please say which one.")
-            rejected.append({"reason": "observed_rule_lost_a_decided_conflict", "kind": kind, "rule_id": rid, "candidate_rule_ids": [rid, winners[0]]})
-            continue
+            chosen = (choices or {}).get(rid)
+            options = decided_conflict_options(rule, rules[winners[0]])
+            if chosen == "change_decision":
+                retargeted.append({"from": rid, "to": winners[0], "intent": chosen})
+                rid, rule = winners[0], rules[winners[0]]                     # the person chose it explicitly: a new change on the decided rule (impact, draft, approval follow)
+            elif chosen in DECIDED_CONFLICT_INTENTS:
+                opt = next(o for o in options if o["intent"] == chosen)
+                refused.append({"quote": quote, "reason": opt["reason"].split(":", 1)[0], "intent": chosen, "why": f"{opt['label']}: {opt['next']} ({opt['reason'].split(': ', 1)[1]})"})
+                continue
+            else:
+                questions.append(f"“{quote}”: “{rule['title']}” is the side of a conflict a person already decided against (decided: “{rules[winners[0]]['title']}”). "
+                                 "Which do you mean: the record of what the sources say is wrong, the source text should follow the decision, or you want to change the decision itself?")
+                rejected.append({"reason": "observed_rule_lost_a_decided_conflict", "kind": kind, "rule_id": rid, "candidate_rule_ids": [rid, winners[0]]})
+                conflict_choices.append({"rule_id": rid, "decided_rule_id": winners[0], "quote": quote, "options": options})
+                continue
         try:
             before, desired = _check_desired(kind, desired, rule, req_numbers, req_norm)
         except ValueError as exc:
@@ -236,7 +267,8 @@ def resolve(obj: Mapping, request: str, rules: Mapping[str, Mapping], relations:
     titles = {rid: rules[rid]["title"] for rid in rules}
     result = {"status": status, "message": message, "operations": ops, "descriptions": [describe(o, titles[o["rule_id"]]) for o in ops], "questions": questions, "refused": refused,
               "rejected": rejected, "noops": noops, "uncovered_parts": uncovered, "assumptions": [a for a in (safe_text(x, 300) for x in obj["assumptions"]) if a][: limits["max_assumptions"]],
-              "write_scope": write_scope, "read_scope": read_scope, "request": request.strip(), "pin": dict(pin)}
+              "write_scope": write_scope, "read_scope": read_scope, "request": request.strip(), "pin": dict(pin),
+              "decided_conflict_choices": conflict_choices, "retargeted": retargeted}
     result["preview_hash"] = canonical_hash({"pin": result["pin"], "request": _norm(request), "operations": ops, "write_scope": write_scope, "status": status})
     return result
 

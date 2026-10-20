@@ -58,7 +58,9 @@ MANIFESTS = {
     "simulation": {
         "version": 1,
         "roles": {"scenario_designer": {"required": True, "round": 1, "kind": "scenarios"}, "assumption_critic": {"required": False, "round": 1, "kind": "findings"},
-                  "engine": {"required": True, "round": 2, "kind": "simulation", "inputs": "round1", "deterministic": True, "job_kind": "ma.simulate"}},
+                  "engine": {"required": True, "round": 2, "kind": "simulation", "inputs": "round1", "deterministic": True, "job_kind": "ma.simulate"},
+                  # LLM-S1: a result interpreter reads the engine's KPI table and states trade-offs; every number it states must be one of the metrics it cites
+                  "result_interpreter": {"required": False, "round": 3, "kind": "interpretation", "inputs": "round2"}},
         "rounds": 2, "rebuttal_max_per_role": 0, "synthesis_calls": 0, "max_concurrency": 2, "deadline_minutes": 30,
         "rebuttal_severities": (),
     },
@@ -99,12 +101,18 @@ def is_deterministic(m: Mapping, role: str) -> bool:
     return bool((m["roles"].get(role) or {}).get("deterministic"))
 
 
+def followup_roles(m: Mapping) -> list:
+    """Round-3 model roles that read the validated round-2 results (LLM-S1 result interpreter)."""
+    return sorted(r for r, spec in m["roles"].items() if int(spec.get("round", 1)) == 3 and spec.get("inputs") == "round2")
+
+
 def max_children(m: Mapping) -> int:
     """The most PROVIDER calls a run can make (the root reservation): one per round-1 model role, at most `rebuttal_max_per_role` rebuttals per such role, plus one per
     model synthesis role; deterministic children (the sandbox) cost no provider call."""
     first = [r for r in m["roles"] if role_round(m, r) == 1 and not is_deterministic(m, r)]
     repairs = int(m.get("repair_max", 0)) * len([r for r in m["roles"] if role_kind(m, r) == "repair"])
-    return len(first) + len(first) * int(m.get("rebuttal_max_per_role", 0)) + len([r for r in synthesis_roles(m) if not is_deterministic(m, r)]) + repairs
+    return (len(first) + len(first) * int(m.get("rebuttal_max_per_role", 0)) + len([r for r in synthesis_roles(m) if not is_deterministic(m, r)]) + repairs
+            + len([r for r in followup_roles(m) if not is_deterministic(m, r)]))
 
 
 def run_id_for(workspace_id: str, workflow: str, binding: Mapping) -> str:
@@ -298,6 +306,80 @@ def validate_repair_object(obj, offered_sites: Iterable[Mapping], limits: Mappin
     return {"status": obj["status"] if kept else "NONE", "sites": kept, "rejected": rejected, "rationale": _plain(obj["rationale"], 300), "notes": [], "findings": [], "disputes": [], "rejected_disputes": []}
 
 
+INTERPRETATION_KEYS = {"status", "statements", "notes"}
+STATEMENT_KINDS = ("trade_off", "risk", "conditional_recommendation", "limitation")
+_CERTAINTY = re.compile(r"\b(guarantee[sd]?|certainly|definitely|proves?|forecasts?|will (?:save|reduce|increase|cut|eliminate))\b", re.I)
+_NUMBER = re.compile(r"(?<![\w.])-?\d+(?:\.\d+)?")
+
+
+def metric_table(comparison: Mapping) -> dict:
+    """`s<n>.<kpi>.<baseline|scenario|delta>` -> value (n = 1-based row of the engine's comparison): the only numbers an interpretation may state.
+    The scenario labels are listed apart (`scenario_labels`), so a metric id never carries free text."""
+    out = {}
+    for n, row in enumerate((comparison or {}).get("rows") or [], start=1):
+        for k, v in row.items():
+            if isinstance(v, Mapping):
+                for part in ("baseline", "scenario", "delta"):
+                    if isinstance(v.get(part), (int, float)):
+                        out[f"s{n}.{k}.{part}"] = float(v[part])
+    return out
+
+
+def scenario_labels(comparison: Mapping) -> dict:
+    return {f"s{n}": {"label": row.get("label"), "policy": row.get("policy")} for n, row in enumerate((comparison or {}).get("rows") or [], start=1)}
+
+
+def _number_matches(n: float, values: list) -> bool:
+    for v in values:
+        for cand in (v, v * 100):                                                      # a share may be stated as a percentage
+            if abs(cand - n) <= max(0.005, abs(cand) * 0.005):
+                return True
+    return False
+
+
+def validate_interpretation_object(obj, metrics: Mapping, limits: Mapping = LIMITS) -> dict:
+    """LLM-S1: keep a statement only when it cites known metrics, every number in it is one of the cited metrics (rounding or percent allowed), it is plain text and it
+    does not turn an exploratory result into a certainty or a forecast. Rejected statements keep their reason."""
+    if not isinstance(obj, dict) or set(obj) != INTERPRETATION_KEYS or obj.get("status") not in ("OK", "NONE_FOUND", "UNSURE"):
+        raise ValueError("keys_or_status")
+    if not isinstance(obj["statements"], list) or len(obj["statements"]) > limits["max_findings"] or not isinstance(obj["notes"], list):
+        raise ValueError("statements")
+    kept, rejected = [], []
+    for st in obj["statements"]:
+        if not isinstance(st, dict) or set(st) != {"text", "metric_refs", "kind"}:
+            raise ValueError("statement_shape")
+        text = _plain(st.get("text"), limits["max_statement_chars"])
+        refs = st.get("metric_refs") if isinstance(st.get("metric_refs"), list) else []
+        if text is None:
+            rejected.append({"text": str(st.get("text"))[:80], "reason": "unsafe_or_empty_text"})
+        elif st.get("kind") not in STATEMENT_KINDS:
+            rejected.append({"text": text[:80], "reason": "kind_unknown"})
+        elif not refs or any(r not in metrics for r in refs):
+            rejected.append({"text": text[:80], "reason": "metric_not_in_engine_results"})
+        elif any(not _number_matches(float(n), [metrics[r] for r in refs]) for n in _NUMBER.findall(text)):
+            rejected.append({"text": text[:80], "reason": "number_not_in_cited_metrics"})
+        elif _CERTAINTY.search(text):
+            rejected.append({"text": text[:80], "reason": "overstates_certainty"})
+        else:
+            kept.append({"text": text, "metric_refs": sorted(set(refs)), "kind": st["kind"]})
+    notes = [n for n in (_plain(x, limits["max_statement_chars"]) for x in obj["notes"][: limits["max_notes"]]) if n]
+    return {"status": obj["status"], "statements": kept, "rejected": rejected, "notes": notes}
+
+
+def _role_ids(capacity: Mapping, known_roles: Iterable[str]) -> dict:
+    """A capacity key written as the role's name (`manager`) becomes the one known role id it names exactly (`role-manager`); nothing fuzzy, an unknown key stays as written
+    and the engine's validator refuses it (live smoke LHA-SMOKE-20261018-07: every scenario used role names)."""
+    known = set(known_roles) | {"manual_review"}
+    out = {}
+    for key, v in capacity.items():
+        k = key if not isinstance(key, str) or key in known else ("role-" + "-".join(key.strip().lower().split()))
+        k = k if k in known else key
+        if k in out:
+            raise ValueError("pairs")
+        out[k] = v
+    return out
+
+
 def validate_scenarios_object(obj, known_roles: Iterable[str], limits: Mapping = LIMITS) -> dict:
     """The designer's typed scenarios: each one validated by the engine's own bounds; invalid ones rejected with the reason. Raises ValueError for a wrong shape."""
     from core.change_intelligence.v2 import process_simulation as ps
@@ -308,8 +390,13 @@ def validate_scenarios_object(obj, known_roles: Iterable[str], limits: Mapping =
     if len(obj["scenarios"]) > limits.get("max_scenarios", 4) or len(obj["notes"]) > limits["max_notes"]:
         raise ValueError("too_many_items")
     kept, rejected = [], []
+    from core.change_intelligence.v2.business_mining import pairs_to_map
     for s in obj["scenarios"]:
         try:
+            if isinstance(s, Mapping) and isinstance(s.get("capacity"), list):                   # structured output sends the capacity map as {role, per_day} pairs
+                s = dict(s, capacity=pairs_to_map(s["capacity"], "role", "per_day"))
+            if isinstance(s, Mapping) and isinstance(s.get("capacity"), Mapping):
+                s = dict(s, capacity=_role_ids(s["capacity"], known_roles))
             kept.append(ps.validate_scenario(s, known_roles=known_roles))
         except ValueError as exc:
             rejected.append({"reason": f"scenario_invalid:{exc}", "label": str((s or {}).get("label") if isinstance(s, Mapping) else s)[:60]})
@@ -391,6 +478,9 @@ def join(children: Iterable[Mapping], m: Mapping, *, binding: Mapping, reason_in
             simulation = dict(simulation or {}, **{k: res.get(k) for k in ("baseline", "scenarios", "comparison", "approver_roles", "seed", "scenarios_proposed", "convergence", "calibration")})
         if role_kind(m, c["role"]) == "scenarios":
             simulation = dict(simulation or {}, proposed=len(res.get("scenarios") or []), rejected_scenarios=res.get("rejected") or [])
+        if role_kind(m, c["role"]) == "interpretation":
+            simulation = dict(simulation or {}, interpretation={"status": res.get("status"), "statements": res.get("statements") or [], "rejected": res.get("rejected") or [],
+                                                                 "label": "Model interpretation of the engine's KPI table: every number is one of the cited metrics; exploratory, not a forecast"})
         for f in res.get("findings") or []:
             e = findings.setdefault(f["claim_id"], {**{k: f[k] for k in ("claim_id", "category", "severity", "statement", "evidence_refs")}, "raised_by": [], "rounds": [],
                                                    "assumptions": [], "counterexamples": [], "disputes": [], **({"legal_support": f["legal_support"]} if f.get("legal_support") else {})})

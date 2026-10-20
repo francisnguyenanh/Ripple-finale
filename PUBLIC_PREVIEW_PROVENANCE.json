@@ -2,48 +2,115 @@
   "schema": "ripple-public-preview-provenance/1",
   "source_repository": "private development repository (not named here)",
   "source_branch": "final-dev",
-  "source_commit": "93a267536ab775ecb98b92cc5177dab04c5d8467",
+  "source_commit": "cadf555d6bac46ef10165f42c2a28ee98d1ecf24",
   "export_manifest": "SUBMISSION_MANIFEST.json",
-  "export_manifest_sha256": "9819d095f55d3a433cc6bbbe5c19632764b39b2b129e84c969f2c5dfa9331a83",
-  "export_overall_sha256": "5e2cce3302ea3a22444a18e9ac9e1689b29693c35924b479ab1e55c48a69578b",
-  "export_file_count": 1343,
+  "export_manifest_sha256": "dc17b1c31e997b6eff2899fea2a628602278f9b995555f139e44ff3546e53453",
+  "export_manifest_sha256_git": "5de15132e8dc99a60394bf3a37e4b7fa045c918d2278b18f8b9b8f494f44aee2",
+  "export_manifest_hash_note": "export_manifest_sha256 is the manifest file as written on disk by the export (CRLF). Under the shipped .gitattributes (text=auto eol=lf) Git stores and checks it out with LF, so a downloaded or checked-out manifest hashes to export_manifest_sha256_git. Same content; the manifest is unchanged. The manifest does not list itself.",
+  "export_overall_sha256": "27eaa173f80547d5d69012899cbbaa7bee680956cb0f148f3a012b5f2627ecd0",
+  "export_file_count": 1440,
+  "export_tool": {
+    "tool_sha256": "e4a43fea5048b4386b80742f763ef0be87ca96c187b46d0f2e822ba3a3121923",
+    "policy_sha256": "21ae01f53daef2eb60c35d1acd6b0008729aa40e321c73ba2f23e53a01da3f48",
+    "note": "equal to the export tool and policy files at the source commit"
+  },
+  "eol_policy": "Shipped .gitattributes: '* text=auto eol=lf'; reference_system/** and the Harbor sample input '-text' (exact bytes); Harbor sample data 'text eol=crlf'. Manifest hashes are raw bytes. Under this policy a checkout reproduces the manifest's raw bytes whatever core.autocrlf says (checked below).",
+  "previous_public": {
+    "commit": "20f5de6bfd2d867ec66648968a6afb719ccf326f",
+    "tag": "preview-3",
+    "source_commit": "93a267536ab775ecb98b92cc5177dab04c5d8467",
+    "export_overall_sha256": "5e2cce3302ea3a22444a18e9ac9e1689b29693c35924b479ab1e55c48a69578b",
+    "readme_sha256_published": "42867761cc118b8aeef210c0457f99b54459b6f489a9ede61d3ad3f6b23f5828",
+    "note": "The earlier record (rehearsal of 2026-10-18: 1268 passed, 3 skipped, 1 deselected, and a server start) describes the tree of tag preview-3 and remains in that tag's history. It is not a result for this tree."
+  },
+  "unpublished_candidate_superseded": {
+    "commit": "7641d8f53336b92d2c0f01be6c814e0476230f68",
+    "source_commit": "d67183ba28133ad543ce4b8a06f832948ef7bfb9",
+    "status": "local review candidate, never published; superseded by this snapshot",
+    "corrections": [
+      "Its provenance and README called the tree byte-identical to its manifest; that was true only after line-ending normalisation. Its checkout did not pass raw-byte manifest verification (Git line-ending conversion without an EOL policy).",
+      "Its publication scan reported 13 high-entropy findings on file-path lines of its manifest (the export scanned before writing the manifest); also present in the manifest of tag preview-3.",
+      "Its source snapshot carried an out-of-date prompt pin (tests/contract/test_final_prompt_pins.py failed); fixed in the development repository before this snapshot.",
+      "Its source snapshot carried a request-assistant context defect (impact facts of several rules sharing a link kind collapsed into one fact); fixed before this snapshot."
+    ]
+  },
+  "update_from_previous_public": {
+    "method": "snapshot synchronisation from the clean export of the source commit; no history from the development repository was merged",
+    "product_files_added": 100,
+    "product_files_changed": 127,
+    "product_files_changed_note": "content changes, plus files whose stored line endings changed to LF under the shipped .gitattributes",
+    "files_removed": [
+      "app/ui_next/assets/index--CB5mBpz.js",
+      "app/ui_next/assets/style-CHNQ06Y4.css",
+      "app/ui_next/assets/vendor-Clz-di71.js"
+    ],
+    "files_removed_reason": "built bundle of the previous snapshot, replaced by index-DbCkWK9g.js, style-CjEQhePU.css and vendor-DE6nbGDD.js of this export",
+    "replaced_from_export": [
+      "SUBMISSION_MANIFEST.json"
+    ]
+  },
   "public_changes": [
     {
       "path": "README.md",
-      "reason": "preview-specific statements (snapshot, evidence labels, interface acceptance scope, public provenance pointer)",
-      "sha256_in_export": "3e403552059986fd153d2bc03c5f0df5b375d8431b8f564ad21f0748c41bffb5",
-      "sha256_published": "42867761cc118b8aeef210c0457f99b54459b6f489a9ede61d3ad3f6b23f5828",
-      "sha256_published_preview_2": "e99dd6c3007cdb0c11fdfcd15f22f2cb01d90bb16f8ab83a707fb164fbbbfd56",
-      "note": "sha256_published is the README at the working-copy commit; sha256_published_preview_2 is the README at tag preview-2 (earlier public record, kept).",
-      "sha256_published_scope": "README.md as committed in the public commit that tag preview-3 points to (LF bytes, identical to the Git blob)"
+      "reason": "preview-specific statements: snapshot, status words, the new screens and request assistant with their evidence levels and limits (AIG-03 quality OPEN, guided preparation off by default, source excerpts for YAML keys only, synthetic models, no human acceptance), owner review scope, checks on this tree, provenance pointer",
+      "sha256_in_export": "05ef5e4b40f14862408be2580a8c4cb20b7804a3d3ef7a063213e28c3c68ce2a",
+      "sha256_published": "f203beb3db9c97678da968c6d7ee560ec0a5e234a59d2325d73159038a1b6444",
+      "sha256_published_scope": "README.md as committed in the public commit that contains this file (LF bytes, identical to the Git blob)"
     }
   ],
   "added_files": [
     "PUBLIC_PREVIEW_PROVENANCE.json"
   ],
-  "note": "All other files are byte-identical to the export. The public commit hash cannot be stored inside the tree; it is the commit that contains this file.",
-  "rehearsal": {
-    "date": "2026-10-18",
-    "tree": "export of source commit 93a2675 plus the README adjustment and this file",
+  "images_added": [],
+  "images_note": "No screenshots were added. The review captures of this round come from browser tests with synthetic models; most were taken on earlier bundles of the same day, so none is bound to this exact bundle.",
+  "manifest_scope": "SUBMISSION_MANIFEST.json describes the export of the source commit and is kept unchanged. README.md was rewritten after export (public_changes) and this file was added; every other listed file is reproduced byte for byte by a checkout (checks_on_this_tree).",
+  "owner_review": "The owner reviewed this preview for publication as an introduction to progress. This is not acceptance of AI quality, of the new interface or of production readiness.",
+  "checks_on_this_tree": {
+    "date": "2026-10-20",
     "provider": "none",
-    "commands": [
-      "python -m venv <new>; pip install -r requirements-dev.txt",
-      "pytest tests/contract tests/unit -q (no DSN set)",
-      "python -m tools.judge_local.run_local on a throwaway PostgreSQL (own container, own port), GET /app-next/ and its four assets"
+    "runs": [
+      {
+        "check": "export tool of the source commit: verify on the export directory",
+        "result": "exit 0; files=1441 problems=0 broken_relative_links=0; publication scan of the final tree including the manifest exit 0"
+      },
+      {
+        "check": "export tool of the source commit: eol-check on the export directory",
+        "result": "exit 0; 1440 files, 2 checkouts (autocrlf true and false), problems 0"
+      },
+      {
+        "check": "raw-byte comparison of the preview tree with the manifest sha256, checked out with core.autocrlf=true and with core.autocrlf=false",
+        "result": "see raw_byte_result"
+      },
+      {
+        "check": "bundle references: app/ui_next/index.html, module imports and stylesheet urls",
+        "result": "index-DbCkWK9g.js, rolldown-runtime-CbXtAM7H.js, vendor-DE6nbGDD.js, style-CjEQhePU.css and 14 font files present; no local machine path"
+      },
+      {
+        "check": "README relative links and in-page anchors",
+        "result": "123 links, 0 missing targets, 0 unknown anchors"
+      },
+      {
+        "check": "pytest tests/contract tests/unit -q -p no:cacheprovider (no DSN, no provider; virtual environment of the earlier rehearsal, unchanged requirements files; Python 3.14.2), on this tree before the README rewrite",
+        "result": "1367 passed, 3 skipped, 1 deselected, 0 failed (tests/contract/test_final_prompt_pins.py passes)",
+        "deselected_reason": "marked live_llm (it would make a real provider call); excluded by pytest.ini addopts; not run"
+      },
+      {
+        "check": "rehearsal smoke: python -m tools.judge_local.run_local on a throwaway PostgreSQL 16 container (tmpfs, own port, removed afterwards), GET /app-next/, its four bundle files and every chunk and font they reference",
+        "result": "HTTP 200 for the page, the four bundle files (bytes equal to the manifest) and 15 referenced chunks/fonts; three rehearsal accounts created; server stopped"
+      },
+      {
+        "check": "publication scan of the committed tree: python -m tools.pitch_pack.scan <checkout> --allowlist tools/pitch_pack/scan_allowlist.json (the tree's scanner and allow-list, unchanged)",
+        "result": "see scan_result"
+      }
     ],
-    "result": {
-      "pytest": "1268 passed, 3 skipped, 1 deselected",
-      "rehearsal_server": "HTTP 200 for /app-next/ and its assets; three accounts printed"
-    },
+    "raw_byte_result": "1439 of 1440 listed files equal the manifest sha256 byte for byte under both settings; README.md differs (public_changes); extra files: PUBLIC_PREVIEW_PROVENANCE.json and SUBMISSION_MANIFEST.json",
+    "scan_result": "exit 0 on the tree including SUBMISSION_MANIFEST.json, README.md and this file; allow-list unchanged",
     "not_run": [
-      "database-backed final_loop and ui_next suites",
-      "frontend design check, type check and unit tests",
-      "Chromium browser suites"
+      "database-backed suites (final_loop, security, pitch_brief, ui_next)",
+      "Chromium browser suites",
+      "frontend design check, type check, unit tests and rebuild of the bundle"
     ],
-    "note": "Self-check on one machine, not independent validation. Skipped tests are not passes.",
-    "deselected_reason": "The one deselected test is marked live_llm (it would make a real provider call); pytest.ini addopts exclude it by default. It was not run."
-  },
-  "manifest_scope": "SUBMISSION_MANIFEST.json describes the source export of the source commit. The public README.md was adjusted after export and has its own hash (public_changes); this file was added. The public tree therefore does NOT match the original manifest byte for byte; every other file does.",
-  "export_manifest_sha256_lf": "fd80e40508e221973af3a90b7330717e87e90b04afe15a67376edb0c382eb031",
-  "export_manifest_hash_note": "export_manifest_sha256 is the manifest file as written on disk by the export (CRLF); the public Git repository stores it with LF line endings, so downloaded bytes hash to export_manifest_sha256_lf. Same content; the manifest content is unchanged."
+    "not_run_reason": "the delta is covered by the development record's runs for those suites; on this machine they need a separate test database and more free memory (about 1 GB). Browser and database results quoted in the README come from the development record, not from this tree.",
+    "note": "Self-check on one machine, not independent validation. Skipped tests are not passes. Results of the source repository are not results for this tree."
+  }
 }

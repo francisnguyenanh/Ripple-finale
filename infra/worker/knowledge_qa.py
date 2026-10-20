@@ -79,6 +79,11 @@ class KnowledgeQaExecutor:
             raise NonRetryableExecutionError("snapshot_moved" if exc.code == "stale_snapshot" else exc.code, str(exc)) from exc
         ctx.request_context.update(qa_pack=pack, qa_frozen=frozen, qa_sha=sha, qa_can_evidence=can_evidence, qa_previous=previous, qa_pre=None, qa_shown={"items_left_out": 0})
         state = retrieval_state(pack)
+        if state["status"] == "no_evidence" and semantic_armed() and planned_calls() > 1 and (pack.get("corpus") or {}).get("items", 0) > 0:
+            # LLM-Q2: the lexical search found nothing in a non-empty authorized corpus. That is not proof: the semantic layers (expand over the offered items, rank,
+            # judge) search first, under this attempt's reserved call budget; only if they find nothing either is the question abstained, without the answer call.
+            ctx.request_context["qa_lexical_empty"] = True
+            state = dict(state, status="semantic_pending")
         if state["status"] == "no_evidence":
             # The search completed over the whole pinned snapshot and found nothing to answer from: the question is ABSTAINED without a model call and without a reservation
             # being used. A failed or half-built retrieval is NOT this case (see `retrieval_state`): it fails the job as retrieval_unavailable so nothing reads as "no evidence".
@@ -111,6 +116,9 @@ class KnowledgeQaExecutor:
             sem = pack.get("semantic") or {}
             sem_calls, sem_in, sem_out = int(sem.get("calls") or 0), int(sem.get("tokens_in") or 0), int(sem.get("tokens_out") or 0)
             rc["qa_pack"] = pack
+            if rc.get("qa_lexical_empty") and not pack.get("items") and not (pack.get("observations") or {}).get("results"):
+                state = {"status": "no_evidence", "reason": "no_evidence_after_semantic_search", "detail": retrieval_state(pack)["detail"]}
+                return self._abstained(ctx, state, model_id=None, actual=None, semantic=(sem_calls, sem_in, sem_out))
             if pack.get("sufficiency") == "insufficient" and sem.get("status") == "applied":
                 # the judge layer ran fully and found the evidence insufficient: no answer call is made; the limit of the search is stated, not hidden
                 state = {"status": "no_evidence", "reason": "evidence_judged_insufficient", "detail": retrieval_state(pack)["detail"]}
@@ -214,3 +222,7 @@ class _SubBudget:
             raise ProviderCallCeilingExceeded(self.max_n, self.used + n)
         self.calls.consume(n)
         self.used += n
+
+    def remaining(self) -> int:
+        """Calls this slice still allows (the adapter keeps one per remaining layer before it retries)."""
+        return self.max_n - self.used

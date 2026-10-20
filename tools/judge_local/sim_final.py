@@ -26,12 +26,36 @@ DECLINES = {
 }
 
 
+# Extension roles (added 2026-10-19 for the owner's visual acceptance of the extension screens): the same schema-valid DECLINE, so each screen shows its labelled
+# fallback / "nothing kept" / "insufficient" state. (config file, template key) -> decline; the simulation roles share one template and are told apart by their rubric.
+EXTRA = {
+    ("knowledge_mining", "prompt_template"): {"status": "UNSURE", "hypotheses": [], "notes": [NOTE]},
+    ("knowledge_mining", "candidate_prompt_template"): {"status": "NONE_FOUND", "pairs": [], "notes": [NOTE]},
+    ("knowledge_mining", "unbound_prompt_template"): {"status": "UNSURE", "items": [], "notes": [NOTE]},
+    ("document_wording", "prompt_template"): {"status": "UNSUPPORTED", "sections": [], "omitted": []},
+    ("gap_interview", "prompt_template"): {"status": "NONE", "question": "", "focus": "kind"},
+    ("change_risk_memo", "prompt_template"): {"status": "insufficient", "statements": [], "open_questions": [NOTE]},
+    ("ma_synthesis_memo", "prompt_template"): {"status": "insufficient", "statements": [], "open_questions": [NOTE]},
+    # request assistant (2026-10-20): the panel shows "The facts do not answer this" with the simulated note; a real answer needs an approved live window
+    ("request_assistant", "prompt_template"): {"outcome": "insufficient_context", "answer_blocks": [], "limitations": [NOTE], "authority_assertions": []},
+}
+RUBRIC_DECLINES = {"You are the SCENARIO DESIGNER": {"status": "UNSURE", "scenarios": [], "notes": [NOTE]},
+                   "You are the ASSUMPTION CRITIC": {"status": "UNSURE", "findings": [], "disputes": [], "notes": [NOTE]},
+                   "You are the RESULT INTERPRETER": {"status": "UNSURE", "statements": [], "notes": [NOTE]}}
+
+
 def _markers() -> dict:
     out = {}
     for name in DECLINES:
         tpl = json.loads((CONFIG / f"{name}.json").read_text(encoding="utf-8"))["prompt_template"]
         out[name] = tpl.split(".", 1)[0][:80]                      # the first sentence of the frozen template identifies the role
+    for (name, key), decline in EXTRA.items():
+        tpl = json.loads((CONFIG / f"{name}.json").read_text(encoding="utf-8"))[key]
+        out[f"{name}:{key}"] = tpl.split(".", 1)[0][:80]
     return out
+
+
+EXTRA_BY_NAME = {f"{name}:{key}": decline for (name, key), decline in EXTRA.items()}
 
 
 _NUM = re.compile(r"(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+)(?![\w.])")
@@ -77,6 +101,13 @@ class SimFinal:
             if marker and prompt.startswith(marker):
                 self.calls += 1
                 obj = numeric_understanding(prompt) if name == "change_understand" else None
-                return SimpleNamespace(text=json.dumps(obj or DECLINES[name]), model_version=self.model_id, candidates=[SimpleNamespace(finish_reason="STOP")],
-                                       usage_metadata=SimpleNamespace(prompt_token_count=len(prompt) // 4, candidates_token_count=60, thoughts_token_count=None, total_token_count=len(prompt) // 4 + 60))
+                return self._reply(prompt, obj or DECLINES.get(name) or EXTRA_BY_NAME[name])
+        for rubric, decline in RUBRIC_DECLINES.items():
+            if rubric in prompt:
+                self.calls += 1
+                return self._reply(prompt, decline)
         return self.fallback.models.generate_content(**kw)
+
+    def _reply(self, prompt, obj):
+        return SimpleNamespace(text=json.dumps(obj), model_version=self.model_id, candidates=[SimpleNamespace(finish_reason="STOP")],
+                               usage_metadata=SimpleNamespace(prompt_token_count=len(prompt) // 4, candidates_token_count=60, thoughts_token_count=None, total_token_count=len(prompt) // 4 + 60))

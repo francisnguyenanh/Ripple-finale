@@ -105,6 +105,10 @@ def test_a_missing_file_is_a_deletion_and_needs_an_acknowledgement(env, ch, pw_b
         page, ctx = _open(pw_browser, server, (env.admin, f"cred-a-{env.nonce}"))
         select_workspace(page, env.ws)
         goto_view(page, "Sources")
+        expect(tid(page, "refresh-consequence")).to_be_visible()                                       # the deletion consequence stays visible (EUI-01)
+        expect(tid(page, "refresh-consequence")).to_contain_text("counts as deleted")
+        expect(tid(page, "refresh-steps")).not_to_be_visible()                                           # the routine walkthrough is collapsed
+        tid(page, "refresh-how").locator("summary").click()
         expect(tid(page, "refresh-steps")).to_contain_text("Publish the new version on purpose")
         expect(tid(page, "refresh-panel")).to_contain_text("Update source files")
         assert "Manual source refresh" not in page.inner_text("main")

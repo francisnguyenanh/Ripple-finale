@@ -185,3 +185,48 @@ def traverse(edges: Iterable[Mapping], start: str, *, max_hops: int = MAX_HOPS, 
             queue.append((other, depth + 1))
     return {"start": start, "nodes": order, "paths": paths, "omitted": {"nodes_over_cap": omitted_nodes, "beyond_hops": too_deep, "max_hops": max_hops,
                                                                           "max_nodes": max_nodes}}
+
+
+MAX_UNBOUND_LISTED = 50
+_CELL = __import__("re").compile(r"([A-Z]{1,3})([0-9]{1,7})")
+
+
+def unbound_values(rules: Iterable[Mapping], observations: Iterable[Mapping], artifact_paths: Mapping[str, str]) -> dict:
+    """Numbers the structured sources hold (a YAML key, a sheet cell) that no rule's binding or provenance points at: the extraction omission the server can see.
+    A listed value may be metadata or a rule nobody extracted; a person decides. -> {"count", "values": [{"evidence_ref", "value"}] (first 50, sorted), "truncated"}."""
+    from core.change_intelligence.v2.business_draft import _locator_label, _num
+    bound = set()
+    for r in rules:
+        for ref in [b.get("evidence_ref") for b in r.get("source_bindings") or []] + [p.get("evidence_ref") for p in r.get("provenance") or [] if isinstance(p, Mapping)]:
+            if isinstance(ref, str) and "#" in ref:
+                path, _, label = ref.partition("#")
+                bound.add((path.rsplit("/", 1)[-1], label))
+    observations = list(observations)
+    cells = {}
+    for o in observations:                                   # sheet cells by (artifact, sheet, column, row): the header (row 1) and the row label (column A) give a cell its meaning
+        loc = o.get("locator") if isinstance(o.get("locator"), Mapping) else {}
+        m = _CELL.fullmatch(str(loc.get("cell") or ""))
+        if loc.get("sheet") and m:
+            cells[(o.get("artifact_id"), loc["sheet"], m.group(1), int(m.group(2)))] = o.get("raw_value")
+    out = {}
+    for o in observations:
+        label = _locator_label(o.get("locator"))
+        raw = o.get("raw_value")
+        if label is None or isinstance(raw, bool) or not (isinstance(raw, (int, float)) or (isinstance(raw, str) and _num(raw) is not None)):
+            continue
+        path = str(artifact_paths.get(o.get("artifact_id")) or o.get("artifact_id") or "")
+        if (path.rsplit("/", 1)[-1], label) in bound:
+            continue
+        ref = f"{path}#{label}"
+        entry = {"evidence_ref": ref, "value": raw, "file": path, "location": label}
+        loc = o.get("locator") if isinstance(o.get("locator"), Mapping) else {}
+        m = _CELL.fullmatch(str(loc.get("cell") or ""))
+        if loc.get("sheet") and m:
+            col, row = m.group(1), int(m.group(2))
+            header, row_label = cells.get((o.get("artifact_id"), loc["sheet"], col, 1)), cells.get((o.get("artifact_id"), loc["sheet"], "A", row))
+            entry["sheet"], entry["cell"] = loc["sheet"], loc["cell"]
+            entry["header"] = header if isinstance(header, str) and row != 1 else None
+            entry["row_label"] = row_label if isinstance(row_label, str) and col != "A" else None
+        out[ref] = entry
+    listed = [out[k] for k in sorted(out)]
+    return {"count": len(listed), "values": listed[:MAX_UNBOUND_LISTED], "truncated": len(listed) > MAX_UNBOUND_LISTED}

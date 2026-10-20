@@ -155,6 +155,13 @@ async def create_job(request: Request):
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
     if not all(isinstance(x, str) and x for x in (workspace_id, kind, job_id)):
         return _error("workspace_id, kind and job_id required", 400)
+    return submit_job(store, workspace_id, kind, job_id, payload, lambda: _authority(identity, request, workspace_id))
+
+
+def submit_job(store, workspace_id: str, kind: str, job_id: str, payload: dict, get_authority):
+    """The whole job-creation contract of `POST /v2/jobs` (permission per kind, payload checks, epoch and lineage guards, quota, provider gate, admission), for
+    the route and for server-side callers acting AS a person (EUI-08 preparation run: `get_authority` resolves that person's current membership). Returns the
+    route's response object; nothing here is relaxed for a server-side caller."""
     permission = JOB_CREATE_PERMISSION.get(kind)
     if permission is None:
         return _error("unsupported job kind", 400)
@@ -314,7 +321,7 @@ async def create_job(request: Request):
                 return _error(f"apply requires {key}", 400)
         permission = APPLY_CREATE_SUBJECT_PERMISSION[apply_subject]
     try:
-        authority = _authority(identity, request, workspace_id)
+        authority = get_authority()
         try:
             require(authority, permission)
         except PermissionDenied:
@@ -529,8 +536,11 @@ def job_status(request: Request, job_id: str, workspace_id: str):
         authority = _authority(identity, request, workspace_id)
         require(authority, "project.read")
         from infra.v2_redaction import redact_job_record
+        from infra import v2_job_visibility
         record = store.job_record(authority["tenant_id"], workspace_id, job_id)
-        out = redact_job_record(record, authority)
+        if not v2_job_visibility.readable(store, authority["tenant_id"], workspace_id, record, authority):
+            raise TenantScopeError(v2_job_visibility.NOT_FOUND)                  # the kind's own read rule (RQA-01): no bypass through the generic read
+        out = redact_job_record(v2_job_visibility.shaped(record), authority)
         from infra.provider_gate import AI_KINDS
         if record["execution_status"] == "FAILED" and record["kind"] in AI_KINDS:
             # Tell the page whether a retry can run at all: a job that used every provider attempt is refused by the worker (and by the retry route).
@@ -564,6 +574,9 @@ async def approve_job(request: Request, job_id: str):
         authority = _authority(identity, request, workspace_id)
         require_human_actor(authority)
         job = store.job_record(authority["tenant_id"], workspace_id, job_id)
+        from infra import v2_job_visibility
+        if not v2_job_visibility.readable(store, authority["tenant_id"], workspace_id, job, authority):
+            raise TenantScopeError(v2_job_visibility.NOT_FOUND)                  # who may not read a job may not act on it (RQA-01)
         permission = _job_permission(job)
         if permission is None:
             return _error("unsupported job kind", 400)
@@ -652,6 +665,9 @@ async def decide_job(request: Request, job_id: str):
         require_human_actor(authority)
         require(authority, "change.approve")
         job = store.job_record(authority["tenant_id"], workspace_id, job_id)
+        from infra import v2_job_visibility
+        if not v2_job_visibility.readable(store, authority["tenant_id"], workspace_id, job, authority):
+            raise TenantScopeError(v2_job_visibility.NOT_FOUND)                  # who may not read a job may not act on it (RQA-01)
         if job["kind"] != "approval":
             return _error("job is not an approval job", 400)
         execution_result = job.get("execution_result") or {}
@@ -804,6 +820,9 @@ async def publish_job(request: Request, job_id: str):
         authority = _authority(identity, request, workspace_id)
         require(authority, "project.read")
         job = store.job_record(authority["tenant_id"], workspace_id, job_id)
+        from infra import v2_job_visibility
+        if not v2_job_visibility.readable(store, authority["tenant_id"], workspace_id, job, authority):
+            raise TenantScopeError(v2_job_visibility.NOT_FOUND)                  # who may not read a job may not act on it (RQA-01)
         if job["status"] != "APPROVED":
             return _error("job is not approved", 409)
         permission = _job_permission(job)
@@ -844,6 +863,9 @@ async def cancel_job_route(request: Request, job_id: str):
     try:
         authority = _authority(identity, request, workspace_id)
         job = store.job_record(authority["tenant_id"], workspace_id, job_id)
+        from infra import v2_job_visibility
+        if not v2_job_visibility.readable(store, authority["tenant_id"], workspace_id, job, authority):
+            raise TenantScopeError(v2_job_visibility.NOT_FOUND)                  # who may not read a job may not act on it (RQA-01)
         permission = _job_permission(job)
         if permission is None:
             return _error("unsupported job kind", 400)
@@ -884,6 +906,9 @@ async def retry_job_route(request: Request, job_id: str):
     try:
         authority = _authority(identity, request, workspace_id)
         job = store.job_record(authority["tenant_id"], workspace_id, job_id)
+        from infra import v2_job_visibility
+        if not v2_job_visibility.readable(store, authority["tenant_id"], workspace_id, job, authority):
+            raise TenantScopeError(v2_job_visibility.NOT_FOUND)                  # who may not read a job may not act on it (RQA-01)
         permission = _job_permission(job)
         if permission is None:
             return _error("unsupported job kind", 400)

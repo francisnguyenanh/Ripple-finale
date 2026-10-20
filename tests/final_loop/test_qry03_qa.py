@@ -103,27 +103,39 @@ def test_answered_with_validated_claims_and_labelled_authority(qa_env):
     q = qa_env
     model = use(q, lambda p: obj("ANSWERED", "A manager approves standard purchases of 1,000,000 JPY or more.",
                                  [claim("Standard purchases of 1,000,000 JPY or more need manager approval.", ["rule-standard-manager-review"], "observed")]))
-    got = run(q, q.admin, "Who has to approve a 1.2 million yen purchase?")
+    got = run(q, q.admin, "Who has to approve a 1.2 million yen standard purchase?")                    # the asker states the process: nothing is assumed
     a = got["answer"]
     assert got["status"] == "done" and a["status"] == "ANSWERED" and model.calls == 1
     assert a["claims"][0]["authority_labels"] == ["what the sources say"] and a["claims"][0]["sources"] == ["Purchases of 1,000,000 JPY or more need manager approval"]
     assert a["retrieval_note"].startswith("The search can miss") and a["conflicts"] == [] and a["snapshot_state"] == "ACCEPTED"
     rec = job_body(q.admin, q.env, got["question_id"])
     assert rec["execution_status"] == "COMPLETED" and rec["execution_provider_calls"] == 1 and rec["execution_model_id"] == MODEL                     # one metered call through the budget machinery
-    again = q.admin.post("/v2/business/questions", json={"workspace_id": q.env.ws, "question": "  who has to approve a 1.2 MILLION yen purchase? "}).json()
+    again = q.admin.post("/v2/business/questions", json={"workspace_id": q.env.ws, "question": "  who has to approve a 1.2 MILLION yen standard purchase? "}).json()
     assert again["question_id"] == got["question_id"] and again["status"] == "done" and model.calls == 1                                                # same question: stored answer, no model call
+    unstated = run(q, q.admin, "Who has to approve a 1.2 million yen purchase?")["answer"]                     # owner decision G2-QA-10 (B): the pinned default was needed
+    assert unstated["status"] == "PARTIAL" and "Assumed: a standard purchase." in unstated["uncertainty"] and unstated["clarifying_questions"][0] == "Is this a standard purchase or an emergency purchase?"
 
 
-def test_a_disagreement_is_disclosed_and_the_status_is_never_stronger_than_partial(qa_env):
+def test_a_decided_disagreement_is_disclosed_and_a_target_view_answer_that_states_the_decision_is_answered(qa_env):
+    """Owner decision H-QA-06, option B (2026-10-18): this test asserted PARTIAL until then (history in EVT-0130). The CAPEX disagreement was settled by a person
+    (qa_env); the answer states the decided rule in the target view, so it is ANSWERED and the old source is still disclosed, with the decision named."""
     q = qa_env
     use(q, lambda p: obj("ANSWERED", "Finance reviews CAPEX from 2,000,000 JPY.",
                          [claim("CAPEX requests from 2,000,000 JPY go to Finance.", ["rule-capex-finance-config-target"], "target")]))
     a = run(q, q.admin, "From which CAPEX amount does Finance review a request?")["answer"]
-    assert a["status"] == "PARTIAL" and len(a["conflicts"]) == 1 and a["conflicts"][0]["one_side_cited_only"] is True
+    assert a["status"] == "ANSWERED" and len(a["conflicts"]) == 1 and a["conflicts"][0]["one_side_cited_only"] is True and a["conflicts"][0]["decided"] is True
     assert len(a["conflicts"][0]["titles"]) == 2 and a["claims"][0]["authority_labels"] == ["decided by a person"]                                          # decided target, not a winner picked by the model
     assert a["implementation_note"] and "rule-capex-finance-config-target" in a["implementation_note"]                                                       # the files and code still show the old rule
     tech = q.admin.get(f"/v2/business/questions/{a and run(q, q.admin, 'From which CAPEX amount does Finance review a request?')['question_id']}", params={"workspace_id": q.env.ws, "mode": "technical"}).json()["answer"]
-    assert "sources_disagree" in tech["technical"]["reasons"] and tech["technical"]["pin"]["business_revision"] == 1
+    assert "sources_disagree_decided" in tech["technical"]["reasons"] and "sources_disagree" not in tech["technical"]["reasons"] and tech["technical"]["pin"]["business_revision"] == 1
+    use(q, lambda p: obj("ANSWERED", "Finance reviews CAPEX from 2,000,000 JPY.",
+                         [claim("CAPEX requests from 2,000,000 JPY go to Finance.", ["rule-capex-finance-config-target"], "target")]))
+    impl = run(q, q.admin, "Which CAPEX amount for Finance review is currently configured in the system?")["answer"]
+    assert impl["status"] == "PARTIAL" and impl["implementation_note"]                                                                                       # what is in force in the files: not yet the decided value
+    use(q, lambda p: obj("ANSWERED", "Finance reviews CAPEX from 2,000,000 JPY.",
+                         [claim("CAPEX requests from 2,000,000 JPY go to Finance.", ["rule-capex-finance-config"], "observed")]))
+    obs = run(q, q.admin, "From which CAPEX amount does Finance review a request?", view="observed")["answer"]
+    assert obs["status"] == "PARTIAL" and obs["conflicts"] and obs["conflicts"][0]["decided"] is False                                                     # the observed view reflects the sources
 
 
 def test_both_sides_cited_still_does_not_pick_a_winner(qa_env):
@@ -308,3 +320,93 @@ def test_a_rule_the_case_does_not_reach_is_dropped_and_a_rule_that_needs_a_missi
     use(q, lambda p: obj("ANSWERED", "Finance reviews CAPEX from 2,000,000 JPY.", [claim("CAPEX of 2,000,000 JPY or more goes to Finance.", ["rule-capex-finance-config"], "observed")]))
     a = run(q, q.admin, "From which CAPEX amount does Finance review a request?")["answer"]
     assert a["claims"][0]["applicability"] == "not_checked"                                                                             # no concrete amount in the question: not a case
+
+
+def test_an_applicable_approval_gate_the_model_left_out_is_added_by_the_server_through_the_real_worker(qa_env):
+    """Omission the server can see (diagnostic finding H-QA-01, 2026-10-18): the stub answers with the Director rule only; the stated case (standard purchase, 3,000,000 JPY) also
+    meets the manager rule, so the server adds it as its own claim, the status is PARTIAL and the reason is visible. SYNTHETIC stub."""
+    q = qa_env
+    use(q, lambda p: obj("ANSWERED", "The Operations Director approves purchases from high-risk suppliers.",
+                         [claim("Purchases from high-risk suppliers go to the Operations Director regardless of amount.", ["rule-high-risk-director"], "observed")]))
+    got = run(q, q.admin, "A standard purchase of 3,000,000 JPY from a supplier on the high-risk register: who approves it?")
+    a = got["answer"]
+    assert got["status"] == "done" and a["status"] == "PARTIAL"
+    sources = [c["sources"][0] for c in a["claims"]]
+    assert "Purchases of 1,000,000 JPY or more need manager approval" in sources and "manager approval" in a["answer"]
+    tech = q.admin.get(f"/v2/business/questions/{got['question_id']}", params={"workspace_id": q.env.ws, "mode": "technical"}).json()["answer"]["technical"]
+    assert "applicable_rule_not_cited" in tech["reasons"] and tech["dropped_claims"] == []
+    stored = job_body(q.admin, q.env, got["question_id"])["execution_result"]["ai_outcome"]
+    assert stored == {"model_attempted": True, "provider_calls": 1, "retained": 1, "rejected": 0, "server_added": 1, "contribution": "retained", "degraded": None}   # LLM-00
+    tclaims = q.admin.get(f"/v2/business/questions/{got['question_id']}", params={"workspace_id": q.env.ws, "mode": "technical"}).json()["answer"]["claims"]
+    assert sorted(c["origin"] for c in tclaims) == ["model", "server_applicability"]
+    assert sorted(c["origin"] for c in a["claims"]) == ["model", "server_applicability"]                 # the business view says it too
+    use(q, lambda p: obj("ANSWERED", "The Operations Director approves purchases from high-risk suppliers.",
+                         [claim("Purchases from high-risk suppliers go to the Operations Director regardless of amount.", ["rule-high-risk-director"], "observed")]))
+    a = run(q, q.admin, "A purchase of 3,000,000 JPY from a supplier on the high-risk register: who approves it?")["answer"]
+    assert len(a["claims"]) == 1                                                                         # standard only by the pinned default: nothing is added
+
+
+def test_the_server_claim_respects_disagreements_views_and_reader_rights_through_the_real_worker(qa_env):
+    """Audit of the server claim (2026-10-18). (1) A decided disagreement: the CAPEX config rule (decided, target) and the policy rule (losing side) both reach 6,000,000
+    JPY, but neither is added: the disagreement is left to its disclosure. (2) Observed view: the added rule carries the observed authority. (3) A reader without evidence
+    rights sees the server claim (it rests on a stored rule, not on source text) and it is labelled as the rule check's, not the model's. SYNTHETIC stubs."""
+    q = qa_env
+    director = claim("Purchases from high-risk suppliers go to the Operations Director regardless of amount.", ["rule-high-risk-director"], "observed")
+    use(q, lambda p: obj("ANSWERED", "The Operations Director approves it.", [director]))
+    a = run(q, q.admin, "A standard CAPEX purchase of 6,000,000 JPY from a supplier on the high-risk register: who must approve it?")["answer"]
+    added = [c for c in a["claims"] if c["origin"] == "server_applicability"]
+    assert [c["sources"][0] for c in added] == ["Purchases of 1,000,000 JPY or more need manager approval"]          # the manager gate only; no CAPEX side chosen
+    use(q, lambda p: obj("ANSWERED", "The Operations Director approves it.", [director]))
+    got = run(q, q.admin, "A standard purchase of 3,000,000 JPY from a supplier on the high-risk register: who approves it?", view="observed")
+    added = [c for c in got["answer"]["claims"] if c["origin"] == "server_applicability"]
+    assert len(added) == 1 and added[0]["basis"] == "observed" and added[0]["authority_labels"] == ["what the sources say"]
+    low = q.req.get(f"/v2/business/questions/{got['question_id']}", params={"workspace_id": q.env.ws}).json()["answer"]
+    assert low["withheld_claims"] == 0 and [c["origin"] for c in low["claims"]].count("server_applicability") == 1
+
+
+def _login(account, cred):
+    from fastapi.testclient import TestClient
+    from infra import judge
+    c = TestClient(judge.app, base_url="https://judge.test")
+    c.headers.update({"Origin": "https://judge.test", "X-Ripple-Judge": "1"})
+    assert c.post("/v2/auth/login", json={"account_id": account, "credential": cred}).status_code == 200
+    return c
+
+
+def test_the_server_claim_never_reaches_a_reader_who_cannot_read_that_business_knowledge(qa_env):
+    """Owner request (2026-10-18): a server claim rests on a rule of the asker's pinned workspace snapshot; a reader sees it only with the right to read that
+    workspace's business knowledge (`project.read`, the same right that shows the rule in the graph), never across workspaces or tenants, and not after the
+    membership is revoked. There is no per-rule visibility in the knowledge model: the check is that the answer shows nothing the reader's graph does not."""
+    from infra.adapters.v2_identity import PostgresIdentityStore
+    q = qa_env
+    ids, n = PostgresIdentityStore(q.env.dsn), q.env.nonce
+    project = f"p-{n}"
+    ids.create_account(f"v-{n}", f"cred-v-{n}")
+    ids.grant_membership(q.env.tenant, project, q.env.ws, f"v-{n}", ("viewer",))
+    other_ws = f"ws2-{n}"
+    q.env.store.create_workspace(q.env.tenant, project, other_ws)
+    ids.create_account(f"o-{n}", f"cred-o-{n}")
+    ids.grant_membership(q.env.tenant, project, other_ws, f"o-{n}", ("requester",))
+    other_tenant = f"t2-{n}"
+    q.env.store.create_workspace(other_tenant, f"p2-{n}", f"ws3-{n}")
+    ids.create_account(f"x-{n}", f"cred-x-{n}")
+    ids.grant_membership(other_tenant, f"p2-{n}", f"ws3-{n}", f"x-{n}", ("admin",))
+    director = claim("Purchases from high-risk suppliers go to the Operations Director regardless of amount.", ["rule-high-risk-director"], "observed")
+    use(q, lambda p: obj("ANSWERED", "The Operations Director approves it.", [director]))
+    qid = run(q, q.admin, "A standard purchase of 3,000,000 JPY from a supplier on the high-risk register: who approves it?")["question_id"]
+    viewer = _login(f"v-{n}", f"cred-v-{n}")
+    seen = viewer.get(f"/v2/business/questions/{qid}", params={"workspace_id": q.env.ws, "mode": "technical"}).json()["answer"]
+    server = [c for c in seen["claims"] if c["origin"] == "server_applicability"]
+    assert len(server) == 1 and seen["withheld_claims"] == 0
+    graph_rules = {n_["id"] for n_ in viewer.get("/v2/business/graph", params={"workspace_id": q.env.ws}).json()["nodes"]}
+    assert set(server[0]["refs"]) <= graph_rules                                                          # nothing the reader's own graph does not show
+    outsider = _login(f"o-{n}", f"cred-o-{n}")
+    assert outsider.get(f"/v2/business/questions/{qid}", params={"workspace_id": q.env.ws}).status_code in (403, 404)
+    assert outsider.get(f"/v2/business/questions/{qid}", params={"workspace_id": other_ws}).status_code == 404     # not in that workspace
+    foreign = _login(f"x-{n}", f"cred-x-{n}")
+    for ws in (q.env.ws, f"ws3-{n}"):
+        r = foreign.get(f"/v2/business/questions/{qid}", params={"workspace_id": ws})
+        assert r.status_code in (403, 404) and "Operations Director" not in r.text and "manager approval" not in r.text
+    ids.revoke_membership(q.env.tenant, project, q.env.ws, f"v-{n}")
+    r = viewer.get(f"/v2/business/questions/{qid}", params={"workspace_id": q.env.ws})
+    assert r.status_code in (401, 403, 404) and "manager approval" not in r.text

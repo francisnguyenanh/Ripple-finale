@@ -29,7 +29,8 @@ def load_config() -> tuple[dict, str]:
 
 
 def job_id_for(snapshot_id: str, attempt: int) -> str:
-    return "gpr-" + hashlib.sha256(json.dumps([snapshot_id, attempt]).encode("utf-8")).hexdigest()[:24]
+    from infra.worker import job_binding
+    return "gpr-" + hashlib.sha256(json.dumps([snapshot_id, attempt, job_binding.fingerprint(KIND)]).encode("utf-8")).hexdigest()[:24]
 
 
 def validate_payload(payload) -> str | None:

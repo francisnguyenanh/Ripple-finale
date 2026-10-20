@@ -56,10 +56,15 @@ export function FileStages({ row, provider }: { row: Rec; provider?: Rec }) {
         {(st === "analysed" || st === "stale" || st === "failed" || st === "running") && (
           <span className="block text-muted" data-testid="stage-analysis-provenance">
             {provider?.mode === "SIMULATED" ? "SIMULATED analysis" : provider?.mode === "LIVE" ? "Live analysis" : provider?.mode === "LIVE_DISARMED" ? "Live server (not armed)" : "Provider not declared"}
-            {ex.model_recorded ? `, model recorded: ${ex.model_recorded}` : ""}
-            {spent ? `, cost ${ex.cost_usd} USD` : ""}
             {st === "stale" ? ", made on an earlier version of the file, which has changed since" : ""}
             {st === "analysed" && ex.file_unchanged_since_analysis ? ", made at an earlier revision; the file has not changed since, so it is still valid" : ""}
+            {(ex.model_recorded || spent) && (                                       // the raw run facts stay one click away, not in the reading line
+              <details className="mt-0.5" data-testid="stage-analysis-run">
+                <summary className="cursor-pointer w-fit text-primary">Run details</summary>
+                {ex.model_recorded ? <span className="block">Model recorded: {String(ex.model_recorded)}</span> : null}
+                <span className="block">Cost: {spent ? `${ex.cost_usd} USD` : "not recorded"}</span>
+              </details>
+            )}
           </span>
         )}
       </Row>
@@ -131,7 +136,13 @@ export function LifeSummary({ life, paths, coverage }: { life: Rec; paths: strin
 }
 
 /** The right button for the real state of the file: Analyze / Analyze again / Analyze latest version / Re-analyze (asks first) / View analysis status. */
-export function AnalysisButtons({ ws, row, canRun, onStart, busy }: { ws: string; row: Rec; canRun: boolean; onStart: () => void; busy: boolean }) {
+/** What starting an analysis costs, said next to the button that starts it. */
+export function costNote(p: Rec | undefined): string {
+  return p?.mode === "SIMULATED" ? "Simulated: nothing is sent to an AI or spent." : p?.mode === "LIVE" ? "Uses the AI: each run is charged within the allocation."
+    : p?.mode === "LIVE_DISARMED" ? "No AI is called until the operator arms this server." : "The server did not say whether a run is live or simulated.";
+}
+
+export function AnalysisButtons({ ws, row, canRun, onStart, busy, provider }: { ws: string; row: Rec; canRun: boolean; onStart: () => void; busy: boolean; provider?: Rec }) {
   const aiOff = useSession().aiOff;
   const [ask, setAsk] = React.useState(false);
   const ex = (row.extraction ?? {}) as Rec;
@@ -145,7 +156,7 @@ export function AnalysisButtons({ ws, row, canRun, onStart, busy }: { ws: string
         {status}
         {canRun && ask && (
           <div role="group" aria-label="Confirm re-analysis" data-testid="reanalyze-confirm" className="basis-full rounded-md border border-border bg-surface-2 p-3 grid gap-2 text-sm">
-            <p>This starts a <strong>new</strong> AI analysis of this file. The current result stays until the new one is ready. When the AI is live it uses budget within the allocation.</p>
+            <p>This starts a <strong>new</strong> AI analysis of this file. The current result stays until the new one is ready. {costNote(provider)}</p>
             <div className="flex gap-2">
               <Button variant="primary" data-testid="action-reanalyze-confirm" title={aiOff ? "AI actions are switched off on this server" : undefined} disabled={busy || aiOff} onClick={() => { setAsk(false); onStart(); }}>Start a new analysis</Button>
               <Button onClick={() => setAsk(false)}>Cancel</Button>
@@ -158,6 +169,7 @@ export function AnalysisButtons({ ws, row, canRun, onStart, busy }: { ws: string
   return (
     <>
       <Button data-testid="action-analyze" title={aiOff ? "AI actions are switched off on this server" : undefined} disabled={busy || aiOff} onClick={onStart}>{st === "stale" ? "Analyze latest version" : st === "failed" ? "Analyze again" : "Analyze"}</Button>
+      <span className="text-xs text-muted" data-testid="analyze-cost-note">{costNote(provider)}</span>
       {status}
     </>
   );

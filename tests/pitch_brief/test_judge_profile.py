@@ -19,7 +19,7 @@ def ch(env, monkeypatch):
 
 def test_the_judge_bundle_is_exactly_the_prepare_up_to_proposal_set():
     p = permissions_for(("judge",))
-    assert p == {"project.read", "intent.create", "intent.confirm_own", "ai.use", "change.prepare"}
+    assert p == {"project.read", "intent.create", "intent.confirm_own", "ai.use", "change.prepare", "request.assistant.ask"}   # + asking the read-only request assistant (RQA)
     for forbidden in ("source.import", "change.apply", "change.approve", "change.review", "change.accept_result", "evidence.read", "membership.manage",
                       "knowledge.confirm", "knowledge.answer", "conflict.resolve", "source.restore", "verification.contract.set"):
         assert forbidden not in p

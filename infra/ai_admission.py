@@ -20,15 +20,23 @@ from infra.adapters.v2_policy import permissions_for
 POLICY_APPROVER = "policy:ai.use"
 POLICY_ROLES = ("ai.use",)
 # What a person may start for themselves. Extraction/analysis of source files stays under the import flow; nothing here approves, applies or publishes.
-SELF_SERVE_KINDS = ("intent.interpret", "change.draft", "gap.answer", "explain", "sim.analysis", "impact.judge", "knowledge.qa", "change.understand", "change.impact_deps", "change.draft_guidance", "knowledge.gap_proposals", "gap.answer_interpret", "ma.specialist", "document.variant", "knowledge.mining", "gap.interview_question")
+SELF_SERVE_KINDS = ("intent.interpret", "change.draft", "gap.answer", "explain", "sim.analysis", "impact.judge", "knowledge.qa", "change.understand", "change.impact_deps", "change.draft_guidance", "knowledge.gap_proposals", "gap.answer_interpret", "ma.specialist", "document.variant", "knowledge.mining", "gap.interview_question", "change.risk_memo", "ma.synthesis_memo", "ci.semantic_drift", "source.correspondence", "code.diff_proposal", "roi.analyst", "request.qa")
 
 
-def block_reason(store, tenant: str, ws: str, authority: dict) -> str | None:
-    """Why this person may not use the AI right now, or None. Read from the server-side membership, never from the request."""
+# A kind with its own scoped capability (RQA-03): `request.qa` is admitted by `request.assistant.ask` only; `ai.use` does not admit it and it admits nothing else.
+KIND_CAPABILITY = {"request.qa": "request.assistant.ask"}
+
+
+def capability_for(kind: str | None) -> str:
+    return KIND_CAPABILITY.get(kind or "", "ai.use")
+
+
+def block_reason(store, tenant: str, ws: str, authority: dict, kind: str | None = None) -> str | None:
+    """Why this person may not use the AI right now (for `kind`), or None. Read from the server-side membership, never from the request."""
     roles = authority.get("roles") or ()
     if "ai_suspended" in roles:
         return "suspended"
-    if "ai.use" not in permissions_for(roles):
+    if capability_for(kind) not in permissions_for(roles):
         return "no_permission"
     from infra.worker.sandbox_hold import is_sandbox
     if is_sandbox(store, tenant, ws):
@@ -38,11 +46,12 @@ def block_reason(store, tenant: str, ws: str, authority: dict) -> str | None:
 
 def admit(store, tenant: str, ws: str, job_id: str, kind: str, authority: dict) -> bool:
     """Approve a just-created PENDING_APPROVAL self-serve job by policy. False = left for a person (not allowed to self-serve here)."""
-    if kind not in SELF_SERVE_KINDS or block_reason(store, tenant, ws, authority) is not None:
+    if kind not in SELF_SERVE_KINDS or block_reason(store, tenant, ws, authority, kind) is not None:
         return False
-    store.approve_job(tenant, ws, job_id, POLICY_APPROVER, POLICY_ROLES)
+    cap = capability_for(kind)
+    store.approve_job(tenant, ws, job_id, f"policy:{cap}", (cap,))
     with store._tx() as cur:
         cur.execute("""INSERT INTO v2_audit (tenant_id, workspace_id, event_type, actor_id, payload)
                        VALUES (%s,%s,'AI_JOB_ADMITTED_BY_POLICY',%s,%s)""",
-                    (tenant, ws, authority["account_id"], Json({"job_id": job_id, "kind": kind, "policy": "ai.use"})))
+                    (tenant, ws, authority["account_id"], Json({"job_id": job_id, "kind": kind, "policy": cap})))
     return True

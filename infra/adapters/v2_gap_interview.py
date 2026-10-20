@@ -3,9 +3,14 @@
 start -> one session per (workspace, gap, knowledge version) with the first deterministic question; answer(text) -> the KNO-07 reading job of that text (same job id as the
 single-shot route: version, gap, text), recorded as a turn; refresh -> readings pulled from the jobs, contradictions and the next question computed, status derived; confirm ->
 the latest READY reading's structured answer with the person's own words as the quote through `preview_answer` + `confirm_answer` (the interview never writes knowledge itself).
-Cap: `DEFAULT_CAP` answered turns, then UNRESOLVED (the controls continue). A moved knowledge version makes the session STALE: nothing of it is saved to the graph.
+Three separate steps (owner decision DEC-0006): the model READS the words (KNO-07 job), the server checks COMPLETENESS (hedged or vague words keep the reading at
+NEEDS_CLARIFICATION and get a bounded follow-up; rechecked when the status is derived and at confirm), and only the PERSON confirms. A reading over unclear words is an
+unresolved interpretation, not a fact: it stays in the history and never contradicts the clarification that replaces it. stop -> the person ends the interview (UNRESOLVED, nothing written).
+UNRESOLVED always carries a reason: unknown_declared, stopped_by_person, turn_cap_reached (`DEFAULT_CAP` answered turns) or no_remaining_clarification (the controls continue). A moved knowledge version makes the session STALE: nothing of it is saved to the graph.
 """
 from __future__ import annotations
+
+import re
 
 import datetime
 
@@ -16,6 +21,7 @@ from infra.adapters import v2_business
 from infra.adapters.v2_postgres import TenantScopeError, _as_object
 
 AUDIT = {"start": "GAP_INTERVIEW_STARTED", "turn": "GAP_INTERVIEW_TURN", "confirm": "GAP_INTERVIEW_CONFIRMED", "unresolved": "GAP_INTERVIEW_UNRESOLVED", "question": "GAP_INTERVIEW_QUESTION"}
+READING_KEYS = ("status", "proposed_answer", "quote", "uncovered", "message", "preview", "reasons", "completeness", "context")
 
 
 def questioner_mode() -> str:
@@ -72,6 +78,16 @@ def start(store, tenant_id, workspace_id, gap_id, *, actor_id: str) -> dict:
         cur.execute("""INSERT INTO v2_gap_interviews (tenant_id, workspace_id, session_id, gap_id, snapshot_id, status, turns, cap, requested_by) VALUES (%s,%s,%s,%s,%s,'OPEN',%s,%s,%s) ON CONFLICT DO NOTHING""",
                     (tenant_id, workspace_id, session_id, gap_id, snap["snapshot"]["snapshot_id"], Json(turns), gi.DEFAULT_CAP, actor_id))
         _audit(cur, tenant_id, workspace_id, AUDIT["start"], actor_id, {"session_id": session_id, "gap_id": gap_id, "snapshot_id": snap["snapshot"]["snapshot_id"], "cap": gi.DEFAULT_CAP})
+    if questioner_mode() == "model":
+        # LLM-K2 (roadmap 15.4): the FIRST question is chosen by the model too (same role, same grounding and fallback as the follow-ups); the deterministic question
+        # is kept as the labelled fallback. Without a provider or budget the deterministic question is asked and says so.
+        s = {"session_id": session_id, "gap_id": gap_id, "snapshot_id": snap["snapshot"]["snapshot_id"], "requested_by": actor_id}
+        first = turns[0]
+        qjid = _question_job(store, tenant_id, workspace_id, s, {k: first[k] for k in first if k in ("turn", "question", "decision", "offers_unknown")}, [])
+        det = {k: first[k] for k in ("turn", "question", "decision", "offers_unknown") if k in first}
+        turns[0] = dict(first, question=None if qjid else first["question"], deterministic=det, question_job_id=qjid,
+                        questioner="model_pending" if qjid else "deterministic_fallback", fallback_reason=None if qjid else "provider_unavailable")
+        _save(store, tenant_id, workspace_id, session_id, status="OPEN", turns=turns)
     return {"session_id": session_id, "created": True, **state(store, tenant_id, workspace_id, session_id)}
 
 
@@ -81,10 +97,13 @@ def answer(store, tenant_id, workspace_id, session_id, *, text: str, authority: 
     if s is None:
         raise TenantScopeError("interview not found")
     refreshed = refresh(store, tenant_id, workspace_id, session_id)
+    s = _row(store, tenant_id, workspace_id, session_id)                               # the refresh may have settled a pending model question into the turns
     if refreshed["status"] not in ("OPEN",):
         raise InterviewRefused("session_not_open", f"the interview is {refreshed['status'].lower().replace('_', ' ')}; use the structured controls or start a new interview on the current knowledge")
     if not isinstance(text, str) or not text.strip() or len(text) > 1200:
         raise InterviewRefused("text_invalid", "text (1-1200 characters) required")
+    if PLACEHOLDER.search(text):                                                        # EUI-05: an unfilled sentence-starter slot is not an answer (no turn, no model call)
+        raise InterviewRefused("unfilled_placeholder", "replace each [blank] of the sentence starter with your own words, or say that you do not know")
     turns = s["turns"]
     current = turns[-1]
     if current.get("question") is None:
@@ -144,7 +163,7 @@ def refresh(store, tenant_id, workspace_id, session_id) -> dict:
                 rec = None
             if rec and rec.get("execution_status") == "COMPLETED" and rec.get("execution_result"):
                 res = rec["execution_result"]
-                t["reading"] = {k: res.get(k) for k in ("status", "proposed_answer", "quote", "uncovered", "message", "preview")}
+                t["reading"] = {k: res.get(k) for k in READING_KEYS}
                 t["reading_status"] = res.get("status")
                 changed = True
             elif rec and rec.get("execution_status") in ("FAILED", "CANCELLED", "REJECTED"):
@@ -174,13 +193,14 @@ def refresh(store, tenant_id, workspace_id, session_id) -> dict:
     if not pin_moved and gap is None and s["status"] != "CONFIRMED":
         status = "CLOSED"                                                           # answered through the controls or dismissed: the interview has nothing left to do
     else:
-        status = gi.session_status(answered, cap=s["cap"], pin_moved=pin_moved, confirmed=False)
+        status = gi.session_status(turns, cap=s["cap"], pin_moved=pin_moved, confirmed=False)
     if status == "OPEN" and not pending and turns and turns[-1].get("text") is not None and gap is not None:
         nq = gi.next_question(gap, answered)
         if nq is not None:
             if questioner_mode() == "model":
                 qjid = _question_job(store, tenant_id, workspace_id, s, nq, answered)
-                turns.append(dict(nq, question=None if qjid else nq["question"], deterministic=dict(nq), question_job_id=qjid, questioner="model_pending" if qjid else "deterministic",
+                turns.append(dict(nq, question=None if qjid else nq["question"], deterministic=dict(nq), question_job_id=qjid, questioner="model_pending" if qjid else "deterministic_fallback",
+                                  fallback_reason=None if qjid else "provider_unavailable",
                                   text=None, job_id=None, reading=None, reading_status=None, unknown=False, asked_at=datetime.datetime.now(datetime.timezone.utc).isoformat()))
             else:
                 turns.append(dict(nq, questioner="deterministic", text=None, job_id=None, reading=None, reading_status=None, unknown=False, asked_at=datetime.datetime.now(datetime.timezone.utc).isoformat()))
@@ -189,7 +209,7 @@ def refresh(store, tenant_id, workspace_id, session_id) -> dict:
         _save(store, tenant_id, workspace_id, session_id, status=status, turns=turns)
         if status == "UNRESOLVED" and s["status"] != "UNRESOLVED":
             with store._tx() as cur:
-                _audit(cur, tenant_id, workspace_id, AUDIT["unresolved"], "server", {"session_id": session_id, "reason": "turn_cap_reached" if len(answered) >= s["cap"] else "unknown_declared"})
+                _audit(cur, tenant_id, workspace_id, AUDIT["unresolved"], "server", {"session_id": session_id, "reason": gi.unresolved_reason(turns, cap=s["cap"])})
     return state(store, tenant_id, workspace_id, session_id)
 
 
@@ -220,6 +240,60 @@ def _question_job(store, tenant_id, workspace_id, s: dict, nq: dict, answered: l
         return None
 
 
+PLACEHOLDER = re.compile(r"\[[^\[\]]{1,40}\]")
+VOCAB_LABEL = "Used in other accepted rules of this workspace - not established for this rule"
+VOCAB_CAP = 12
+STARTERS = {                                                                            # blank slots only: no business value is asserted by a starter
+    "missing_actor": ["[role] decides this.", "[role] reviews it when [condition].", "It is decided automatically when [condition]; nobody approves it."],
+    "missing_condition": ["It applies when [measure] is more than [amount and unit].", "It applies only to [category]."],
+    "missing_outcome": ["When it applies, [role] must [approve / review / be informed].", "When it applies, the request is [blocked / sent to a person]."],
+    "missing_exception": ["It does not apply when [case].", "[role] may skip it when [case]."],
+    "conflicting_facts": ["The business rule is [one of the values], because [reason]."],
+}
+
+
+def vocabulary(store, tenant_id, workspace_id, session_id) -> dict:
+    """EUI-05 wording help for the open question, read-only, no model call: words used by OTHER rules of the workspace's ACCEPTED business knowledge (actor roles,
+    outcome kinds, measured fields; never amounts, quotes, ids or people), each labelled as not established for this rule, plus blank sentence starters. Not the
+    member directory; nothing here is evidence or an answer."""
+    s = _row(store, tenant_id, workspace_id, session_id)
+    if s is None:
+        raise TenantScopeError("interview not found")
+    gap = _open_gap(store, tenant_id, workspace_id, s["gap_id"])
+    kind = (gap or {}).get("kind")
+    accepted = (v2_business.business_view(store, tenant_id, workspace_id).get("accepted") or {}).get("rules") or []
+    own = set((gap or {}).get("affected_rule_ids") or [])
+    others = [r for r in accepted if r["rule_id"] not in own]
+    from collections import Counter
+    from core.change_intelligence.v2.business_index import _leaf_fields
+
+    def top(counter):
+        return [{"text": t, "used_in": n} for t, n in sorted(counter.items(), key=lambda kv: (-kv[1], kv[0]))[:VOCAB_CAP]]
+    actors = Counter(str(r["actor_ref"]).replace("role-", "").replace("-", " ") for r in others if r.get("actor_ref"))
+    outcomes = Counter(str((r.get("outcome") or {}).get("kind")).replace("_", " ") for r in others if (r.get("outcome") or {}).get("kind"))
+    measures = Counter(f for r in others for f in _leaf_fields(r.get("condition")))
+    groups = {"missing_actor": [("actor", actors)], "missing_outcome": [("outcome", outcomes), ("actor", actors)], "missing_condition": [("measure", measures)],
+              "missing_exception": [("actor", actors)], "conflicting_facts": []}.get(kind, [("actor", actors)])
+    return {"session_id": session_id, "gap_kind": kind, "label": VOCAB_LABEL, "accepted_knowledge": bool(accepted),
+            "vocabulary": [{"group": g, **item} for g, c in groups for item in top(c)],
+            "starters": STARTERS.get(kind, ["[who] does [what] when [condition]."]), "placeholder_rule": "a [blank] left unfilled cannot be sent"}
+
+
+def stop(store, tenant_id, workspace_id, session_id, *, authority: dict) -> dict:
+    """The person stops (skips / cancels) the interview: UNRESOLVED with reason stopped_by_person; nothing is written to the knowledge and no model call is made."""
+    s = _row(store, tenant_id, workspace_id, session_id)
+    if s is None:
+        raise TenantScopeError("interview not found")
+    if s["status"] in ("CONFIRMED", "CLOSED", "STALE", "UNRESOLVED"):
+        raise InterviewRefused("session_not_open", f"the interview is already {s['status'].lower().replace('_', ' ')}")
+    turns = s["turns"]
+    turns[-1]["stopped"], turns[-1]["stopped_at"], turns[-1]["stopped_by"] = True, datetime.datetime.now(datetime.timezone.utc).isoformat(), authority["account_id"]
+    _save(store, tenant_id, workspace_id, session_id, status="UNRESOLVED", turns=turns)
+    with store._tx() as cur:
+        _audit(cur, tenant_id, workspace_id, AUDIT["unresolved"], authority["account_id"], {"session_id": session_id, "reason": "stopped_by_person", "turn": turns[-1].get("turn")})
+    return state(store, tenant_id, workspace_id, session_id)
+
+
 def confirm(store, tenant_id, workspace_id, session_id, *, authority: dict) -> dict:
     """The person confirms the latest READY reading with their own words of that turn through the existing answer path. Refused when the session is not ready, a contradiction is open
     or the preview moved."""
@@ -229,6 +303,8 @@ def confirm(store, tenant_id, workspace_id, session_id, *, authority: dict) -> d
     s = _row(store, tenant_id, workspace_id, session_id)
     last = [t for t in s["turns"] if t.get("text") is not None][-1]
     reading = last["reading"]
+    if not gi.assess(last)["confirmable"]:                                             # completeness rechecked at confirm with the current rules: the person confirms only a complete reading
+        raise InterviewRefused("incomplete", "the reading is not complete (uncertain or vague words, or a part not covered); nothing is confirmed")
     preview = v2_business.preview_answer(store, tenant_id, workspace_id, gap_id=s["gap_id"], answer=reading["proposed_answer"])
     out = v2_business.confirm_answer(store, tenant_id, workspace_id, actor_id=authority["account_id"], gap_id=s["gap_id"], answer=reading["proposed_answer"], quote=last["text"],
                                      preview_hash=preview["preview_hash"])
@@ -244,17 +320,34 @@ def state(store, tenant_id, workspace_id, session_id) -> dict:
         raise TenantScopeError("interview not found")
     answered = [t for t in s["turns"] if t.get("text") is not None]
     last = s["turns"][-1] if s["turns"] else None
-    open_q = last if last and last.get("text") is None and last.get("question") is not None else None
+    open_q = last if s["status"] == "OPEN" and last and last.get("text") is None and last.get("question") is not None else None    # a stopped / stale session asks nothing
     question_pending = bool(last and last.get("text") is None and last.get("question") is None and last.get("question_job_id"))
     return {"schema": gi.SCHEMA, "session_id": session_id, "gap_id": s["gap_id"], "snapshot_id": s["snapshot_id"], "status": s["status"], "cap": s["cap"], "turns_answered": len(answered),
+            "unresolved_reason": gi.unresolved_reason(s["turns"], cap=s["cap"]) if s["status"] == "UNRESOLVED" else None,
             "turns_left": max(0, s["cap"] - len(answered)), "questioner_mode": questioner_mode(), "question_pending": question_pending,
             "open_question": {**{k: open_q[k] for k in ("turn", "question", "decision", "offers_unknown")}, "questioner": open_q.get("questioner", "deterministic"), "fallback_reason": open_q.get("fallback_reason")} if open_q else None,
-            "turns": s["turns"], "contradictions": gi.contradictions(answered), "transcript_hash": gi.transcript_hash(s["turns"]), "requested_by": s["requested_by"], "decision_id": s["decision_id"],
+            "turns": _assessed(s["turns"], s["status"]), "contradictions": gi.contradictions(answered), "transcript_hash": gi.transcript_hash(s["turns"]), "requested_by": s["requested_by"], "decision_id": s["decision_id"],
             "created_at": s["created_at"], "updated_at": s["updated_at"],
             "statement": {"OPEN": "Answer the open question in your own words; a model reads it into the form and you see exactly what confirming would change.",
-                          "READY_TO_CONFIRM": "The last reading covers your answer; confirming records your words as the decision.", "UNRESOLVED": "The interview stopped (you said you do not know, or the turn limit was reached); the structured controls continue.",
+                          "READY_TO_CONFIRM": "The last reading covers your answer; confirming records your words as the decision.", "UNRESOLVED": "The interview stopped without a decision (you said you do not know, you stopped it, the turn limit was reached, or no further question could make the answer exact); nothing was saved and the structured controls continue.",
                           "CONFIRMED": "Your words were recorded as the decision through the ordinary answer path.", "STALE": "The knowledge version changed; nothing from this interview is saved; start again on the current version.",
                           "CLOSED": "The question is no longer open."}[s["status"]]}
+
+
+def _assessed(turns: list, status: str) -> list:
+    """Each answered turn with what its reading is worth now (history kept): role proposed_answer / unresolved_interpretation / no_reading, or confirmed_fact for the
+    turn whose words the person confirmed; `superseded` when a later answer replaced it. Problems include the recheck with the current completeness rules."""
+    answered = [i for i, t in enumerate(turns) if t.get("text") is not None]
+    out = []
+    for i, t in enumerate(turns):
+        if t.get("text") is None:
+            out.append(t)
+            continue
+        a = gi.assess(t)
+        last = i == answered[-1]
+        role = "confirmed_fact" if status == "CONFIRMED" and last and a["confirmable"] else a["role"]
+        out.append(dict(t, assessment={**a, "role": role, "superseded": not last}))
+    return out
 
 
 def sessions_for_gap(store, tenant_id, workspace_id, gap_id) -> list:

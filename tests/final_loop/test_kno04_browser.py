@@ -18,6 +18,14 @@ from tests.final_loop.test_kno03_graph_gaps import seed  # noqa: E402
 WAIT = 30000
 
 
+def _shot(page, name):                                                                       # optional review capture (UI_NEXT_SHOTS); never affects the assertions
+    import os
+    target = os.environ.get("UI_NEXT_SHOTS")
+    if target:
+        os.makedirs(target, exist_ok=True)
+        page.screenshot(path=os.path.join(target, f"{name}.png"), full_page=False)
+
+
 def sign_in(browser, server, ws_id, account, credential):
     ctx = browser.new_context(base_url=server.url, viewport={"width": 1280, "height": 1000})
     page = ctx.new_page()
@@ -53,7 +61,15 @@ def test_business_question_is_answered_in_the_browser_and_a_requester_only_reads
         expect(card.get_by_test_id("business-gap-question")).to_contain_text("Which one is the business rule?")
         before = counts(env)
         expect(card.get_by_test_id("business-gap-preview")).to_be_disabled()              # nothing chosen yet
-        card.get_by_label("2000000").check()
+        cards = card.get_by_test_id("conflict-card")                                            # EUI-06: A/B cards compare the options before a choice
+        expect(cards).to_have_count(len(conflict["options"]))
+        assert card.locator('[data-testid="conflict-field"][data-differs="true"]').count() >= 1  # what differs is marked on each card
+        pick = next(o for o in conflict["options"] if o["label"] == "2000000")
+        card.locator(f'input[type=radio][value="{pick["rule_id"]}"]').check()
+        expect(card.locator('[data-testid="conflict-card"][data-selected="true"]')).to_have_count(1)
+        card.scroll_into_view_if_needed()
+        _shot(page, "eui06_conflict_ab")
+        assert counts(env) == before                                                      # choosing a card records nothing
         card.get_by_test_id("business-gap-preview").click()
         expect(card.get_by_test_id("business-gap-preview-result")).to_contain_text("source files are not changed", timeout=WAIT)
         assert counts(env) == before                                                      # a preview records nothing

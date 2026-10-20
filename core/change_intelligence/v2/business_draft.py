@@ -154,6 +154,69 @@ def rule_diff(before: Mapping, after: Mapping) -> list:
     return out
 
 
+_OP_WORDS = {"eq": "is", "ne": "is not", "gt": "more than", "gte": "at least", "lt": "less than", "lte": "at most", "in": "is one of", "not_in": "is none of"}
+
+
+def _leaves(cond) -> list:
+    if not isinstance(cond, Mapping):
+        return []
+    if "field" in cond:
+        return [cond]
+    return [x for key in ("all", "any") for c in cond.get(key, []) for x in _leaves(c)] + (_leaves(cond["not"]) if "not" in cond else [])
+
+
+def _shape(cond):
+    """The expression without its leaf values: two conditions with the same shape differ only in leaves."""
+    if not isinstance(cond, Mapping):
+        return None
+    if "field" in cond:
+        return "leaf"
+    return {k: ([_shape(c) for c in cond[k]] if k in ("all", "any") else _shape(cond[k])) for k in ("all", "any", "not") if k in cond}
+
+
+def _value_words(v) -> str:
+    return ", ".join(map(str, v)) if isinstance(v, list) else str(v)                      # the stored value, unformatted (exact amounts, no locale rewrite)
+
+
+def semantic_aspects(diff: Iterable[Mapping]) -> list:
+    """EUI-03: each rule-diff entry as typed aspects, so a changed operator, actor, unit, exception or scope is as visible as a changed number. Values are the stored
+    ones; no percentage or derived figure is computed here."""
+    out = []
+    for d in diff:
+        f, b, a = d["field"], d["before"], d["after"]
+        if f == "actor_ref":
+            out.append({"aspect": "actor", "label": "Who acts", "before": _role_words(b), "after": _role_words(a)})
+        elif f == "condition":
+            lb, la = _leaves(b), _leaves(a)
+            if b is None or a is None or _shape(b) != _shape(a) or len(lb) != len(la):
+                out.append({"aspect": "condition", "label": "When it applies", "before": condition_text(b), "after": condition_text(a)})
+                continue
+            for x, y in zip(lb, la):
+                what = str(x.get("field", "")).replace("_", " ").replace(".", " ")
+                if x.get("field") != y.get("field"):
+                    out.append({"aspect": "measure", "label": "What is measured", "before": what, "after": str(y.get("field", "")).replace("_", " ").replace(".", " ")})
+                if x.get("op") != y.get("op"):
+                    out.append({"aspect": "operator", "label": f"Comparison ({what})", "before": _OP_WORDS.get(x.get("op"), str(x.get("op"))),
+                                "after": _OP_WORDS.get(y.get("op"), str(y.get("op")))})
+                if x.get("value") != y.get("value"):
+                    out.append({"aspect": "threshold", "label": f"Value ({what})", "before": _value_words(x.get("value")), "after": _value_words(y.get("value")),
+                                "unit": y.get("unit") if x.get("unit") == y.get("unit") else None})
+                if x.get("unit") != y.get("unit"):
+                    out.append({"aspect": "unit", "label": f"Unit ({what})", "before": str(x.get("unit") or "none"), "after": str(y.get("unit") or "none")})
+        elif f == "exceptions":
+            tb, ta = [e["text"] for e in b or []], [e["text"] for e in a or []]
+            out += [{"aspect": "exception_removed", "label": "Exception removed", "before": t, "after": None} for t in tb if t not in ta]
+            out += [{"aspect": "exception_added", "label": "Exception added", "before": None, "after": t} for t in ta if t not in tb]
+        elif f == "scope":
+            sb, sa = dict(b or {}), dict(a or {})
+            for k in sorted(set(sb) | set(sa)):
+                if sb.get(k) != sa.get(k):
+                    out.append({"aspect": "scope", "label": f"Where it applies ({k})", "before": _value_words(sb[k]) if k in sb else "any", "after": _value_words(sa[k]) if k in sa else "any"})
+        else:
+            out.append({"aspect": "title", "label": "Title", "before": str(b), "after": str(a)})
+    return out
+
+
 def _flags(op: Mapping, rule: Mapping, before: Mapping) -> list:
     flags = []
     k = op["kind"]
@@ -678,7 +741,7 @@ def render(draft: Mapping, *, mode: str, can_read_evidence: bool, guidance_writt
     guidance = {"status": g.get("status", "not_requested"), "reason": g.get("reason"), "summary": None if hide_guidance else g.get("summary"), "summary_withheld": hide_guidance and bool(g.get("summary")),
                 "questions_for_human": [] if hide_guidance else list(g.get("questions_for_human") or []), "not_addressed_count": len(g.get("not_addressed") or []), "rejected_count": len(g.get("rejected") or [])}
     out = {"statement": draft["statement"], "status": draft["status"], "operations": ops,
-           "rule_changes": [{"title": c["title"], "before": c["before_text"], "after": c["after_text"], "changes": [d["text"] for d in c["diff"]], "valid": c["valid"], "error": c["error"],
+           "rule_changes": [{"title": c["title"], "before": c["before_text"], "after": c["after_text"], "changes": [d["text"] for d in c["diff"]], "aspects": semantic_aspects(c["diff"]), "valid": c["valid"], "error": c["error"],
                              "flags": [f["text"] for f in c["flags"]]} for c in draft["rule_changes"]],
            "relation_updates": [{"type": r["type"], "action": r["action"], "text": r["text"], "status": r["status"]} for r in draft["relation_updates"]],
            "counterevidence": [{"title": c["title"], "label": c["label"]} for c in draft["counterevidence"]], "excluded": [e["text"] for e in draft["excluded"]],

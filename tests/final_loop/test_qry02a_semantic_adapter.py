@@ -136,11 +136,45 @@ def test_bounded_retry_and_call_cap():
     assert p2.calls == 3                                    # one attempt per layer when retries are off, never more than the call cap
 
 
+def test_a_retry_that_succeeds_stays_visible_with_its_cause_and_the_slot_it_used():
+    """Live finding FNL-LIVE-20261018-01/-02: expand and rank applied, judge fell back with call_cap_reached and nothing said why a third layer had no call left.
+    A transient failure followed by a successful retry used that slot; the layer now reports its attempts and the first failure (safe words only), and a retry is
+    taken only when every later layer keeps its call."""
+    seen = {"expand": 0}
+
+    def once(layer, request, timeout):
+        if layer == "expand" and seen["expand"] == 0:
+            seen["expand"] += 1
+            exc = sr.ProviderUnavailable("transport_error")
+            exc.detail = "RuntimeError"
+            raise exc
+        return good(layer, request, timeout)
+    out = run(sr.SemanticAdapter(sr.ScriptedProvider(once), caps={"max_calls": 4}))                   # a spare call: the retry is allowed and stays visible
+    assert out["layers"]["expand"] == {"status": "applied", "attempts": 2, "retried_after": {"reason": "transport_error", "detail": "RuntimeError"}}
+    assert out["layers"]["rank"] == {"status": "applied"} and out["layers"]["judge"] == {"status": "applied"} and out["calls"] == 4 and out["status"] == "applied"
+    seen["expand"] = 0
+    tight = run(sr.SemanticAdapter(sr.ScriptedProvider(once)))                                          # one call per layer: no retry takes the judge's call
+    assert tight["layers"]["expand"]["reason"] == "transport_error" and tight["layers"]["expand"]["status"] == "fallback"
+    assert tight["layers"]["rank"] == {"status": "applied"} and tight["layers"]["judge"] == {"status": "applied"} and tight["calls"] == 3
+    clean = run(sr.SemanticAdapter(sr.ScriptedProvider(good)))
+    assert all(v == {"status": "applied"} for v in clean["layers"].values())                   # one clean call per layer: nothing extra is reported
+
+
 def test_timeout_is_a_labelled_fallback_after_the_allowed_attempts():
     ticks = iter(range(0, 1000, 20))                        # every clock reading jumps 20 s: each call "takes" longer than the 8 s timeout
     a = sr.SemanticAdapter(sr.ScriptedProvider(good), clock=lambda: float(next(ticks)))
     out = run(a)
     assert out["status"] == "fallback" and out["layers"]["expand"]["reason"] == "timeout" and out["terms"] == [] and out["calls"] <= sr.DEFAULT_CAPS["max_calls"]
+
+
+def test_a_late_answer_is_discarded_but_its_usage_is_booked():
+    """Live finding FNL-LIVE-20261018-03: an expand answer that arrived after the adapter's timeout was discarded and its usage never reached the job's accounting."""
+    def paid(layer, request, timeout):
+        return good(layer, request, timeout), {"input_tokens": 100, "output_tokens": 10}
+    ticks = iter(range(0, 1000, 20))
+    out = run(sr.SemanticAdapter(sr.ScriptedProvider(paid), clock=lambda: float(next(ticks)), caps={"max_retries": 0}))
+    assert {v["reason"] for v in out["layers"].values()} == {"timeout"} and out["calls"] == 3
+    assert out["tokens_in"] == 300 and out["tokens_out"] == 30                                          # three late, discarded, paid answers: all booked
 
 
 def test_invalid_output_discards_only_that_layer():

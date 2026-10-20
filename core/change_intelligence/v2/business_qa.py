@@ -121,12 +121,13 @@ def case_facts_for_rule(rule: Mapping, facts: Mapping) -> dict:
     return out
 
 
-def rule_applicability(rule: Mapping, facts: Mapping, universe: Mapping) -> dict:
-    """{"status": applies|conditional|not_applicable|not_evaluated, "missing": [fact keys], "why": [...]} for one structured rule."""
+def rule_applicability(rule: Mapping, facts: Mapping, universe: Mapping, *, alias_amount: bool = True) -> dict:
+    """{"status": applies|conditional|not_applicable|not_evaluated, "missing": [fact keys], "why": [...]} for one structured rule.
+    `alias_amount=False` evaluates only the facts the question states (no case amount standing in for another JPY field): used for rules nobody cited."""
     from core.change_intelligence.v2.policy_decision import evaluate_condition
     if rule.get("condition") is None:
         return {"status": "not_evaluated", "missing": [], "why": ["rule_condition_unknown"]}
-    facts = case_facts_for_rule(rule, facts)
+    facts = case_facts_for_rule(rule, facts) if alias_amount else dict(facts)
     scoped, why = _scope_with_universe(rule, facts, universe)
     if scoped is False:
         return {"status": "not_applicable", "missing": [], "why": ["scope_excludes_this_case"]}
@@ -163,6 +164,56 @@ def claim_applicability(refs: Iterable[str], by_id: Mapping, facts: Mapping, uni
         return {"status": "not_applicable", "missing": [], "why": [w for x in results for w in x["why"]]}
     return {"status": "not_evaluated", "missing": [], "why": [w for x in results for w in x["why"]]}
 
+
+
+MAX_SERVER_CLAIMS = 3
+_IMPLEMENTED_STATE = re.compile(r"\b(?:currently|right now|today|in (?:the )?(?:system|code|configuration|config|files?)|implemented|configured|in production|in force in)\b", re.I)
+
+
+def _decided_by(pack: Mapping, pair: set, kept: list) -> Optional[str]:
+    """The decided TARGET rule that settles this disagreement, when a kept claim states it as decided: an item with TARGET authority, CONFIRMED, backed by a
+    human decision, whose versions include one side of the pair, cited with basis target/decision. None otherwise (the disagreement stays open for the answer)."""
+    for it in pack["items"]:
+        ids = {it["item_id"]} | {m["item_id"] for m in it.get("versions", [])}
+        if it.get("kind") == "rule" and it.get("authority") == "TARGET" and it.get("status") == "CONFIRMED" and it.get("decision_ids") and ids & pair:
+            if any(c["basis"] in ("target", "decision") and set(c["refs"]) & ids for c in kept):
+                return it["item_id"]
+    return None
+
+
+def _implementation_pending(pack: Mapping, item_id: str) -> bool:
+    return any(it["item_id"] == item_id and it.get("implementation_status") in ("pending", "partial") for it in pack["items"])
+SETTLED_RULE_STATES = frozenset({"VALIDATED", "CONFIRMED"})      # DRAFT / PENDING_HUMAN are not confirmed data: never a server claim
+
+
+def uncited_applicable_gates(pack: Mapping, cited: set, qf: Mapping) -> list:
+    """Approval gates of the pack that reach the stated case although no kept claim cites them (omission the server can see). Strict: every fact the rule needs is stated
+    in the question (no pinned default, no amount standing in for another field), the question names no amount in another currency, the rule is settled (VALIDATED or
+    CONFIRMED, no unknown field such as an unknown unit, no open question about it) and is on neither side of a disagreement (left to the conflict disclosure)."""
+    if qf.get("foreign_amount"):
+        return []
+    in_conflict = {r for c in pack["counterevidence"] if c["kind"] == "conflicting_rule" for r in (c["rule_id"], c["with"])}
+    questioned = {r for c in pack["counterevidence"] if c["kind"] == "open_question" for r in c.get("affected_rule_ids", [])}
+    stated = {k: v for k, v in qf["facts"].items() if k not in qf.get("assumed", {})}
+    universe = scope_universe(pack["items"])
+    out = []
+    for it in pack["items"]:
+        ids = {it["item_id"]} | {m["item_id"] for m in it.get("versions", [])}
+        if it.get("kind") != "rule" or (it.get("outcome") or {}).get("kind") not in _GATE_KINDS or ids & cited or ids & in_conflict or ids & questioned:
+            continue
+        if it.get("status") not in SETTLED_RULE_STATES or it.get("unknown_fields"):
+            continue
+        if rule_applicability(it, stated, universe, alias_amount=False)["status"] == "applies":
+            out.append(it)
+    return out[:MAX_SERVER_CLAIMS]
+
+
+def _server_claim(it: Mapping) -> dict:
+    basis = "target" if it.get("authority") == "TARGET" else "observed"        # the authority of the version this view serves, not of any version behind it
+    title = _safe_text(it.get("title") or it.get("text"), 300) or it["item_id"]
+    return {"text": f"The case in the question also meets the recorded condition of this rule: {title.rstrip('.')}.", "refs": [it["item_id"]], "basis": basis,
+            "authority_labels": ["what the sources say" if basis == "observed" else "decided by a person"], "uses_evidence": False, "applicability": "applies",
+            "conditional_on": [], "assumptions": [], "origin": "server_applicability"}
 
 
 BASES = ("target", "observed", "decision")
@@ -283,10 +334,18 @@ def judge_claims(claims: Iterable[Mapping], pack: Mapping, question: str, frozen
         if c["kind"] == "conflicting_rule":
             by_id.setdefault(c["rule_id"], {"item_id": c["rule_id"], "kind": "rule", "text": c["text"], "authority": c["authority"], "versions": []})
     obs_text = {o["observation_id"]: json.dumps(o["raw_value"], ensure_ascii=False) for o in pack["observations"].get("results", [])} if can_read_evidence else {}
+    # a person's decision is cited through the rule it decided: the stored provenance (TARGET rule -> decision_ids) links them, nothing is inferred
+    decided_rule = {}
+    for it in pack["items"]:
+        if it.get("kind") == "rule" and it.get("authority") == "TARGET":
+            for d in it.get("decision_ids") or []:
+                decided_rule.setdefault(d, []).append(it["item_id"])
     kept, dropped = [], []
     for c in claims:
         text = _safe_text(c["text"], lim["max_claim_chars"])
         refs = list(dict.fromkeys(c["refs"]))
+        from_decision = [r for d in refs for r in decided_rule.get(d, []) if r not in refs and r in readable]
+        refs = refs + list(dict.fromkeys(from_decision))
         if text is None:
             dropped.append({"reason": "unsafe_or_empty_text", "text": str(c["text"])[:80]})
         elif not refs:
@@ -312,10 +371,12 @@ def judge_claims(claims: Iterable[Mapping], pack: Mapping, question: str, frozen
             else:
                 claim = {"text": text, "refs": refs, "basis": c["basis"], "authority_labels": ["what the sources say" if c["basis"] == "observed" else "decided by a person"],
                          "uses_evidence": any(r in obs_text for r in refs), "applicability": "not_checked", "conditional_on": [], "assumptions": []}
+                if from_decision:
+                    claim["refs_from_decision"] = list(dict.fromkeys(from_decision))      # added by the server from the decision the claim cites
                 if concrete:
                     app = claim_applicability(refs, by_id, qf["facts"], universe)
                     if app["status"] == "not_applicable":
-                        dropped.append({"reason": "claim_not_applicable", "text": text[:80], "detail": app["why"][:4]})
+                        dropped.append({"reason": "claim_not_applicable", "text": text[:80], "detail": app["why"][:4], "refs": refs, "basis": c["basis"]})
                         continue
                     claim["applicability"], claim["conditional_on"] = app["status"], app["missing"]
                     if app["status"] == "applies" and qf["assumed"]:
@@ -346,10 +407,18 @@ def finalize(model: Mapping, kept: list, dropped: list, pack: Mapping, frozen: M
         if it["item_id"] in cited:
             cited.update(m["item_id"] for m in it.get("versions", []))
     conflicts = []
+    view = pack.get("view") or (pack.get("pin") or {}).get("view") or "target"
     for c in pack["counterevidence"]:
         if c["kind"] == "conflicting_rule" and ({c["rule_id"], c["with"]} & cited):
-            conflicts.append({"rules": sorted([c["rule_id"], c["with"]]), "title": c["title"], "one_side_cited_only": not ({c["rule_id"], c["with"]} <= cited)})
+            decided = _decided_by(pack, {c["rule_id"], c["with"]}, kept) if view == "target" else None
+            conflicts.append({"rules": sorted([c["rule_id"], c["with"]]), "title": c["title"], "one_side_cited_only": not ({c["rule_id"], c["with"]} <= cited),
+                              "decided_by": decided})
     questions = [q for q in (_safe_text(q, 200) for q in model["clarifying_questions"]) if q][: lim["max_questions"]]
+    added = []
+    if concrete and kept and (pack["items"] or pack["observations"].get("results")):
+        # omission the server can see: an approval gate that reaches the stated case is added as a server claim and the answer is never complete without it
+        added = [_server_claim(it) for it in uncited_applicable_gates(pack, cited, qf)][: max(0, lim["max_claims"] - len(kept))]
+        kept, applying = kept + added, applying + added
     if not kept:
         if status == "NEEDS_CLARIFICATION" and questions:
             reasons.append("needs_clarification")
@@ -361,15 +430,33 @@ def finalize(model: Mapping, kept: list, dropped: list, pack: Mapping, frozen: M
         if status in ("ABSTAINED", "NEEDS_CLARIFICATION"):
             status = "PARTIAL"                       # the model abstained but cited valid evidence: keep what is supported, say it is partial
             reasons.append("model_abstained_with_supported_claims")
-        if dropped:
+        # a history claim about the losing side of a decided disagreement that does not reach the case is not a gap in the answer (H-QA-06, option B)
+        losing = {r for c in conflicts if c["decided_by"] for r in c["rules"]} - {m["item_id"] for it in pack["items"] if it["item_id"] in {c["decided_by"] for c in conflicts} for m in [it, *it.get("versions", [])]}
+        material = [d for d in dropped if not (d["reason"] == "claim_not_applicable" and d.get("basis") == "observed" and d.get("refs") and set(d["refs"]) <= losing)]
+        if material:
             status = "PARTIAL" if status == "ANSWERED" else status
             reasons.append("some_claims_dropped")
+        elif dropped:
+            reasons.append("history_claims_not_applicable")
         if conflicts:
-            status = "PARTIAL" if status == "ANSWERED" else status
-            reasons.append("sources_disagree")
+            # owner decision H-QA-06 (option B, 2026-10-18): in the accepted-target view a disagreement a valid decision settled, answered with the decided rule,
+            # is disclosed but does not by itself make the answer partial; an undecided one, the observed view, or an answer that does not state the decision does
+            open_ = [c for c in conflicts if not c["decided_by"]]
+            if open_:
+                status = "PARTIAL" if status == "ANSWERED" else status
+                reasons.append("sources_disagree")
+            else:
+                reasons.append("sources_disagree_decided")
+                pending_decided = [c["decided_by"] for c in conflicts if _implementation_pending(pack, c["decided_by"])]
+                if pending_decided and _IMPLEMENTED_STATE.search(pack.get("query") or ""):
+                    status = "PARTIAL" if status == "ANSWERED" else status         # the question asks what is in force in the files/code, which still show the old rule
+                    reasons.append("implementation_pending")
         if pack.get("sufficiency") == "insufficient":
             status = "PARTIAL" if status == "ANSWERED" else status
             reasons.append("evidence_judged_insufficient")
+        if added:
+            status = "PARTIAL" if status == "ANSWERED" else status
+            reasons.append("applicable_rule_not_cited")
         if not pack["items"] and not pack["observations"].get("results"):
             status = "ABSTAINED"
             reasons.append("empty_pack")
@@ -390,6 +477,15 @@ def finalize(model: Mapping, kept: list, dropped: list, pack: Mapping, frozen: M
                     applicability_questions.append(FACT_QUESTIONS.get(key, f"What is the {key.replace('.', ' ').replace('_', ' ')} of this case?"))
             if assumed:
                 reasons.append("assumed_defaults")
+                # owner decision G2-QA-10 (option B, 2026-10-18): a pinned default is a technical reading aid, not a fact of the case; when a claim needed it to reach the
+                # case, the missing fact can change the result, so the answer is at most PARTIAL and asks for it. A fact the question states (including a hypothetical the
+                # asker sets, "if it were a standard purchase") is not assumed and is unaffected; no authoritative business default is declared in the knowledge model yet.
+                status = "PARTIAL" if status == "ANSWERED" else status
+                reasons.append("assumed_default_needs_fact")
+                for key in sorted({a.split("=")[0] for a in assumed}):
+                    q = FACT_QUESTIONS.get(key, f"What is the {key.replace('.', ' ').replace('_', ' ')} of this case?")
+                    if q not in applicability_questions:
+                        applicability_questions.append(q)
     if misapplied:
         reasons.append("claims_not_applicable_dropped")
     if qf.get("foreign_amount") and not qf.get("amounts") and status in ("ANSWERED", "PARTIAL"):
@@ -412,6 +508,8 @@ def finalize(model: Mapping, kept: list, dropped: list, pack: Mapping, frozen: M
         if concrete and (conditional or unevaluated or misapplied or assumed):
             ok = False                                            # the model's free text may assert what the rules do not reach: the claims speak, each with its condition
         answer = proposed if ok and status != "NEEDS_CLARIFICATION" else (" ".join(_claim_sentence(c) for c in kept) if kept else "More detail is needed to answer.")
+        if answer == proposed and added:
+            answer = (answer + " " + " ".join(c["text"] for c in added)).strip()        # the model's text did not name these rules: the server's sentences follow it
         if not ok and kept:
             reasons.append("answer_text_replaced_by_claims")
     pending = sorted({it["item_id"] for it in pack["items"] if it["item_id"] in cited and it.get("authority") == "TARGET" and it.get("implementation_status") in ("pending", "partial")})
@@ -446,14 +544,18 @@ def render(result: Mapping, *, mode: str, can_read_evidence: bool, titles: Mappi
     for c in result["claims"]:
         if c["uses_evidence"] and not can_read_evidence:
             withheld += 1
-            claims.append({"text": WITHHELD, "basis": c["basis"], "authority_labels": c["authority_labels"], "sources": []})
+            claims.append({"text": WITHHELD, "basis": c["basis"], "authority_labels": c["authority_labels"], "sources": [], "origin": c.get("origin", "model")})
         else:
             claims.append({"text": c["text"], "basis": c["basis"], "authority_labels": c["authority_labels"], "sources": [titles.get(r, "a source passage") for r in c["refs"]],
-                           "applicability": c.get("applicability", "not_checked"), "conditional_on": list(c.get("conditional_on", [])), "assumptions": list(c.get("assumptions", []))})
+                           "applicability": c.get("applicability", "not_checked"), "conditional_on": list(c.get("conditional_on", [])), "assumptions": list(c.get("assumptions", [])),
+                           "origin": c.get("origin", "model")})                    # model = written by the model and validated; server_applicability = derived by the server's rule check
             if mode == "technical":
                 claims[-1]["refs"] = list(c["refs"])
+                if c.get("refs_from_decision"):
+                    claims[-1]["refs_from_decision"] = list(c["refs_from_decision"])
     answer = result["answer"] if not withheld else ("Part of this answer rests on source text that needs the evidence.read permission. " + " ".join(c["text"] for c in claims if c["text"] != WITHHELD)).strip()
-    out = {"status": result["status"], "answer": answer, "claims": claims, "conflicts": [{"titles": [titles.get(r, r) for r in c["rules"]], "one_side_cited_only": c["one_side_cited_only"]} for c in result["conflicts"]],
+    out = {"status": result["status"], "answer": answer, "claims": claims, "conflicts": [{"titles": [titles.get(r, r) for r in c["rules"]], "one_side_cited_only": c["one_side_cited_only"], "decided": bool(c.get("decided_by")),
+                          "decided_title": titles.get(c["decided_by"]) if c.get("decided_by") else None} for c in result["conflicts"]],
            "uncertainty": result["uncertainty"], "clarifying_questions": result["clarifying_questions"], "retrieval_note": result["retrieval_note"],
            "implementation_note": result["implementation_note"], "view": result["view"], "snapshot_state": result["pack"]["pin"].get("snapshot_state"),
            "newer_knowledge_exists": newer_knowledge, "withheld_claims": withheld, "synthetic_note": None,

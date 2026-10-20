@@ -83,6 +83,24 @@ The engine child runs the baseline over `seeds` independent seeds (default 3) an
 `GET /v2/ma/runs/{run_id}` (`project.read` + change visibility; refs only with `evidence.read`); `POST /v2/ma/runs/{run_id}/advance` (idempotent recovery step, `ma.run`);
 `POST /v2/ma/runs/{run_id}/cancel {reason}` (`ma.run`); `GET /v2/business/changes/{change_id}/ma`.
 
+## 6a. Advisory memos (SUR-06 risk memo, SUR-08 synthesis memo; added 2026-10-19)
+Two pinned roles write advisory memos over an immutable pack of server facts (`core/change_intelligence/v2/advisory_memo.py`, worker `infra/worker/advisory_memo.py`,
+configs `config/change_risk_memo.json`, `config/ma_synthesis_memo.json`; one provider call per job; the result is stored on the job only).
+- **Risk memo** (`change.risk_memo`): over the impact report of a CONFIRMED change (operations, affected rules with the algorithm's severity, open questions) and, when
+  `board_run_id` names a finished review-board run of that change, its findings. `POST /v2/business/changes/{change_id}/impact/risk-memo {workspace_id, attempt 1-3, board_run_id?}`
+  (human actor, `ai.use`, change visibility; 409 `not_confirmed`, `board_not_finished`, `provider_disarmed`, `budget_exceeded`); `GET .../impact/risk-memo?board_run_id=`
+  (`project.read` + change visibility; reads only).
+- **Synthesis memo** (`ma.synthesis_memo`): over a finished review-board report. `POST /v2/ma/runs/{run_id}/synthesis-memo {workspace_id, attempt 1-3}` (human actor, `ai.use`,
+  change visibility; 409 `board_not_finished`, `not_a_review_board`); `GET /v2/ma/runs/{run_id}/synthesis-memo`.
+- **Identity:** one job per (change or run, attempt, board report hash, frozen config + pinned model); the same request again returns the same job and makes no new call; a
+  board report that moves after the request fails the job `board_report_moved` (never re-read silently).
+- **Server checks:** each statement cites offered refs only (a written ref is matched exactly, or by two deterministic repairs onto exactly one offered ref: the prompt line's `ref=` label copied with the value, or a non-numeric bare id such as `rule-x` for `rule:rule-x`; an unknown, ambiguous, numeric or wrongly prefixed ref refuses the statement `ref_not_offered`; a kept statement keeps the written form in `refs_written`, counted in `counts.refs_canonicalized`); every number is written in a cited fact (no invented money, probability, percentage or count); forecast /
+  certainty wording and status claims (approved, compliant, implemented, verified ...) the facts do not hold are refused; materiality is never below the cited facts'
+  algorithm or board severity (`floor_applied`); a refused statement is dropped whole with its reason. Every `must_address` fact (HIGH severity, open question, minority or
+  unresolved finding, missing required role, human action) not cited by a kept statement is listed by the server in `not_addressed`; `complete` is false then.
+- **Authority:** a memo changes no severity, verdict, required review, relation, knowledge or change; no source evidence is put in the prompt (titles, severities, reasons,
+  finding statements only). Failed / pending memos say so and conclude nothing about risk. Real-model memo quality and usefulness are not established by the local build.
+
 ## 7. Recovery
 A child writes its validated result into its own row BEFORE creating its join job, so the join never races the worker. A worker dying between the child's completion and the join
 creation leaves the run RUNNING with a terminal child: `POST .../advance` (or the next child's join) finishes it. Late results of a cancelled run are recorded `LATE_IGNORED`.

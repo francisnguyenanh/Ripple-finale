@@ -2,16 +2,20 @@
 
 The plan (groups, skipped rules, pair counts) is recomputed deterministically from the snapshot on every call, so no run table is needed: a group's job id is a function of
 (snapshot, group, attempt). The view marks the result `stale` when the latest knowledge version is not the one mined; a dismissal is refused on a stale result.
+LHA-K1: the first request also creates the semantic candidate job of the snapshot (one call); once it is completed, its kept pairs join the plan as semantic groups, created
+by the next request (same ids). The candidate pairs are suggestions to compare, shown with their state; they never become relations or findings.
+SUR-02: for a requester with `evidence.read`, the request also creates the unbound-value triage job when the version has source numbers no rule uses; the view shows its
+classifications (values and locations only to a reader with `evidence.read`). A classification is a proposal for a person, never a rule, a gap or a binding.
 """
 from __future__ import annotations
 
 from psycopg2.extras import Json
 
-from core.change_intelligence.v2 import business_mining as bm
+from core.change_intelligence.v2 import business_mining as bm, unbound_triage as ut
 from infra.adapters import v2_business
 from infra.adapters.v2_business import BusinessKnowledgeRefused, read_snapshot
 from infra.adapters.v2_postgres import TenantScopeError
-from infra.worker.knowledge_mining import KIND, load_config
+from infra.worker.knowledge_mining import KIND, load_config, semantic_pairs
 
 REASON_WORDS = {"authority_revoked": "the person who asked no longer has permission", "snapshot_moved": "the knowledge changed after the request", "group_moved": "the rule group changed",
                 "schema_violation": "the model answer could not be used", "budget_exceeded": "the rule group was too large to send", "config_moved": "the mining configuration changed"}
@@ -35,50 +39,88 @@ def _snapshot(store, tenant_id, workspace_id, snapshot_id=None):
     return snap, latest
 
 
+def _unbound(store, tenant_id, workspace_id, snap) -> dict:
+    return v2_business._unbound_values(store, tenant_id, workspace_id, snap["snapshot"]["source_revision_id"], snap["rules"])
+
+
+def _unbound_view(store, tenant_id, workspace_id, sid, attempt, bind, viewer) -> dict:
+    try:
+        rec = store.job_record(tenant_id, workspace_id, ut.job_id(sid, attempt, bind))
+    except TenantScopeError:
+        return {"state": "not_requested", "items": [], "statement": "Not requested (it needs evidence.read and a source number no rule uses)."}
+    res = rec.get("execution_result") or {}
+    can = viewer is not None and "evidence.read" in v2_business.current_permissions(store, tenant_id, workspace_id, viewer)
+    items = res.get("classified", [])
+    if not can:
+        items = [{k: i[k] for k in ("class", "class_proposed", "disposition", "rule_ids", "status", "origin", "file")} for i in items]
+    return {"job_id": rec.get("job_id") or ut.job_id(sid, attempt, bind), "state": _state(rec), "items": items, "values_withheld": not can,
+            "counts": {"classified": len(res.get("classified", [])), "rejected": len(res.get("rejected", [])), "not_classified": len(res.get("not_classified", [])),
+                       "not_offered": res.get("not_offered"), "total": res.get("total")},
+            "not_classified": res.get("not_classified", []) if can else [],
+            "statement": "The model's reading of source numbers no rule uses: a proposal for a person. A policy candidate is not a rule; unclassified or not offered values stay unknown."}
+
+
+def _wants_candidates(snap, frozen) -> bool:
+    return int(frozen["limits"].get("max_semantic_pairs", 0)) > 0 and len(bm.candidate_offer(snap["rules"], frozen["limits"])["rules"]) >= 2
+
+
 def request(store, tenant_id, workspace_id, *, attempt: int, authority: dict, limit: int, reservation) -> dict:
-    """Create the missing group jobs of the latest knowledge version (idempotent per snapshot/group/attempt); returns the view."""
+    """Create the missing group jobs (and the semantic candidate job) of the latest knowledge version (idempotent per snapshot/group/attempt); returns the view."""
     snap, _ = _snapshot(store, tenant_id, workspace_id)
     frozen, sha = load_config()
-    plan = bm.plan_groups(snap["rules"], frozen["limits"])
     sid = snap["snapshot"]["snapshot_id"]
     created, deferred = [], []
-    if plan["groups"]:
+    from infra.worker import job_binding
+    bind = job_binding.fingerprint(KIND)
+    extra, cand = semantic_pairs(store, tenant_id, workspace_id, sid, attempt, bind)
+    plan = bm.plan_groups(snap["rules"], frozen["limits"], extra)
+    todo = [(bm.candidate_job_id(sid, attempt, bind), {"stage": "candidates"}, None)] if cand is None and _wants_candidates(snap, frozen) else []
+    if "evidence.read" in v2_business.current_permissions(store, tenant_id, workspace_id, authority["account_id"]) and _unbound(store, tenant_id, workspace_id, snap)["count"]:
+        todo.append((ut.job_id(sid, attempt, bind), {"stage": "unbound"}, "unbound"))
+    todo += [(bm.group_job_id(sid, g["group_id"], attempt, bind), {"group_id": g["group_id"], "rule_ids": g["rule_ids"]}, g["group_id"]) for g in plan["groups"]]
+    if todo:
         from infra import ai_admission
         from infra.adapters.v2_postgres import ConcurrencyLimitExceeded
-        for g in plan["groups"]:
-            jid = bm.group_job_id(sid, g["group_id"], attempt)
+        for jid, extra_payload, gid in todo:
             try:
                 store.job_record(tenant_id, workspace_id, jid)
                 continue
             except TenantScopeError:
                 pass
             if deferred:                                                                 # the workspace limit was hit: the remaining groups wait for the next request (same ids, idempotent)
-                deferred.append(g["group_id"])
+                deferred.append(gid or "candidates")
                 continue
             head = store.head(tenant_id, workspace_id)
             try:
-                store.create_job(tenant_id, workspace_id, jid, KIND, {"snapshot_id": sid, "group_id": g["group_id"], "attempt": attempt, "config_sha256": sha, "rule_ids": g["rule_ids"]},
+                store.create_job(tenant_id, workspace_id, jid, KIND, {"snapshot_id": sid, "attempt": attempt, "config_sha256": sha, **extra_payload},
                                  expected_version=head.version, idempotency_key=f"job-create-{jid}", max_concurrent_jobs=limit, budget_reservation=reservation, requested_by=authority["account_id"])
             except ConcurrencyLimitExceeded:
-                deferred.append(g["group_id"])
+                deferred.append(gid or "candidates")
                 continue
             ai_admission.admit(store, tenant_id, workspace_id, jid, KIND, authority)
             created.append(jid)
     with store._tx() as cur:
         cur.execute("INSERT INTO v2_audit (tenant_id, workspace_id, event_type, actor_id, payload) VALUES (%s,%s,'KNOWLEDGE_MINING_REQUESTED',%s,%s)",
                     (tenant_id, workspace_id, authority["account_id"], Json({"snapshot_id": sid, "attempt": attempt, "groups": len(plan["groups"]), "jobs_created": len(created), "config_sha256": sha})))
-    return {**view(store, tenant_id, workspace_id, snapshot_id=sid, attempt=attempt), "jobs_created": created, "jobs_deferred": deferred,
+    return {**view(store, tenant_id, workspace_id, snapshot_id=sid, attempt=attempt, viewer=authority["account_id"]), "jobs_created": created, "jobs_deferred": deferred,
             "statement_request": ("Some groups wait for a free slot of the workspace; request mining again once the running groups finish (the same groups keep the same job ids)." if deferred else "Every planned group has its job.")}
 
 
-def view(store, tenant_id, workspace_id, *, snapshot_id: str | None = None, attempt: int = 1) -> dict:
+def view(store, tenant_id, workspace_id, *, snapshot_id: str | None = None, attempt: int = 1, viewer: str | None = None) -> dict:
     snap, latest = _snapshot(store, tenant_id, workspace_id, snapshot_id)
     frozen, sha = load_config()
-    plan = bm.plan_groups(snap["rules"], frozen["limits"])
     sid = snap["snapshot"]["snapshot_id"]
     states, hypotheses, rejected, failures, jobs = {}, [], [], [], []
+    from infra.worker import job_binding
+    bind = job_binding.fingerprint(KIND)
+    extra, cand = semantic_pairs(store, tenant_id, workspace_id, sid, attempt, bind)
+    plan = bm.plan_groups(snap["rules"], frozen["limits"], extra)
+    cres = (cand or {}).get("execution_result") or {}
+    candidates = {"job_id": bm.candidate_job_id(sid, attempt, bind), "state": _state(cand) if cand else ("not_requested" if _wants_candidates(snap, frozen) else "not_needed"),
+                  "pairs": extra, "rejected": cres.get("rejected", []), "offered": cres.get("offered"), "not_offered": cres.get("not_offered", []),
+                  "statement": "Pairs the model suggested comparing although they share no field; each kept pair is compared as its own group. A suggestion is not a relation or a finding."}
     for g in plan["groups"]:
-        jid = bm.group_job_id(sid, g["group_id"], attempt)
+        jid = bm.group_job_id(sid, g["group_id"], attempt, bind)
         try:
             rec = store.job_record(tenant_id, workspace_id, jid)
         except TenantScopeError:
@@ -115,6 +157,7 @@ def view(store, tenant_id, workspace_id, *, snapshot_id: str | None = None, atte
     stale = sid != latest["snapshot"]["snapshot_id"]
     cov = bm.coverage(plan, states)
     return {"schema": bm.SCHEMA, "snapshot_id": sid, "attempt": attempt, "stale": stale, "config_sha256": sha, "hypotheses": hypotheses, "rejected": rejected, "coverage": cov, "jobs": jobs, "duplicates_merged": duplicates,
+            "semantic_candidates": candidates, "unbound_triage": _unbound_view(store, tenant_id, workspace_id, sid, attempt, bind, viewer),
             "open": sum(1 for h in hypotheses if h["status"] == "PROPOSED"),
             "statement": (("This mining result is of an older knowledge version; request it again on the current one. " if stale else "")
                           + f"{len(hypotheses)} hypothesis(es) over {cov['pairs_compared']} of {cov['pairs_total']} rule pairs; " + ("every planned group was compared" if cov["complete"] else "coverage is partial")

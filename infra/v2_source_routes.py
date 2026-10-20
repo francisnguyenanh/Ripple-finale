@@ -417,6 +417,67 @@ def read_refresh(request: Request, refresh_id: str, workspace_id: str):
         return _error("refresh not found", 404)
 
 
+@router.post("/v2/sources/refresh/{refresh_id}/correspondence")
+async def request_refresh_correspondence(request: Request, refresh_id: str):
+    """SUR-05: ask a model to propose where the content and obligations of deleted / changed artifacts continue on the new side of a PREPARED or COMMITTED refresh. Proposals
+    only: never a rename proof, nothing changes. Human actor with `source.import`, `ai.use` and `evidence.read` (excerpts of the sources go to the model)."""
+    from infra.v2_policy_routes import _json_body, _v2_store
+    if not _origin_ok(request):
+        return _error("origin refused", 403)
+    identity, store = _services()[0], _v2_store()
+    if identity is None or store is None:
+        return _error("v2 unavailable", 503)
+    body = await _json_body(request)
+    workspace_id, attempt = body.get("workspace_id"), body.get("attempt", 1)
+    if not isinstance(workspace_id, str) or not workspace_id.strip() or isinstance(attempt, bool) or not isinstance(attempt, int) or not 1 <= attempt <= 3:
+        return _error("workspace_id and attempt (1-3) required", 400)
+    try:
+        authority = _authority(identity, request, workspace_id)
+        require_human_actor(authority)
+        for perm in ("source.import", "ai.use", "evidence.read"):
+            require(authority, perm)
+        tenant = authority["tenant_id"]
+        refresh = store.source_refresh(tenant, workspace_id, refresh_id)
+        if refresh["status"] not in ("PREPARED", "COMMITTED") or refresh["noop"]:
+            return JSONResponse({"error": "Only an open refresh that observed a change can get a proposal.", "code": "refresh_not_open"}, status_code=409,
+                                headers={"Cache-Control": "no-store"})
+        from infra.adapters import v2_source_correspondence as v2sc
+        from infra.v2_business_routes import _quota_for
+        jid = v2sc.job_id(refresh_id, refresh["refresh_digest"], attempt)
+        return _ok(v2sc.request(store, tenant, workspace_id, jid, {"refresh_id": refresh_id, "refresh_digest": refresh["refresh_digest"], "attempt": attempt},
+                                authority, quota=_quota_for))
+    except IdentityDenied as exc:
+        return _identity_denied(exc)
+    except PermissionDenied as exc:
+        return _error(f"permission denied: {exc}", 403)
+    except TenantScopeError:
+        return _error("refresh not found", 404)
+    except Exception as exc:
+        from infra.v2_business_routes import _refusal
+        return _refusal(exc)
+
+
+@router.get("/v2/sources/refresh/{refresh_id}/correspondence")
+def read_refresh_correspondence(request: Request, refresh_id: str, workspace_id: str):
+    """The latest proposal for this refresh (reads only). `project.read` + `evidence.read` (quotes are source text)."""
+    identity, store = _services()
+    if identity is None:
+        return _error("v2 unavailable", 503)
+    try:
+        authority = _authority(identity, request, workspace_id)
+        require(authority, "project.read")
+        require(authority, "evidence.read")
+        refresh = store.source_refresh(authority["tenant_id"], workspace_id, refresh_id)
+        from infra.adapters import v2_source_correspondence as v2sc
+        return _ok(v2sc.latest(store, authority["tenant_id"], workspace_id, refresh_id, refresh["refresh_digest"]))
+    except IdentityDenied as exc:
+        return _identity_denied(exc)
+    except PermissionDenied as exc:
+        return _error(f"permission denied: {exc}", 403)
+    except TenantScopeError:
+        return _error("refresh not found", 404)
+
+
 @router.get("/v2/sources/revisions/{revision_id}")
 def read_revision(request: Request, revision_id: str, workspace_id: str):
     identity, store = _services()

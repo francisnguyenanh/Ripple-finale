@@ -2,9 +2,11 @@
 
 POST /v2/business/gaps/{gap_id}/interview            {workspace_id}         start (or return) the interview of this open question on the current knowledge version   knowledge.confirm + ai.use
 GET  /v2/business/interviews/{session_id}            ?workspace_id=         state, transcript, open question, contradictions                                           knowledge.confirm
+GET  /v2/business/interviews/{session_id}/vocabulary ?workspace_id=         wording help: words of OTHER accepted rules + blank starters (no model call)       knowledge.confirm
 POST /v2/business/interviews/{session_id}/answer     {workspace_id, text}   the person's words for the open question; starts the KNO-07 reading (one model call)        knowledge.confirm + ai.use
 POST /v2/business/interviews/{session_id}/refresh    {workspace_id}         pull readings, compute the next question / status (idempotent)                             knowledge.confirm
 POST /v2/business/interviews/{session_id}/confirm    {workspace_id}         confirm the latest READY reading with the person's own words through the answer path          knowledge.confirm
+POST /v2/business/interviews/{session_id}/stop       {workspace_id}         the person stops (skips / cancels) the interview: UNRESOLVED, nothing written, no model call   knowledge.confirm
 The interview writes no knowledge itself; the structured controls always remain available.
 """
 from __future__ import annotations
@@ -64,6 +66,11 @@ def read_interview(request: Request, session_id: str, workspace_id: str):
     return _shell(request, workspace_id, lambda store, tenant, authority: v2_gap_interview.refresh(store, tenant, workspace_id, session_id), mutating=False)
 
 
+@router.get("/v2/business/interviews/{session_id}/vocabulary")
+def interview_vocabulary(request: Request, session_id: str, workspace_id: str):
+    return _shell(request, workspace_id, lambda store, tenant, a: v2_gap_interview.vocabulary(store, tenant, workspace_id, session_id), mutating=False)
+
+
 @router.post("/v2/business/interviews/{session_id}/answer")
 async def answer_interview(request: Request, session_id: str):
     body = await _json_body(request)
@@ -80,3 +87,9 @@ async def refresh_interview(request: Request, session_id: str):
 async def confirm_interview(request: Request, session_id: str):
     body = await _json_body(request)
     return _shell(request, body.get("workspace_id"), lambda store, tenant, authority: v2_gap_interview.confirm(store, tenant, body["workspace_id"], session_id, authority=authority))
+
+
+@router.post("/v2/business/interviews/{session_id}/stop")
+async def stop_interview(request: Request, session_id: str):
+    body = await _json_body(request)
+    return _shell(request, body.get("workspace_id"), lambda store, tenant, authority: v2_gap_interview.stop(store, tenant, body["workspace_id"], session_id, authority=authority))

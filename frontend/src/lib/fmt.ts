@@ -12,6 +12,22 @@ export const humanize = (s: unknown): string => {
   return t ? t.charAt(0).toUpperCase() + t.slice(1) : "";
 };
 
+const ANSWER_FIELD: Record<string, string> = { actor: "Who", condition: "When", outcome: "What happens", value: "Value", unit: "Unit", exceptions: "Exceptions", scope: "Applies to" };
+
+export const answerField = (k: string): string => ANSWER_FIELD[k] ?? humanize(k);
+export const answerValue = (v: unknown): string => (typeof v === "string" || typeof v === "number" ? String(v) : JSON.stringify(v));
+
+/** A proposed answer for a reader: "Who: finance director" instead of the raw object. Unknown keys are humanized; nested values stay exact. */
+export const answerText = (a: unknown): string => {
+  if (a === null || a === undefined) return "";
+  if (typeof a !== "object") return String(a);
+  return Object.entries(a as Record<string, unknown>).map(([k, v]) => `${ANSWER_FIELD[k] ?? humanize(k)}: ${typeof v === "string" || typeof v === "number" ? String(v) : JSON.stringify(v)}`).join("; ");
+};
+
+const READING: Record<string, string> = { READY: "complete", NEEDS_CLARIFICATION: "needs clarification", UNSUPPORTED: "not something the form can hold", REFUSED: "refused" };
+/** The status of a model's reading of an answer, as words (the raw status stays in data attributes and the Technical view). */
+export const readingStatus = (s: unknown): string => READING[String(s)] ?? humanize(String(s ?? "")).toLowerCase();
+
 export const isCurrency = (u: unknown): boolean => /^[A-Z]{3}$/.test(String(u ?? ""));
 
 /** "1,000,000 JPY" (currency) or "1,000,000 net goods amount" (another unit). The exact value only. */

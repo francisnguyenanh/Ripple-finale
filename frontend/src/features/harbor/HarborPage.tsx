@@ -1,4 +1,4 @@
-// Harbor try-out: one requisition through Harbor's OWN routing code, under the configuration of two versions of this workspace's sources, side by side.
+// Sample process trial (route id "harbor"; Harbor is the example system): one requisition through Harbor's OWN routing code, under the configuration of two versions of this workspace's sources, side by side.
 // Read-only. The code is the pinned public Harbor copy (not a deployed Harbor application); no AI decides anything here.
 import * as React from "react";
 import { api } from "@/lib/api";

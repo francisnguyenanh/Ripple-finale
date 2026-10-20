@@ -75,7 +75,7 @@ async def request_mining(request: Request):
 def read_mining(request: Request, workspace_id: str, snapshot_id: str | None = None, attempt: int = 1):
     if _attempt(attempt) is None:
         return _error("attempt (1-3) required", 400)
-    return _shell(request, workspace_id, lambda store, tenant, authority: v2_mining.view(store, tenant, workspace_id, snapshot_id=snapshot_id, attempt=attempt), mutating=False)
+    return _shell(request, workspace_id, lambda store, tenant, authority: v2_mining.view(store, tenant, workspace_id, snapshot_id=snapshot_id, attempt=attempt, viewer=authority["account_id"]), mutating=False)
 
 
 @router.post("/v2/business/mining/hypotheses/{hypothesis_id}/dismiss")

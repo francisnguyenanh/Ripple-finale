@@ -405,20 +405,32 @@ def analyse_workspace(store, tenant_id, workspace_id, *, actor_id, idempotency_k
     rel_list, gap_list = _merge_state(rules, base["relations"], base["gaps"])
     content_hash = canonical_hash({"rules": rules, "relations": rel_list, "gaps": gap_list})
     derived_id = derived["snapshot_id"] if derived else None
+    unbound = _unbound_values(store, tenant_id, workspace_id, meta["source_revision_id"], rules)
     if content_hash == meta["content_hash"]:                 # nothing to add: the base already holds exactly this
-        return {"snapshot_id": meta["snapshot_id"], "replayed": derived is None or derived["replayed"], "relations": len(rel_list), "gaps": len(gap_list), "derived": derived_id}
+        return {"snapshot_id": meta["snapshot_id"], "replayed": derived is None or derived["replayed"], "relations": len(rel_list), "gaps": len(gap_list), "derived": derived_id,
+                "unbound_values": unbound}
     snapshot_id = "analysis-" + content_hash[:20]
     with read_snapshot(store) as cur:
         cur.execute("SELECT 1 FROM v2_business_snapshots WHERE tenant_id=%s AND workspace_id=%s AND snapshot_id=%s", (tenant_id, workspace_id, snapshot_id))
         exists = cur.fetchone() is not None
     if exists:
-        return {"snapshot_id": snapshot_id, "replayed": True, "relations": len(rel_list), "gaps": len(gap_list), "derived": derived_id}
+        return {"snapshot_id": snapshot_id, "replayed": True, "relations": len(rel_list), "gaps": len(gap_list), "derived": derived_id, "unbound_values": unbound}
     decisions = []                       # analysis records no decision: it only proposes
     result = commit_snapshot(store, tenant_id, workspace_id, snapshot_id=snapshot_id, actor_id=actor_id, lifecycle_state="PENDING_HUMAN", rules=rules,
                              relations=rel_list, gaps=gap_list, decisions=decisions, expected_version=head.version, expected_business_revision=0,
                              source_revision_id=head.source_revision_id, km_revision_id=head.knowledge_revision_id, decision_epoch=head.decision_epoch,
-                             idempotency_key=idempotency_key, coverage={"origin": "analysis", "base_snapshot_id": meta["snapshot_id"]})
-    return {"snapshot_id": snapshot_id, "replayed": False, "version": result.version, "relations": len(rel_list), "gaps": len(gap_list), "derived": derived_id}
+                             idempotency_key=idempotency_key, coverage={"origin": "analysis", "base_snapshot_id": meta["snapshot_id"], "unbound_values": unbound})
+    return {"snapshot_id": snapshot_id, "replayed": False, "version": result.version, "relations": len(rel_list), "gaps": len(gap_list), "derived": derived_id,
+            "unbound_values": unbound}
+
+
+def _unbound_values(store, tenant_id, workspace_id, source_revision_id, rules) -> dict:
+    """Numbers in the structured sources of the snapshot's revision that no rule uses (`business_graph.unbound_values`); a disclosure for a person, never a gap or a rule."""
+    if not source_revision_id:
+        return {"count": 0, "values": [], "truncated": False}
+    view = store.source_revision_view(tenant_id, workspace_id, source_revision_id)
+    paths = {a["artifact_id"]: a.get("logical_path") or a["artifact_id"] for a in view["artifacts"]}
+    return business_graph.unbound_values(rules, store.source_observations(tenant_id, workspace_id, source_revision_id), paths)
 
 
 def gap_queue(store, tenant_id, workspace_id) -> dict:
@@ -427,8 +439,28 @@ def gap_queue(store, tenant_id, workspace_id) -> dict:
     if snap is None:
         return {"snapshot_id": None, "gaps": []}
     titles = {r["rule_id"]: r["title"] for r in snap["rules"]}
+    by_id = {r["rule_id"]: r for r in snap["rules"]}
+    from core.change_intelligence.v2 import business_index as _bi
+
+    def compare(rid):
+        """EUI-06 A/B card of one conflicting option: the rule's own fields in words (the same fields graph_view already gives this reader); unknown stays unknown."""
+        r = by_id.get(rid)
+        if r is None:
+            return None
+        unknown = set(r.get("unknown_fields") or [])
+        def word(f, v):
+            return "unknown" if f in unknown or v in (None, "", [], {}) else v
+        return {"actor": word("actor_ref", str(r.get("actor_ref") or "").replace("role-", "").replace("-", " ")),
+                "condition": word("condition", _bi.condition_text(r.get("condition")) if r.get("condition") else None),
+                "outcome": word("outcome", str((r.get("outcome") or {}).get("kind") or "").replace("_", " ")),
+                "exceptions": [e["text"] for e in r.get("exceptions") or []], "scope": word("scope", _bi._scope_text(r.get("scope") or {})),
+                "status": r.get("status"), "evidence_count": len(r.get("source_bindings") or [])}
+
     def shaped(g):
-        return dict(g, affected=[{"rule_id": r, "title": titles.get(r)} for r in g["affected_rule_ids"]])
+        out = dict(g, affected=[{"rule_id": r, "title": titles.get(r)} for r in g["affected_rule_ids"]])
+        if g.get("kind") == "conflicting_facts" and g.get("options"):
+            out["options"] = [dict(o, compare=compare(o.get("rule_id"))) for o in g["options"]]
+        return out
     from infra.adapters import v2_business_proposals
     proposals = v2_business_proposals.proposals_for(store, tenant_id, workspace_id, snap)            # KNO-06: suggested by a model, labelled, open until a person acts
     open_gaps = sorted((shaped(g) for g in snap["gaps"] if g["status"] in ("OPEN", "REOPENED")), key=lambda g: (g["priority"] != "critical", g["gap_id"]))

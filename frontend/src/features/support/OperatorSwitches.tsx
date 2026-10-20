@@ -8,7 +8,7 @@ import { useNotify } from "@/lib/notify";
 import { useSession } from "@/session";
 import type { Rec } from "@/features/changes/types";
 
-const WORDS: Record<string, string> = { ai_switch: "New AI starts", worker_claims: "Job processing (the worker claims jobs)" };
+const WORDS: Record<string, string> = { ai_switch: "New AI starts", worker_claims: "Job processing (the worker claims jobs)", request_assistant: "Request assistant (new questions)" };
 
 export function OperatorSwitches() {
   const s = useSession();
@@ -28,7 +28,7 @@ export function OperatorSwitches() {
       {!st.active && <Muted testid="switches-inactive">The runtime switches are not active on this deployment.</Muted>}
       {st.active && (
         <div className="grid gap-3 text-sm">
-          {["ai_switch", "worker_claims"].map((k) => (
+          {["ai_switch", "worker_claims", "request_assistant"].map((k) => (
             <div key={k} data-testid={`switch-${k}`} data-value={String(st[k])} className="flex flex-wrap items-center gap-2">
               <strong>{WORDS[k]}:</strong> <span>{st[k] === "on" ? "ON" : st[k] === "off" ? "OFF (paused by the operator)" : String(st[k])}</span>
               {st.can_change && <Button disabled={pending || reason.trim().length < 10} data-testid={`flip-${k}`} onClick={() => void flip(k, st[k] === "on" ? "off" : "on")}>Switch {st[k] === "on" ? "OFF" : "ON"}</Button>}

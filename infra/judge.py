@@ -69,6 +69,12 @@ from infra.v2_change_routes import router as _v2_change_router
 app.include_router(_v2_change_router)
 from infra.v2_work_routes import router as _v2_work_router
 app.include_router(_v2_work_router)
+from infra.v2_request_routes import router as _v2_request_router
+app.include_router(_v2_request_router)
+from infra.v2_request_assistant_routes import router as _v2_request_assistant_router
+app.include_router(_v2_request_assistant_router)
+from infra.v2_preparation_routes import router as _v2_preparation_router                    # EUI-08 guided preparation (RIPPLE_GUIDED_PREPARATION=on; off by default)
+app.include_router(_v2_preparation_router)
 from infra.v2_coverage_routes import router as _v2_coverage_router
 app.include_router(_v2_coverage_router)
 from infra.v2_operator_routes import router as _v2_operator_router

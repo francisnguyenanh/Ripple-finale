@@ -37,6 +37,10 @@ def validate_payload(payload) -> str | None:
         return "request_invalid"
     if not isinstance(payload.get("snapshot_id"), str) or not payload["snapshot_id"]:
         return "snapshot_required"
+    choice = payload.get("decided_conflict_intent")
+    if choice is not None and not (isinstance(choice, dict) and set(choice) == {"rule_id", "intent"} and isinstance(choice["rule_id"], str) and choice["rule_id"]
+                                   and choice["intent"] in bc.DECIDED_CONFLICT_INTENTS):
+        return "decided_conflict_intent_invalid"
     return None
 
 
@@ -90,7 +94,9 @@ class ChangeUnderstandExecutor:
         except ValueError as exc:
             raise NonRetryableExecutionError("schema_violation", str(exc)) from exc
         payload = ctx.job["payload"]
-        result = bc.resolve(model, payload["request"], rc["cu_rules"], rc["cu_relations"], rc["cu_frozen"]["limits"], pin=rc["cu_pin"])
+        choice = payload.get("decided_conflict_intent")
+        result = bc.resolve(model, payload["request"], rc["cu_rules"], rc["cu_relations"], rc["cu_frozen"]["limits"], pin=rc["cu_pin"],
+                            choices={choice["rule_id"]: choice["intent"]} if choice else None)
         result.update(executor_id=EXECUTOR_ID, config_sha256=rc["cu_sha"], provider_calls=1, applies_nothing=True, offered_rule_ids=sorted(rc["cu_rules"]),
                       titles={rid: r["title"] for rid, r in rc["cu_rules"].items()}, model={"pinned": model_id, "served": actual})
         return ExecutionOutcome(result=json.loads(_canon_json(result)), model_id=actual, input_tokens=in_t, output_tokens=out_t, thought_tokens=th_t)

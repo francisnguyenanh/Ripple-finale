@@ -8,6 +8,14 @@ from __future__ import annotations
 
 import pytest
 
+
+def _shot(page, name):                                                                       # optional review capture (UI_NEXT_SHOTS); never affects the assertions
+    import os
+    target = os.environ.get("UI_NEXT_SHOTS")
+    if target:
+        os.makedirs(target, exist_ok=True)
+        page.screenshot(path=os.path.join(target, f"{name}.png"), full_page=False)
+
 pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import expect  # noqa: E402
 
@@ -67,10 +75,17 @@ def test_requester_confirms_and_sees_the_meaning_an_approver_decides_separately_
     review = req.get_by_test_id("chg-review")
     expect(review).to_be_visible(timeout=WAIT)
     expect(review).to_have_attribute("data-status", "PARTIAL")
+    req.set_viewport_size({"width": 1440, "height": 900})                                          # EUI-01: decisions rail beside the evidence on a wide screen
+    assert req.get_by_test_id("rev-rail").bounding_box()["x"] > req.get_by_test_id("rev-evidence").bounding_box()["x"] + 300
+    assert req.get_by_test_id("rev-rail").get_by_test_id("rev-decisions").count() == 1
+    _shot(req, "eui01_review_rail_1440")
     meaning = req.get_by_test_id("rev-meaning")
     expect(meaning).to_contain_text("Before:")
     expect(meaning).to_contain_text("After:")
-    expect(req.get_by_test_id("rev-change")).to_contain_text("when it applies")
+    threshold = req.locator('[data-testid="rev-aspect"][data-aspect="threshold"]')                # EUI-03: the change as typed aspects (the sentence stays in Technical)
+    expect(threshold).to_contain_text("Value (")
+    expect(threshold).to_contain_text("→")
+    assert req.get_by_test_id("rev-change").count() == 0
     expect(req.get_by_test_id("rev-affected").first).to_contain_text("changed by this request")
     expect(req.get_by_test_id("rev-counts")).to_contain_text("Automatic edits possible: 1")
     expect(req.get_by_test_id("rev-counts")).to_contain_text("Unresolved:")
@@ -107,10 +122,18 @@ def test_requester_confirms_and_sees_the_meaning_an_approver_decides_separately_
     req.reload()
     expect(req.get_by_test_id("chg-review")).to_be_visible(timeout=WAIT)
     expect(req.locator("[data-testid=rev-decision][data-kind=knowledge]")).to_have_attribute("data-current", "true", timeout=WAIT)
-    req.get_by_test_id("rev-clarify-ref").select_option(index=1)
-    req.get_by_test_id("rev-clarify-disposition").select_option("manual_later")
-    req.get_by_test_id("rev-clarify-submit").click()
+    opener = req.get_by_test_id("rev-clarify-open").first                                          # EUI-06: the form opens under the item it is about
+    ref = opener.get_attribute("data-ref")
+    opener.click()
+    form = req.locator(f'[data-testid="rev-clarify"][data-ref="{ref}"]')
+    expect(form).to_contain_text("Clarifying:")
+    assert req.get_by_test_id("rev-clarify").count() == 1                                          # one open form at a time
+    form.get_by_test_id("rev-clarify-disposition").select_option("answered")
+    expect(form.get_by_test_id("rev-clarify-submit")).to_be_disabled()                             # an answer needs words
+    form.get_by_test_id("rev-clarify-disposition").select_option("manual_later")
+    form.get_by_test_id("rev-clarify-submit").click()
     expect(req.get_by_test_id("rev-note")).to_contain_text("revised", timeout=WAIT)
+    assert req.get_by_test_id("rev-rail").get_by_test_id("rev-note").count() == 1                 # the outcome shows in the rail, beside the controls
     expect(req.locator("[data-testid=rev-decision][data-kind=knowledge]")).to_have_attribute("data-current", "false", timeout=WAIT)
     expect(req.locator("[data-testid=rev-decision][data-kind=clarification]")).to_have_count(1)
     # 5. the approver sees the stale decision, decides again for the revised draft and approves the file edits separately

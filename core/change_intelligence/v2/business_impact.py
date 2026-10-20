@@ -211,11 +211,44 @@ _LINK_WORDS = {"direct": "changed by this request", "confirmed_link": "linked by
                "counterevidence": "disagrees with a changed rule; kept as evidence, not changed"}
 
 
+def logical_rule_id(rule_id: str) -> str:
+    """The observed rule and its accepted TARGET version (`<id>-target`, business_answers) are two versions of one logical rule."""
+    return rule_id[:-7] if rule_id.endswith("-target") else rule_id
+
+
+def ref_key(rule_id: str) -> str:
+    """Opaque, stable key of a LOGICAL rule for typed links between reader views (impact rows, risk-memo statements, assistant facts); carries no id in clear."""
+    return "rk-" + canonical_hash({"rule": logical_rule_id(str(rule_id))})[:16]
+
+
+def _version(i: Mapping) -> dict:
+    return {"view": "target" if i["rule_id"].endswith("-target") else "observed", "title": i["title"], "meaning": _LINK_WORDS[i["link"]], "link": i["link"],
+            "severity": i["severity"], "unknown": bool(i.get("unknown"))}
+
+
+def _affected_for_reader(items) -> list:
+    """One entry per logical rule. When the walk reached both versions of a rule, they are grouped, never merged by title: each version keeps its view, link
+    (counterevidence included) and severity under `versions`; the entry's headline is the first version in the report's order (the most severe)."""
+    groups: dict = {}
+    for i in items:
+        groups.setdefault(logical_rule_id(i["rule_id"]), []).append(i)
+    out = []
+    for vs in groups.values():
+        head = vs[0]
+        e = {"title": head["title"], "meaning": _LINK_WORDS[head["link"]], "link": head["link"], "severity": head["severity"], "unknown": any(v.get("unknown") for v in vs),
+             "ref_key": ref_key(head["rule_id"])}
+        if len(vs) > 1:
+            e["versions"] = [_version(v) for v in vs]
+        out.append(e)
+    return out
+
+
 def render(report: Mapping, *, mode: str, can_read_evidence: bool) -> dict:
-    """What THIS reader may see. Business mode has no ids; file names, locators and code recommendations need evidence rights; Technical adds ids, paths in the graph and the hash."""
+    """What THIS reader may see. Business mode has no ids; file names, locators and code recommendations need evidence rights; Technical adds ids, paths in the graph and the hash.
+    The stored report (and its hash) keeps one item per rule id; only this rendering groups the versions of one logical rule."""
     withheld = 0 if can_read_evidence else len(report["file_inventory"])
     out = {"statement": report["statement"], "severity_rubric": report["severity_rubric"], "coverage": report["coverage"],
-           "affected_rules": [{"title": i["title"], "meaning": _LINK_WORDS[i["link"]], "link": i["link"], "severity": i["severity"], "unknown": bool(i.get("unknown"))} for i in report["affected_rules"]],
+           "affected_rules": _affected_for_reader(report["affected_rules"]),
            "gaps": [g["text"] for g in report["gaps"] if can_read_evidence or g["kind"] not in ("missing_file",)],
            "excluded": [e["text"] for e in report["excluded"]], "simulation": [{"status": s["status"], "reason": s["reason"]} for s in report["simulation"]],
            "measured": report["measured"], "ai_dependencies": report["ai_dependencies"],
@@ -224,7 +257,8 @@ def render(report: Mapping, *, mode: str, can_read_evidence: bool) -> dict:
            "files_withheld": withheld}
     if mode == "technical":
         out["technical"] = {"pin": report["pin"], "report_hash": report["report_hash"], "write_scope": report["write_scope"], "counterevidence_rule_ids": report["counterevidence_rule_ids"],
-                            "affected": [{"rule_id": i["rule_id"], "link": i["link"], "severity": i["severity"], "reasons": i["reasons"], "path": i["path"]} for i in report["affected_rules"]],
+                            "affected": [{"rule_id": i["rule_id"], "logical_rule_id": logical_rule_id(i["rule_id"]), "link": i["link"], "severity": i["severity"], "reasons": i["reasons"],
+                                          "path": i["path"]} for i in report["affected_rules"]],
                             "limits": report["limits"], "gaps": report["gaps"] if can_read_evidence else [g for g in report["gaps"] if g["kind"] != "missing_file"]}
         if can_read_evidence:
             out["technical"]["files"] = [{k: f[k] for k in ("artifact_id", "path", "kind", "role", "locators", "rules", "status")} for f in report["file_inventory"]]

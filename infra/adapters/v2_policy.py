@@ -21,7 +21,7 @@ class PermissionDenied(PermissionError):
 # membership.manage); a client never selects its own role.
 ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     "requester": frozenset({
-        "project.read", "source.import", "knowledge.answer", "intent.create", "change.prepare",
+        "project.read", "request.assistant.ask", "source.import", "knowledge.answer", "intent.create", "change.prepare",
         # Production role model: the requester uses the AI under the workspace policy (no per-reply grant), confirms the
         # understanding of THEIR OWN request (never anyone else's, never knowledge), and starts an apply only after a valid approval.
         "ai.use", "intent.confirm_own", "change.apply",
@@ -32,14 +32,14 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
         # still compares accounts, so holding two roles never lets anyone decide their own request in the strict default.
     }),
     "knowledge_owner": frozenset({
-        "project.read", "knowledge.confirm", "conflict.resolve",
+        "project.read", "request.assistant.ask", "knowledge.confirm", "conflict.resolve",
         # Raw source-quote evidence in the human work queue is
         # gated separately from "project.read" -- only a role that can
         # actually confirm/resolve knowledge may see the underlying quotes.
         "evidence.read",
     }),
     "change_approver": frozenset({
-        "project.read", "change.approve", "change.accept_result", "ai.use",
+        "project.read", "request.assistant.ask", "change.approve", "change.accept_result", "ai.use",
         # Extension (local only): approve or reject a candidate code patch bound to its validation (never their own request).
         "code.approve",
         # Extension ma/1 (local build): start, advance or cancel a multi-agent review board over a confirmed change; the report is read, never an approval.
@@ -49,17 +49,17 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
         "verification.contract.set",
     }),
     # A person who may only LOOK (every read surface of the workspace), nothing else: no import, no AI run, no request, no decision, no restore.
-    "viewer": frozenset({"project.read"}),
+    "viewer": frozenset({"project.read", "request.assistant.ask"}),   # RQA: may ASK the read-only request assistant about requests it may read; no other AI work
     # A reviewer reads the proposal, its evidence, impact, simulation and gaps, may use the AI to help read them, and records a review note
     # (comment / request changes / ready for approval). No approve, no apply, no import, no request of their own.
-    "reviewer": frozenset({"project.read", "evidence.read", "ai.use", "change.review", "ma.run"}),
+    "reviewer": frozenset({"project.read", "evidence.read", "ai.use", "change.review", "ma.run", "request.assistant.ask"}),
     # Marker role: removes ai.use from the member's other roles (a per-member revoke of AI use). Grants nothing itself.
     "ai_suspended": frozenset(),
     "restore_operator": frozenset({
-        "project.read", "source.restore",
+        "project.read", "request.assistant.ask", "source.restore",
     }),
     "admin": frozenset({
-        "project.read", "source.import", "knowledge.answer", "intent.create",
+        "project.read", "request.assistant.ask", "source.import", "knowledge.answer", "intent.create",
         "knowledge.confirm", "conflict.resolve", "change.approve",
         "change.accept_result", "source.restore", "membership.manage",
         "evidence.read", "verification.contract.set",
@@ -69,7 +69,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     }),
     # Demo/judge profile: a person who may state a change in free text, confirm their OWN request, and prepare it up to a proposal that WAITS for a reviewer/approver
     # (draft, impact, simulation, what-if, proposal, AI reading). No source import, no analysis/extraction/re-extraction, no review/approval bundle, no apply, no membership, no operator switches.
-    "judge": frozenset({"project.read", "intent.create", "intent.confirm_own", "ai.use", "change.prepare"}),
+    "judge": frozenset({"project.read", "intent.create", "intent.confirm_own", "ai.use", "change.prepare", "request.assistant.ask"}),
 }
 
 # Only these role names may ever be granted through the public membership
@@ -190,6 +190,18 @@ JOB_APPROVE_PERMISSION = {"change": "change.approve", "restore": "source.restore
                           "gap.answer_interpret": "ai.use",
                           # Extension AIX-D1: an audience variant of a generated document (pinned role document.wording); created only by POST .../documents/{artifact_id}/variants.
                           "document.variant": "ai.use",
+                          # Extension SUR-06 / SUR-08: advisory memos (pinned roles change.risk_memo / ma.synthesis_memo); created only by POST .../impact/risk-memo and POST /v2/ma/runs/{run_id}/synthesis-memo.
+                          "change.risk_memo": "ai.use", "ma.synthesis_memo": "ai.use",
+                          # Extension SUR-04: semantic drift advisory over a declared repository's diff; created only by POST /v2/business/ci/semantic-drift (ai.use + evidence.read).
+                          "ci.semantic_drift": "ai.use",
+                          # Extension SUR-05: proposed old/new correspondence of a source refresh; created only by POST /v2/sources/refresh/{refresh_id}/correspondence.
+                          "source.correspondence": "ai.use",
+                          # Extension SUR-03 (proposal-only): model-proposed edits checked statically, never applied or run; created only by POST .../code/proposal (code.patch + ai.use + evidence.read).
+                          "code.diff_proposal": "ai.use",
+                          # Extension SUR-07: analyst memo over a SYNTHETIC replay (engine computes every number; real data refused); created only by POST /v2/business/roi/analyst.
+                          "roi.analyst": "ai.use",
+                          # RQA-03: one question of a private request-assistant thread; created only by POST /v2/request-assistant/threads/{thread_id}/messages.
+                          "request.qa": "request.assistant.ask",
                           # Extension AIX-K1: one rule group of a knowledge version compared for conflict hypotheses (pinned role knowledge.mining); created only by POST /v2/business/mining.
                           "knowledge.mining": "ai.use",
                           # Extension AIX-K2 model questioner: the next question of an interview session (pinned role gap.interview); created only by the interview refresh.
@@ -233,6 +245,10 @@ RESULT_ACCEPT_SUBJECT_PERMISSION = {"CHANGE": "change.accept_result",
                                     "RESTORE": "source.restore"}
 
 
+# Capabilities that let a member start paid model work; `ai_suspended` removes all of them.
+AI_CAPABILITIES = frozenset({"ai.use", "request.assistant.ask"})
+
+
 def permissions_for(roles) -> frozenset[str]:
     """Union of permissions for a membership's role bundle. Unknown role names
     grant nothing -- an unrecognized role must never fail open."""
@@ -240,7 +256,7 @@ def permissions_for(roles) -> frozenset[str]:
     for role in roles or ():
         granted |= ROLE_PERMISSIONS.get(role, frozenset())
     if "ai_suspended" in (roles or ()):
-        granted.discard("ai.use")
+        granted -= AI_CAPABILITIES                                     # every AI capability, not only ai.use (RQA-01: the request assistant's scoped right too)
     return frozenset(granted)
 
 
@@ -305,6 +321,8 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str | None] = {
     ("POST", _SOURCE_REFRESH + "/prepare"): "source.import",
     ("POST", _SOURCE_REFRESH + "/commit"): "source.import",
     ("GET", _SOURCE_REFRESH + "/{refresh_id}"): "project.read",
+    ("POST", _SOURCE_REFRESH + "/{refresh_id}/correspondence"): "source.import",
+    ("GET", _SOURCE_REFRESH + "/{refresh_id}/correspondence"): "evidence.read",
     # Human work queue -- listing is project.read (evidence itself
     # is redacted per-caller inside the DTO by the "evidence.read"
     # permission, not gated as a separate route-level ceiling); answering is
@@ -340,6 +358,12 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str | None] = {
     ("GET", "/v2/changes/{proposal_job_id}/review-notes"): "project.read",
     ("GET", "/v2/work/inbox"): "project.read",
     ("GET", "/v2/work/chain"): "project.read",
+    ("GET", "/v2/requests/{family}/{request_id}/task-view"): "project.read",   # plus the family read rule; others get the generic 404
+    ("POST", "/v2/requests/{family}/{request_id}/assistant/threads"): "request.assistant.ask",
+    ("GET", "/v2/requests/{family}/{request_id}/assistant/threads"): "project.read",
+    ("GET", "/v2/request-assistant/threads/{thread_id}"): "project.read",   # own thread only
+    ("POST", "/v2/request-assistant/threads/{thread_id}/messages"): "request.assistant.ask",
+    ("POST", "/v2/request-assistant/threads/{thread_id}/messages/{message_id}/cancel"): "project.read",   # own thread only
     # Restore routes (infra/v2_restore_routes.py). The two result-decision /
     # work-proof entries above name the CHANGE subject's permission; a RESTORE
     # apply is authorized by `RESULT_ACCEPT_SUBJECT_PERMISSION["RESTORE"]`
@@ -375,6 +399,8 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str | None] = {
     # Extension ext/1 (local only)
     ("GET", "/v2/business/changes/{change_id}/code/candidate"): "project.read",
     ("POST", "/v2/business/changes/{change_id}/code/candidate"): "code.patch",
+    ("POST", "/v2/business/changes/{change_id}/code/proposal"): "code.patch",
+    ("GET", "/v2/business/changes/{change_id}/code/proposal"): "evidence.read",
     ("POST", "/v2/business/changes/{change_id}/code/candidate/validate"): "code.patch",
     ("POST", "/v2/business/changes/{change_id}/code/candidate/decide"): "code.approve",
     ("POST", "/v2/business/changes/{change_id}/code/candidate/publish"): "code.approve",
@@ -385,16 +411,25 @@ ROUTE_PERMISSIONS: dict[tuple[str, str], str | None] = {
     ("POST", "/v2/business/policy/decide"): "project.read",
     ("POST", "/v2/business/audit/export"): "project.read",
     ("POST", "/v2/business/roi/replay"): "project.read",
+    ("POST", "/v2/business/roi/analyst"): "ai.use",
+    ("GET", "/v2/business/roi/analyst/{job_id}"): "project.read",
+    ("POST", "/v2/business/ci/semantic-drift"): "evidence.read",
+    ("GET", "/v2/business/ci/semantic-drift/{job_id}"): "evidence.read",
     ("POST", "/v2/ma/runs"): "ma.run",
     ("GET", "/v2/ma/runs/{run_id}"): "project.read",
     ("POST", "/v2/ma/runs/{run_id}/advance"): "ma.run",
     ("POST", "/v2/ma/runs/{run_id}/cancel"): "ma.run",
     ("GET", "/v2/business/changes/{change_id}/ma"): "project.read",
+    ("POST", "/v2/business/changes/{change_id}/impact/risk-memo"): "ai.use",
+    ("GET", "/v2/business/changes/{change_id}/impact/risk-memo"): "project.read",
+    ("POST", "/v2/ma/runs/{run_id}/synthesis-memo"): "ai.use",
+    ("GET", "/v2/ma/runs/{run_id}/synthesis-memo"): "project.read",
     ("POST", "/v2/business/gaps/{gap_id}/interview"): "knowledge.confirm",
     ("GET", "/v2/business/interviews/{session_id}"): "knowledge.confirm",
     ("POST", "/v2/business/interviews/{session_id}/answer"): "knowledge.confirm",
     ("POST", "/v2/business/interviews/{session_id}/refresh"): "knowledge.confirm",
     ("POST", "/v2/business/interviews/{session_id}/confirm"): "knowledge.confirm",
+    ("POST", "/v2/business/interviews/{session_id}/stop"): "knowledge.confirm",
     ("POST", "/v2/business/documents/{artifact_id}/variants"): "project.read",
     ("GET", "/v2/business/documents/{artifact_id}/variants"): "project.read",
     ("GET", "/v2/business/documents/variants/{variant_id}"): "project.read",

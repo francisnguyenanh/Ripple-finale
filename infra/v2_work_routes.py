@@ -281,6 +281,10 @@ def work_chain(request: Request, workspace_id: str, proposal_job_id: str):
 
 @router.get("/v2/work/inbox")
 def work_inbox(request: Request, workspace_id: str):
+    """My work (RUX-04): every request this person may read, placed by the ONE task projection (`v2_request_tasks.task_view`, the same the task frame and the request
+    assistant read): my required step, my optional contribution, blocked, waiting for a person, waiting for the system, recent. The legacy lists `todo` / `waiting` /
+    `recent` keep their meaning. A request whose task view cannot be read is counted in `unavailable`, never shown as "no work"."""
+    from infra.adapters import v2_request_tasks as rt
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
@@ -292,52 +296,72 @@ def work_inbox(request: Request, workspace_id: str):
         by_kind = {k: [store.job_record(tenant, workspace_id, j) for j in _jobs(store, tenant, workspace_id, k)[:INBOX_LIMIT]]
                    for k in ("proposal", "review", "approval", "apply")}
         replaced = {(p.get("payload") or {}).get("previous_proposal_job_id") for p in by_kind["proposal"]}
-        todo, waiting, recent = [], [], []
+        sections = {k: [] for k in rt.SECTIONS}
+        unavailable = 0
+
+        def place(family, rid, item, mine):
+            nonlocal unavailable
+            try:
+                tv = rt.task_view(store, tenant, workspace_id, family, rid, authority)
+            except TenantScopeError:
+                return                                                   # not readable by this person: not their work, and not counted
+            except Exception:                                            # noqa: BLE001 - a failed read is reported as unavailable, never as an empty list
+                unavailable += 1
+                return
+            entry = rt.work_entry(tv, mine=mine)
+            if entry is not None:
+                sections[entry["section"]].append({**item, **entry, "family": family, "request_id": tv["request_ref"]["id"]})
+
+        seen_intents = set()
         for prop in by_kind["proposal"]:
             if prop["job_id"] in replaced:
                 continue                                             # a newer proposal replaced this one
-            c = _chain(store, tenant, workspace_id, prop, by_kind)
-            notes = review_notes(store, tenant, workspace_id, prop["job_id"])
-            st = _stage(prop, c, notes)
             pl = prop.get("payload") or {}
             intent_id = pl.get("intent_id")
-            title = None
-            if intent_id:
-                try:
-                    title = (store.get_intent(tenant, workspace_id, intent_id).get("raw_request") or "")[:140] or None
-                except Exception:
-                    title = None
+            if not intent_id or intent_id in seen_intents:
+                continue                                             # the projection reads the newest proposal of an intent
+            seen_intents.add(intent_id)
+            c = _chain(store, tenant, workspace_id, prop, by_kind)
+            notes = review_notes(store, tenant, workspace_id, prop["job_id"])
+            try:
+                title = (store.get_intent(tenant, workspace_id, intent_id).get("raw_request") or "")[:140] or None
+            except Exception:
+                title = None
             params = {k: v for k, v in {"intent": intent_id, "draft": pl.get("draft_job_id"), "impact": pl.get("impact_job_id"),
                                         "simulation": pl.get("simulation_job_id"), "proposal": prop["job_id"],
                                         "review": (c["review"] or {}).get("job_id"), "approval": (c["approval"] or {}).get("job_id"),
                                         "apply": (c["apply"] or {}).get("job_id")}.items() if v}
             mine = prop.get("requested_by") == me
-            item = {"proposal_job_id": prop["job_id"], "title": title or prop["job_id"], "requested_by": prop.get("requested_by"),
-                    "stage": st["stage"], "label": st["label"], "params": params, "mine": mine,
-                    "reviewer_notes": len(notes), "open_change_requests": open_change_requests(notes)}
-            w = st["waits"]
-            if w is None:
-                if st["stage"] == "APPLIED":
-                    recent.append({**item, "waiting_on": None})
-                elif mine:
-                    waiting.append({**item, "waiting_on": "the system"})
-                continue
-            can = w["perm"] in perms and (not w.get("not_owner") or not mine) and (not w.get("owner") or mine)
-            if can and w["perm"] in APPROVER_STEPS and "admin" in (authority.get("roles") or ()) and "change_approver" not in (authority.get("roles") or ()):
-                can = False       # an administrator is not a default approver: it may still decide (the server allows it) but is not asked to
-            if can:
-                todo.append({**item, "you_do": w["who"], "why": st["label"]})
-            elif mine:
-                waiting.append({**item, "waiting_on": w["who"]})
-            # a reviewer is also offered every proposal that waits for a decision (optional review), until they leave a note
-            if st["stage"] in REVIEWABLE and "change.review" in perms and not mine and not any(n["reviewer"] == me for n in notes):
-                todo.append({**item, "you_do": "a reviewer (optional)", "why": "You may review this proposal before the approver decides", "optional": True})
-        have_intent = {(p.get("payload") or {}).get("intent_id") for p in by_kind["proposal"]}
-        if "intent.create" in perms:
+            place("intent_flow", intent_id, {"proposal_job_id": prop["job_id"], "title": title or prop["job_id"], "requested_by": prop.get("requested_by"), "page": "changes",
+                                             "params": params, "mine": mine, "reviewer_notes": len(notes), "open_change_requests": open_change_requests(notes)}, mine)
+        if "intent.create" in perms:                                     # the caller's own requests that have not reached a proposal yet
             drafts = [store.job_record(tenant, workspace_id, j) for j in _jobs(store, tenant, workspace_id, "change.draft")[:INBOX_LIMIT]]
-            for item in _own_requests(store, tenant, workspace_id, me, have_intent, drafts):
-                (waiting if item.pop("waits_for_system", False) else todo).append(item)
-        return JSONResponse({"workspace_id": workspace_id, "account_id": me, "todo": todo, "waiting": waiting, "recent": recent[:5]}, headers=_NO_STORE)
+            for item in _own_requests(store, tenant, workspace_id, me, seen_intents, drafts):
+                rid = item["params"].get("intent") or item["params"]["chat"]
+                keep = {k: item[k] for k in ("proposal_job_id", "title", "requested_by", "params", "mine", "open_change_requests", "reviewer_notes")}
+                place("intent_flow", rid, {**keep, "page": "changes"}, True)
+                if item["params"].get("intent"):
+                    seen_intents.add(item["params"]["intent"])
+            with store._tx() as cur:                                     # the caller's own requests stated without a conversation (no proposal yet)
+                cur.execute("""SELECT intent_id, raw_request FROM v2_intents WHERE tenant_id=%s AND workspace_id=%s AND created_by=%s AND status IN ('PARSED','CONFIRMED')
+                    ORDER BY created_at DESC LIMIT %s""", (tenant, workspace_id, me, INBOX_LIMIT))
+                own = [r for r in cur.fetchall() if r[0] not in seen_intents]
+            for iid, raw in own:
+                place("intent_flow", iid, {"proposal_job_id": iid, "title": (raw or iid)[:140], "requested_by": me, "page": "changes", "params": {"intent": iid},
+                                           "mine": True, "open_change_requests": [], "reviewer_notes": 0}, True)
+        for jid in _jobs(store, tenant, workspace_id, "change.understand")[:INBOX_LIMIT]:   # business changes, under that family's own read rule
+            try:
+                rec = store.job_record(tenant, workspace_id, jid)
+            except TenantScopeError:
+                continue
+            mine = rec.get("requested_by") == me
+            place("business_change", jid, {"proposal_job_id": jid, "title": ((rec.get("payload") or {}).get("request") or jid)[:140], "requested_by": rec.get("requested_by"),
+                                           "page": "questions", "params": {"chg": jid}, "mine": mine, "open_change_requests": [], "reviewer_notes": 0}, mine)
+        todo = sections["mine"] + sections["optional"]
+        waiting = sections["waiting_human"] + sections["waiting_system"] + sections["blocked"]
+        recent = sections["recent"]
+        return JSONResponse({"workspace_id": workspace_id, "account_id": me, "todo": todo, "waiting": waiting, "recent": recent[:5],
+                             "sections": {k: (v[:5] if k == "recent" else v) for k, v in sections.items()}, "unavailable": unavailable}, headers=_NO_STORE)
     except IdentityDenied as exc:
         status = _identity_denied_status(exc)
         return _error("sign in required" if status == 401 else "permission denied", status)

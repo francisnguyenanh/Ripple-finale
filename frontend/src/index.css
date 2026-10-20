@@ -9,6 +9,7 @@
   --text: #141A22; --text-muted: #566170; --primary: #2557D6; --on-primary: #FFFFFF;
   --success: #137A3F; --warning: #A15C00; --danger: #B3261E; --info: #0B6E8A; --sim: #6B3FA0; --focus: #0B57D0;
   --on-danger: #FFFFFF; --overlay-backdrop: rgb(0 0 0 / 0.4);
+  --origin-ai: #9A2C67; --origin-ai-surface: #FBF0F6; --origin-evidence: #3E5266; --origin-evidence-surface: #EFF3F7;
   --z-sticky: 20; --z-menu: 40; --z-tooltip: 50; --z-skip: 60;
   --shadow-1: 0 1px 2px rgba(0,0,0,.08); --shadow-2: 0 8px 24px rgba(0,0,0,.16);
 }
@@ -17,12 +18,14 @@
     --bg: #0E1116; --surface: #151A21; --surface-2: #1B222B; --border: #2A3340;
     --text: #E8ECF1; --text-muted: #9AA6B5; --primary: #6D95F5; --on-primary: #0E1116;
     --success: #4CC58A; --warning: #F0B35A; --danger: #FF8A80; --info: #5CC7E0; --sim: #B79CFF; --focus: #8AB4FF; --on-danger: #0E1116; --overlay-backdrop: rgb(0 0 0 / 0.6);
+    --origin-ai: #F29AC9; --origin-ai-surface: #2A1B24; --origin-evidence: #AFC0D2; --origin-evidence-surface: #18212B;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0E1116; --surface: #151A21; --surface-2: #1B222B; --border: #2A3340;
   --text: #E8ECF1; --text-muted: #9AA6B5; --primary: #6D95F5; --on-primary: #0E1116;
   --success: #4CC58A; --warning: #F0B35A; --danger: #FF8A80; --info: #5CC7E0; --sim: #B79CFF; --focus: #8AB4FF; --on-danger: #0E1116; --overlay-backdrop: rgb(0 0 0 / 0.6);
+  --origin-ai: #F29AC9; --origin-ai-surface: #2A1B24; --origin-evidence: #AFC0D2; --origin-evidence-surface: #18212B;
 }
 
 @theme inline {
@@ -33,6 +36,8 @@
   --color-primary: var(--primary); --color-on-primary: var(--on-primary); --color-on-danger: var(--on-danger);
   --color-success: var(--success); --color-warning: var(--warning); --color-danger: var(--danger);
   --color-info: var(--info); --color-sim: var(--sim);
+  --color-origin-ai: var(--origin-ai); --color-origin-ai-surface: var(--origin-ai-surface);
+  --color-origin-evidence: var(--origin-evidence); --color-origin-evidence-surface: var(--origin-evidence-surface);
   --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px;
   --shadow-card: var(--shadow-1); --shadow-pop: var(--shadow-2);
 }
@@ -58,3 +63,12 @@ body.modal-open { overflow: hidden; }
 .rp-edge-active .react-flow__edge-path { stroke: var(--primary); stroke-width: 2.4; }
 .rp-edge-projection .react-flow__edge-path { stroke: var(--warning); stroke-dasharray: 6 4; }
 .react-flow__node:focus-visible, .react-flow__node button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* Native meter (EUI-04 typed metrics): one value of one declared denominator; never a health score. */
+.rp-meter { appearance: none; width: 100%; height: 8px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border); }
+.rp-meter::-webkit-meter-bar { background: var(--surface-2); border: none; border-radius: 4px; }
+.rp-meter::-webkit-meter-optimum-value, .rp-meter::-webkit-meter-suboptimum-value, .rp-meter::-webkit-meter-even-less-good-value { background: var(--text-muted); border-radius: 4px; }
+.rp-meter::-moz-meter-bar { background: var(--text-muted); border-radius: 4px; }
+
+/* EUI-07 typed link target: rows a selected AI statement cites (set by reference, never by text match). Colour plus outline; the statement names the count. */
+[data-highlight="true"] { outline: 2px solid var(--origin-ai); outline-offset: 2px; background: var(--origin-ai-surface); }

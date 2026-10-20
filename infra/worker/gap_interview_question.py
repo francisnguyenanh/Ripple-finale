@@ -26,7 +26,8 @@ def load_config() -> tuple[dict, str]:
 
 
 def job_id_for(session_id: str, turn: int) -> str:
-    return "giq-" + hashlib.sha256(json.dumps([session_id, int(turn)]).encode("utf-8")).hexdigest()[:24]
+    from infra.worker import job_binding
+    return "giq-" + hashlib.sha256(json.dumps([session_id, int(turn), job_binding.fingerprint(KIND)]).encode("utf-8")).hexdigest()[:24]
 
 
 class GapInterviewQuestionExecutor:

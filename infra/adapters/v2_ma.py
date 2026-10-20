@@ -37,6 +37,16 @@ class MaRefused(Exception):
         self.code = code
 
 
+def _role_binding(workflow: str) -> dict:
+    import os
+    model = None
+    if os.environ.get("RIPPLE_BUDGET_CONFIG_PATH"):
+        from infra.worker import budget_config, job_quota
+        config = job_quota.load_worker_budget_config()
+        model = {"model": budget_config.model_for_role(config, ROLE), "thinking": budget_config.thinking_level_for_role(config, ROLE)}
+    return {"config": load_config(workflow)[1], "model": model}
+
+
 def load_config(workflow: str = "review_board") -> tuple[dict, str]:
     path = CONFIG_PATH.parent / f"ma_{workflow}.json"
     raw = path.read_bytes()
@@ -251,7 +261,9 @@ def start_run(store, tenant_id, workspace_id, change_id, *, workflow: str, autho
         binding = dict(binding, candidate_job_id=candidate_job_id, patch_hash=context["candidate"]["patch_hash"])
     if moved:
         raise MaRefused("knowledge_moved", "the business knowledge moved after this change was confirmed; the review must be revalidated first")
-    run_id = ma.run_id_for(workspace_id, workflow, binding)
+    # the run id also carries the workflow's frozen config and the pinned specialist model (LHA-00 for runs; live smoke LHA-SMOKE-20261018-06 replayed a run made under
+    # the previous scenario schema): a changed configuration is a new run, the old run stays readable as history
+    run_id = ma.run_id_for(workspace_id, workflow, dict(binding, role_binding=_role_binding(workflow)))
     existing = _run(store, tenant_id, workspace_id, run_id)
     if existing is not None:
         return {"run_id": run_id, "created": False, "status": existing["status"]}
@@ -431,6 +443,21 @@ def advance(store, tenant_id, workspace_id, run_id, *, actor_id: str = "coordina
                 _plan_child(store, tenant_id, workspace_id, run_id, role=role, round_no=2, payload_extra=extra)
             _dispatch_slots(store, tenant_id, workspace_id, run_id, m, authority, per_job)
             return state(store, tenant_id, workspace_id, run_id, can_read_evidence=True)
+    follow = ma.followup_roles(m)
+    if follow and round2 and not [c for c in children if c["round"] == 3]:
+        # LLM-S1: the result interpreter reads the validated round-2 results (the engine's KPI comparison) as DATA; no engine result -> nothing to interpret
+        engine = [c for c in round2 if c["status"] == "COMPLETED" and (c["result"] or {}).get("comparison")]
+        if engine:
+            inputs = [{"role": c["role"], "status": (c["result"] or {}).get("status"), "findings": [], "notes": [],
+                       "simulation": {"comparison": (c["result"] or {}).get("comparison"), "baseline_label": ((c["result"] or {}).get("comparison") or {}).get("baseline")}} for c in engine]
+            _, per_job, _cap = _budget()
+            with store._tx() as cur:
+                _event(cur, tenant_id, workspace_id, run_id, "MA_INTERPRETATION_ROUND", actor_id, {"roles": follow})
+            authority = {"account_id": run["requested_by"], "roles": _roles_of(store, tenant_id, workspace_id, run["requested_by"])}
+            for role in follow:
+                _plan_child(store, tenant_id, workspace_id, run_id, role=role, round_no=3, payload_extra={"synthesis_inputs": inputs})
+            _dispatch_slots(store, tenant_id, workspace_id, run_id, m, authority, per_job)
+            return state(store, tenant_id, workspace_id, run_id, can_read_evidence=True)
     if m.get("repair_max"):
         nxt = _repair_step(store, tenant_id, workspace_id, run, m, children, actor_id=actor_id)
         if nxt is not None:
@@ -575,9 +602,48 @@ def state(store, tenant_id, workspace_id, run_id, *, can_read_evidence: bool) ->
                           "findings": len((c["result"] or {}).get("findings") or []), "rejected": len((c["result"] or {}).get("rejected") or []), "disputes": len((c["result"] or {}).get("disputes") or []),
                           "cost_usd": c["cost_usd"], "entry_state": c["entry_state"]} for c in children],
             "budget": invariant, "report": report, "report_hash": run["report_hash"], "events": events,
+            "progress": _progress(store, tenant_id, workspace_id, run["status"], children),
             "statement": {"RUNNING": "Specialists are working; nothing is decided.", "JOINING": "A bounded second round is running (rebuttal or synthesis).", "PLANNED": "Planned.",
                           "REVIEW_READY": "A person reads this report in the review; agreement among specialists is not approval.", "INCOMPLETE": "The report is incomplete and says why; a person decides what to do.",
                           "FAILED": "The run failed.", "CANCELLED": "The run was cancelled; late results are ignored."}[run["status"]]}
+
+
+def _progress(store, tenant_id, workspace_id, status: str, children: list) -> dict | None:
+    """Where a live run actually is (finding (e): RUNNING alone did not say whether a specialist is working or waiting). Children: `planned` (no job yet: waiting for a
+    slot of this run), `queued` (job created, not picked up: the worker admits at most the workspace limit of RUNNING jobs), `running`, `done`, `failed`. `phase` is
+    `running` when a child runs, else `waiting_for_slot` with the reason (how many OTHER jobs of the workspace hold the slots); None for a finished run."""
+    if status not in ("PLANNED", "RUNNING", "JOINING"):
+        return None
+    counts = {"planned": 0, "queued": 0, "running": 0, "done": 0, "failed": 0}
+    for c in children:
+        if c["status"] == "PLANNED":
+            counts["planned"] += 1
+        elif c["status"] == "DISPATCHED":
+            counts["running" if c["job_status"] == "RUNNING" else "queued"] += 1
+        elif c["status"] == "COMPLETED":
+            counts["done"] += 1
+        else:
+            counts["failed"] += 1
+    own = [c["job_id"] for c in children if c["job_id"]]
+    with store._tx() as cur:
+        cur.execute("SELECT kind, count(*) FROM v2_jobs WHERE tenant_id=%s AND workspace_id=%s AND execution_status='RUNNING' AND NOT (job_id = ANY(%s)) GROUP BY kind ORDER BY kind",
+                    (tenant_id, workspace_id, own))
+        others = {r[0]: int(r[1]) for r in cur.fetchall()}
+    limit = None
+    import os
+    if os.environ.get("RIPPLE_BUDGET_CONFIG_PATH"):
+        from infra.worker import job_quota
+        limit = job_quota.load_concurrency_limit()
+    busy = sum(others.values())
+    if counts["running"]:
+        phase, reason = "running", None
+    elif counts["queued"] or counts["planned"]:
+        phase = "waiting_for_slot"
+        reason = (f"Waiting: {busy} other job(s) of this workspace are running ({', '.join(f'{k} {v}' for k, v in others.items())}) at its limit of {limit}; this run continues "
+                  "when a slot frees. Nothing failed." if limit and busy >= limit else "Waiting for the worker to pick up the next step. Nothing failed.")
+    else:
+        phase, reason = "joining", None
+    return {"phase": phase, "children": counts, "workspace_running_other": others, "workspace_limit": limit, "reason": reason}
 
 
 def runs_for_change(store, tenant_id, workspace_id, change_id) -> list:

@@ -8,11 +8,19 @@ that group, the text is plain, the pair is not already asked or decided, and the
 does not match is rejected; a case the evaluator cannot decide downgrades the hypothesis to `missing_context` with the missing facts as unknowns). A `potential_conflict`
 whose rules agree on actor and outcome is not a conflict (rejected). Hypotheses are findings, never knowledge: a person dismisses them or raises them as questions through
 the existing controls. The coverage report says what was and was not compared; NONE_FOUND is a coverage statement, never proof.
+
+LHA-K1 (2026-10-18): (1) semantic candidates: one model call over the offered pack (live rules with a condition, capped and reported) may propose rule pairs that share a
+business concept without sharing a field or scope value; the server keeps a pair only if both ids were offered, the pair is not planned already, it is not a duplicate and
+the cap is not reached; a kept pair becomes a two-rule `semantic` group compared like any other group. A candidate pair is never a relation or a finding. (2) compatibility
+rubric for a verified potential_conflict: two obligations that can both be met (two approvals by different people, a review and a report) are not a conflict
+(`compatible_obligations`); a terminal outcome (rejected, prohibited) against an obligation is `incompatible` and stays a potential conflict; an outcome the rubric does not
+know downgrades the hypothesis to `ambiguity` with compatibility `unknown` (a question for a person, neither a conflict nor safe). The model's kind and the server's
+disposition are both kept.
 """
 from __future__ import annotations
 
 import re
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, Optional
 
 from core.change_intelligence.v2 import policy_decision as pd
 from core.change_intelligence.v2.roi_replay import _fields_of
@@ -33,8 +41,9 @@ def live_rules(rules: Iterable[Mapping]) -> list:
     return sorted(effective, key=lambda r: r["rule_id"])
 
 
-def plan_groups(rules: Iterable[Mapping], limits: Mapping) -> dict:
-    """-> {groups: [{group_id, rule_ids, fields}], skipped_rules: [{rule_id, reason}], skipped_groups: [{group_id, rule_ids, reason}], pairs_total, pairs_planned}."""
+def plan_groups(rules: Iterable[Mapping], limits: Mapping, semantic_pairs: Iterable[Mapping] = ()) -> dict:
+    """-> {groups: [{group_id, rule_ids, fields}], skipped_rules: [{rule_id, reason}], skipped_groups: [{group_id, rule_ids, reason}], pairs_total, pairs_planned}.
+    `semantic_pairs`: pairs kept from the semantic candidate job ({rule_ids, link}); each live pair not planned already becomes a two-rule `semantic` group."""
     rules = live_rules(rules)
     fields = {r["rule_id"]: _fields_of(r.get("condition")) | {f for e in r.get("exceptions") or [] for f in _fields_of(e.get("condition") if isinstance(e, Mapping) else None)} for r in rules}
     skipped = [{"rule_id": r["rule_id"], "reason": "no_condition"} for r in rules if not fields[r["rule_id"]]]
@@ -95,14 +104,138 @@ def plan_groups(rules: Iterable[Mapping], limits: Mapping) -> dict:
         entry = {"group_id": "grp-b-" + canonical_hash([a, b])[:12], "rule_ids": [a, b], "fields": sorted(fields[a] | fields[b]), "kind": "bridge", "shared": shared,
                  "groups": sorted({group_of.get(a, "single"), group_of.get(b, "single")})}
         (bridges if k < cap else bridge_skipped).append(entry if k < cap else dict(entry, reason="bridge_cap"))
+    planned_pairs = in_group_pairs | {frozenset(b["rule_ids"]) for b in bridges}
+    semantic = []
+    for sp in semantic_pairs:
+        a, b = sorted(sp["rule_ids"])
+        if a in by_rule and b in by_rule and frozenset((a, b)) not in planned_pairs:
+            planned_pairs.add(frozenset((a, b)))
+            semantic.append({"group_id": "grp-s-" + canonical_hash([a, b])[:12], "rule_ids": [a, b], "fields": sorted(fields[a] | fields[b]), "kind": "semantic", "link": sp.get("link", ""),
+                             "groups": sorted({group_of.get(a, "single"), group_of.get(b, "single")})})
+    bridges += semantic
     skipped = [s for s in skipped if s["reason"] != "no_rule_shares_a_field" or not any(s["rule_id"] in b["rule_ids"] for b in bridges)]
     for g in groups:
         g.setdefault("kind", "component")
     pairs_total = len(with_cond) * (len(with_cond) - 1) // 2
     pairs_planned = sum(len(g["rule_ids"]) * (len(g["rule_ids"]) - 1) // 2 for g in groups) + len(bridges)
-    unrelated = pairs_total - len(in_group_pairs) - len(scored)
+    unrelated = pairs_total - len(in_group_pairs) - len(scored) - len(semantic)
     return {"groups": groups + bridges, "skipped_rules": sorted(skipped, key=lambda s: s["rule_id"]), "skipped_groups": skipped_groups + bridge_skipped, "rules_live": len(rules),
-            "pairs_total": pairs_total, "pairs_planned": pairs_planned, "cross_group_pairs": {"planned": len(bridges), "skipped_by_cap": len(bridge_skipped), "unrelated": max(0, unrelated)}}
+            "pairs_total": pairs_total, "pairs_planned": pairs_planned,
+            "cross_group_pairs": {"planned": len(bridges) - len(semantic), "skipped_by_cap": len(bridge_skipped), "unrelated": max(0, unrelated), "semantic": len(semantic)}}
+
+
+# ---- semantic candidates (LHA-K1) -------------------------------------------------------------------------------------------------------------------------
+
+CANDIDATE_KEYS = {"status", "pairs", "notes"}
+CANDIDATE_LINKS = ("same_concept", "overlapping_case", "dependency", "equivalent")
+
+
+def candidate_offer(rules: Iterable[Mapping], limits: Mapping) -> dict:
+    """The offered pack of the candidate call: live rules with a condition, by id, capped; the rest is reported as not offered."""
+    live = [r for r in live_rules(rules) if r.get("condition") is not None]
+    cap = int(limits.get("max_candidate_rules", 30))
+    return {"rules": live[:cap], "not_offered": [r["rule_id"] for r in live[cap:]], "rules_live_with_condition": len(live)}
+
+
+def candidate_job_id(snapshot_id: str, attempt: int, binding: Optional[str] = None) -> str:
+    return "mcand-" + canonical_hash({"snap": snapshot_id, "attempt": attempt, "stage": "candidates", **({"binding": binding} if binding else {})})[:24]
+
+
+def structural_pairs(plan: Mapping) -> list:
+    """Rule pairs the deterministic plan already compares (groups and bridges, not semantic groups)."""
+    return [list(p) for g in plan["groups"] if g.get("kind") != "semantic" for p in _pairs(g["rule_ids"])]
+
+
+def build_candidate_prompt(frozen: Mapping, rules: Iterable[Mapping], planned: Iterable[Iterable[str]]) -> str:
+    from core.change_intelligence.v2.business_index import condition_text
+    lines = [f"- id={r['rule_id']} | {r.get('title')} | who acts: {r.get('actor_ref') or 'not stated'} | when: {condition_text(r['condition'])} | "
+             f"what happens: {(r.get('outcome') or {}).get('kind', 'unknown')}" for r in rules]
+    pairs = "\n".join(f"- {', '.join(p)}" for p in sorted(sorted(p) for p in planned)) or "(none)"
+    prompt = frozen["candidate_prompt_template"].replace("{rules}", "\n".join(lines) or "(none)").replace("{planned}", pairs)
+    if len(prompt) > frozen["limits"]["max_prompt_chars"]:
+        raise ValueError("context_too_large")
+    return prompt
+
+
+def validate_candidate_object(obj, limits: Mapping) -> dict:
+    if not isinstance(obj, dict) or set(obj) != CANDIDATE_KEYS or obj["status"] not in ("OK", "NONE_FOUND"):
+        raise ValueError("object keys or status")
+    if not isinstance(obj["pairs"], list) or len(obj["pairs"]) > limits["max_candidate_proposals"]:
+        raise ValueError("pairs")
+    for c in obj["pairs"]:
+        if not isinstance(c, dict) or set(c) != {"rule_ids", "relation", "link"} or not isinstance(c["rule_ids"], list) or len(c["rule_ids"]) != 2 \
+                or not all(isinstance(x, str) for x in c["rule_ids"]) or c["relation"] not in CANDIDATE_LINKS or not isinstance(c["link"], str) or len(c["link"]) > limits["max_reason_chars"]:
+            raise ValueError("pair shape")
+    if not isinstance(obj["notes"], list) or len(obj["notes"]) > limits["max_notes"] or not all(isinstance(n, str) and len(n) <= 300 for n in obj["notes"]):
+        raise ValueError("notes")
+    return obj
+
+
+def link_checks(a: Mapping, b: Mapping) -> dict:
+    """SUR-01: what the server can check about a proposed link of two rules: the units their conditions compare, whether their scopes can meet, the evidence of each side."""
+    def units(r):
+        out, stack = set(), [r.get("condition")]
+        while stack:
+            c = stack.pop()
+            if isinstance(c, Mapping):
+                if "field" in c and c.get("unit"):
+                    out.add(str(c["unit"]).upper())
+                stack += list(c.get("all") or []) + list(c.get("any") or []) + ([c["not"]] if "not" in c else [])
+        return out
+    ua, ub = units(a), units(b)
+    sa, sb = a.get("scope") or {}, b.get("scope") or {}
+    common = [k for k in sa if k in sb and isinstance(sa[k], list) and isinstance(sb[k], list)]
+    scope = "not_stated" if not common else ("disjoint" if any(not set(map(str, sa[k])) & set(map(str, sb[k])) for k in common) else "overlapping")
+    from core.change_intelligence.v2 import business_graph
+    return {"units": "not_compared" if not (ua and ub) else ("same" if ua == ub else "different"), "scope": scope,
+            "evidence_refs": {a["rule_id"]: business_graph._evidence_refs(a)[:4], b["rule_id"]: business_graph._evidence_refs(b)[:4]}}
+
+
+def resolve_candidates(model: Mapping, offered_ids: Iterable[str], planned: Iterable[Iterable[str]], limits: Mapping, rules_by_id: Optional[Mapping] = None) -> dict:
+    """Keep proposed pairs of offered rules that are new to the plan, unique and within the cap; every refused pair keeps its reason. With `rules_by_id` each kept pair
+    carries the server's link checks (SUR-01); an `equivalent` claim over different units or disjoint scopes is downgraded to `same_concept` (never a merge)."""
+    offered, planned = set(offered_ids), {frozenset(p) for p in planned}
+    kept, rejected, seen = [], [], set()
+    for c in model["pairs"]:
+        a, b = sorted(c["rule_ids"])
+        reason = None
+        if a not in offered or b not in offered:
+            reason = "rule_not_offered"
+        elif a == b:
+            reason = "same_rule"
+        elif _UNSAFE.search(c["link"]) or not c["link"].strip():
+            reason = "unsafe_or_empty_text"
+        elif frozenset((a, b)) in planned:
+            reason = "already_planned"
+        elif (a, b) in seen:
+            reason = "duplicate"
+        elif len(kept) >= int(limits.get("max_semantic_pairs", 4)):
+            reason = "semantic_cap"
+        if reason:
+            rejected.append({"rule_ids": [a, b], "reason": reason})
+            continue
+        seen.add((a, b))
+        pair = {"rule_ids": [a, b], "relation": c["relation"], "relation_proposed": c["relation"], "link": " ".join(c["link"].split()), "origin": "model_candidate", "status": "PROPOSED"}
+        if rules_by_id is not None:
+            pair["checks"] = link_checks(rules_by_id[a], rules_by_id[b])
+            if c["relation"] == "equivalent" and (pair["checks"]["units"] == "different" or pair["checks"]["scope"] == "disjoint"):
+                pair["relation"] = "same_concept"
+        kept.append(pair)
+    return {"pairs": kept, "rejected": rejected, "notes": [" ".join(n.split()) for n in model["notes"] if not _UNSAFE.search(n)]}
+
+
+def compatibility(rules: Iterable[Mapping], rubric: Mapping) -> str:
+    """`compatible` (every outcome can be met together), `incompatible` (a terminal outcome against an obligation) or `unknown` (an outcome the rubric does not list)."""
+    def cls(kind):
+        if kind in rubric.get("cumulative", []):
+            return "cumulative"
+        if kind in rubric.get("terminal", []) or any(kind.startswith(p) for p in rubric.get("terminal_prefixes", [])):
+            return "terminal"
+        return None
+    classes = [cls(str((r.get("outcome") or {}).get("kind") or "")) for r in rules]
+    if None in classes:
+        return "unknown"
+    return "incompatible" if len(set(classes)) > 1 else "compatible"
 
 
 def _pairs(ids):
@@ -121,8 +254,9 @@ def _shared(a: Mapping, b: Mapping) -> list:
     return sorted(out)
 
 
-def group_job_id(snapshot_id: str, group_id: str, attempt: int) -> str:
-    return "mine-" + canonical_hash({"snap": snapshot_id, "group": group_id, "attempt": attempt})[:24]
+def group_job_id(snapshot_id: str, group_id: str, attempt: int, binding: Optional[str] = None) -> str:
+    """`binding` = the prompt/schema/model fingerprint of the mining role (LHA-00): a changed configuration is a new group job, never a reuse of an old result."""
+    return "mine-" + canonical_hash({"snap": snapshot_id, "group": group_id, "attempt": attempt, **({"binding": binding} if binding else {})})[:24]
 
 
 def coverage(plan: Mapping, group_states: Mapping) -> dict:
@@ -188,7 +322,30 @@ def _isnum(x) -> bool:
         return False
 
 
+def pairs_to_map(value, key: str, val: str, *, numbers: bool = False):
+    """A provider list of {key, value} pairs -> a map (structured output cannot return an open object: live smoke 2026-10-18); a map passes unchanged. Duplicate or
+    malformed pairs raise ValueError. With `numbers`, a value written as a plain number becomes a number."""
+    if isinstance(value, Mapping):
+        return dict(value)
+    if not isinstance(value, list):
+        raise ValueError("pairs")
+    out = {}
+    for p in value:
+        if not isinstance(p, Mapping) or set(p) != {key, val} or not isinstance(p[key], str) or p[key] in out:
+            raise ValueError("pairs")
+        v = p[val]
+        if numbers and isinstance(v, str) and re.fullmatch(r"-?\d[\d,]*(?:\.\d+)?", v.strip()):
+            n = float(v.strip().replace(",", ""))
+            v = int(n) if n.is_integer() else n
+        out[p[key]] = v
+    return out
+
+
 def validate_model_object(obj, limits: Mapping) -> dict:
+    if isinstance(obj, dict) and isinstance(obj.get("hypotheses"), list):
+        for h in obj["hypotheses"]:
+            if isinstance(h, dict) and isinstance(h.get("case"), list):
+                h["case"] = pairs_to_map(h["case"], "field", "value", numbers=True)
     if not isinstance(obj, dict) or set(obj) != MODEL_KEYS:
         raise ValueError("object keys")
     if obj["status"] not in ("OK", "NONE_FOUND", "UNSURE"):
@@ -215,8 +372,9 @@ def hypothesis_id(snapshot_id: str, kind: str, rule_ids: Iterable[str], case: Ma
     return "hyp-" + canonical_hash({"snap": snapshot_id, "kind": kind, "rules": sorted(rule_ids), "case": {k: str(v) for k, v in sorted(case.items())}})[:20]
 
 
-def resolve(model: Mapping, group_rules: Mapping[str, Mapping], asked_pairs: Iterable[Iterable[str]], *, snapshot_id: str, group_id: str) -> dict:
-    """Keep what the group's rules support. `asked_pairs`: rule-id sets of gaps already asked or decided (any status) -> `already_asked`."""
+def resolve(model: Mapping, group_rules: Mapping[str, Mapping], asked_pairs: Iterable[Iterable[str]], *, snapshot_id: str, group_id: str, rubric: Optional[Mapping] = None) -> dict:
+    """Keep what the group's rules support. `asked_pairs`: rule-id sets of gaps already asked or decided (any status) -> `already_asked`. `rubric`: outcome compatibility
+    classes (config `compatibility`); without it a verified conflict is only checked for actor/outcome agreement."""
     asked = {frozenset(p) for p in asked_pairs}
     kept, rejected, seen = [], [], set()
     for h in model["hypotheses"]:
@@ -235,7 +393,7 @@ def resolve(model: Mapping, group_rules: Mapping[str, Mapping], asked_pairs: Ite
         if reason:
             rejected.append({"kind": h["kind"], "rule_ids": rids, "reason": reason})
             continue
-        kind, unknowns, verified = h["kind"], list(h["unknowns"]), None
+        kind, unknowns, verified, compat, disposition = h["kind"], list(h["unknowns"]), None, None, "as_proposed"
         if kind in ("potential_conflict", "exception_overlap"):
             if not h["case"]:
                 kind, verified = "missing_context", False
@@ -243,7 +401,8 @@ def resolve(model: Mapping, group_rules: Mapping[str, Mapping], asked_pairs: Ite
             else:
                 verdicts = {rid: _applies(group_rules[rid], h["case"]) for rid in rids}
                 if any(v[0] is False for v in verdicts.values()):
-                    rejected.append({"kind": h["kind"], "rule_ids": rids, "reason": "case_not_shared:" + ",".join(r for r, v in sorted(verdicts.items()) if v[0] is False)})
+                    rejected.append({"kind": h["kind"], "rule_ids": rids, "reason": "case_not_shared:" + ",".join(r for r, v in sorted(verdicts.items()) if v[0] is False),
+                                     "case": {str(k)[:60]: str(v)[:60] for k, v in list(h["case"].items())[:8]}})    # kept for diagnosis: which case the model proposed
                     continue
                 if any(v[0] is None for v in verdicts.values()):
                     kind, verified = "missing_context", False
@@ -253,6 +412,16 @@ def resolve(model: Mapping, group_rules: Mapping[str, Mapping], asked_pairs: Ite
                     if kind == "potential_conflict" and len({(group_rules[r].get("actor_ref"), (group_rules[r].get("outcome") or {}).get("kind")) for r in rids}) == 1:
                         rejected.append({"kind": h["kind"], "rule_ids": rids, "reason": "no_disagreement"})
                         continue
+                    if kind == "potential_conflict" and rubric is not None:
+                        compat = compatibility([group_rules[r] for r in rids], rubric)
+                        if compat == "compatible":                       # two approvals (or a review and a report) can both be required: not a conflict
+                            rejected.append({"kind": h["kind"], "rule_ids": rids, "reason": "compatible_obligations", "case": {k: v for k, v in sorted(h["case"].items())}})
+                            continue
+                        if compat == "unknown":
+                            kind, disposition = "ambiguity", "downgraded:compatibility_unknown"
+                            unknowns.append("whether these outcomes can both be met is not in the supported rubric")
+        if kind != h["kind"] and disposition == "as_proposed":
+            disposition = "downgraded:" + ("case_undecided" if h["case"] else "no_case")
         key = (kind, tuple(rids))
         if key in seen:
             rejected.append({"kind": kind, "rule_ids": rids, "reason": "duplicate"})
@@ -260,7 +429,7 @@ def resolve(model: Mapping, group_rules: Mapping[str, Mapping], asked_pairs: Ite
         seen.add(key)
         kept.append({"hypothesis_id": hypothesis_id(snapshot_id, kind, rids, h["case"]), "kind": kind, "kind_proposed": h["kind"], "rule_ids": rids, "titles": [group_rules[r].get("title") for r in rids],
                      "reason": " ".join(h["reason"].split()), "case": {k: v for k, v in sorted(h["case"].items())}, "case_verified": verified, "question": " ".join(h["question"].split()),
-                     "unknowns": unknowns[:6], "group_id": group_id, "origin": ORIGIN, "status": "PROPOSED"})
+                     "unknowns": unknowns[:6], "group_id": group_id, "origin": ORIGIN, "status": "PROPOSED", "disposition": disposition, "compatibility": compat})
     return {"hypotheses": kept, "rejected": rejected, "notes": [" ".join(n.split()) for n in model["notes"] if not _UNSAFE.search(n)]}
 
 

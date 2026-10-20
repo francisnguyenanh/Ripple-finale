@@ -4,17 +4,22 @@
 import * as React from "react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Callout, Field, Muted, StatePill, Tech, TextArea } from "@/components/bits";
+import { Callout, Field, Muted, Select, StatePill, Tech, TextArea } from "@/components/bits";
 import { TrustStateSummary } from "@/components/decision/TrustStateSummary";
 import { useAction } from "@/lib/useAction";
 import { useSession } from "@/session";
 import type { Rec } from "@/features/changes/types";
 import { CodeCandidate, CodeRecommendations } from "./CodePanel";
+import { ChangeAiPanels } from "./ChangeAiPanels";
+import { TaskFrame } from "@/features/request-assistant/TaskFrame";
 import { refusalWords } from "@/lib/refusal";
 
 const q = encodeURIComponent;
 const ACTION_WORDS: Record<string, string> = { approve: "Accepted", reject: "Rejected", request_changes: "Changes requested", clarify: "Clarified" };
 const KIND_WORDS: Record<string, string> = { knowledge: "Knowledge change", file_writes: "Automatic file edits", clarification: "Clarification" };
+// EUI-03: what a file action IS, never what happened: a candidate edit is not an applied change, and guidance is not an executable diff
+const FILE_ACTION_WORDS: Record<string, string> = { AI_EDIT_SUPPORTED: "automatic edit possible (candidate, not applied)", MANUAL: "a person edits it (proposed guidance, no executable diff)",
+  NO_OP: "already as requested", UNRESOLVED: "location unresolved" };
 const STATUS_WORDS: Record<string, string> = { READY_FOR_REVIEW: "Ready for review", PARTIAL: "Partly resolved: a person still has work to do", INVALID: "Not valid" };
 const DISPOSITIONS: [string, string][] = [["answered", "Answer the question"], ["outside_this_request", "Not part of this change"], ["manual_later", "A person will do it after the change"], ["resolved_by_person", "I know where or what it is"]];
 
@@ -93,6 +98,25 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
       return r;
     } catch (e) { setNote(errText(e)); setTick((t) => t + 1); return null; }
   };
+  const open = new Set(can.clarify ? openRefs.map((o) => o.ref) : []);
+  // EUI-06: the clarification form opens directly under the item it is about (full text, no truncated list); same refs, same four dispositions, same handler
+  const clarifyHere = (ref: string, text: string) => !open.has(ref) ? null : clarifyRef !== ref ? (
+    <Button size="sm" variant="ghost" data-testid="rev-clarify-open" data-ref={ref} onClick={() => { setClarifyRef(ref); setAnswer(""); setDisposition("manual_later"); }}>Clarify this</Button>
+  ) : (
+    <div data-testid="rev-clarify" data-ref={ref} className="grid gap-2 rounded-md border border-border p-3 mt-1">
+      <p className="text-sm"><span className="text-muted">Clarifying:</span> {text}</p>
+      <Field label="What is true for this item" hint="Your answer is recorded with your name. It labels or answers the item; it changes no file and no rule.">
+        <Select data-testid="rev-clarify-disposition" value={disposition} onChange={(e) => setDisposition(e.target.value)}>
+          {DISPOSITIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </Select>
+      </Field>
+      <TextArea data-testid="rev-clarify-answer" aria-label="Your answer" rows={2} maxLength={1000} placeholder="Your answer (required for an answer or a statement)" value={answer} onChange={(e) => setAnswer(e.target.value)} />
+      <div className="flex flex-wrap gap-2">
+        <Button data-testid="rev-clarify-submit" disabled={pending || ((disposition === "answered" || disposition === "resolved_by_person") && !answer.trim())} onClick={() => void run(clarify)}>Record clarification</Button>
+        <Button variant="ghost" data-testid="rev-clarify-cancel" disabled={pending} onClick={() => setClarifyRef("")}>Cancel</Button>
+      </div>
+    </div>
+  );
   const clarify = async () => {
     setNote(null);
     try {
@@ -110,6 +134,9 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
         <StatePill state={draft.status as string} label={STATUS_WORDS[draft.status as string] ?? (draft.status as string)} testid="rev-status" />
         {data.knowledge_moved && <Callout tone="warn" testid="rev-moved">The business knowledge changed after this request was confirmed. It has to be stated and confirmed again; decisions are refused.</Callout>}
       </div>
+      <TaskFrame key={`${ws}|${cid}`} ws={ws} family="business_change" id={cid} refreshKey={data} />
+      <div className="grid gap-4 items-start xl:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]" data-testid="rev-workspace">   {/* EUI-01: evidence / work left, decisions rail right from 1280 px */}
+      <div className="grid gap-4 min-w-0" data-testid="rev-evidence">
       <Muted>{String(draft.statement)}</Muted>
       <div data-testid="rev-meaning" className="grid gap-2">
         <p className="text-sm font-medium">What the rule means</p>
@@ -120,7 +147,19 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
               <p><span className="text-muted">Before:</span> {c.before as string}</p>
               <p><span className="text-muted">After:</span> {c.after as string}</p>
             </div>
-            {((c.changes ?? []) as string[]).map((t, j) => <p key={j} data-testid="rev-change">{t}</p>)}
+            {((c.aspects ?? []) as Rec[]).length > 0 && (
+              <ul className="grid gap-1" data-testid="rev-aspects" aria-label="What changes in the rule">
+                {((c.aspects ?? []) as Rec[]).map((a, j) => (
+                  <li key={j} data-testid="rev-aspect" data-aspect={String(a.aspect)} className="rounded-sm border-l-4 border-warning bg-surface-2 px-2 py-1">
+                    <span className="font-medium">{String(a.label)}:</span>{" "}
+                    {a.before != null && <span>{String(a.before)}</span>}{a.before != null && a.after != null && <span aria-label="becomes"> → </span>}
+                    {a.after != null && <strong>{String(a.after)}</strong>}{a.unit ? <span className="text-muted"> {String(a.unit)}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Tech>{((c.changes ?? []) as string[]).map((t, j) => <p key={j} data-testid="rev-change">{t}</p>)}</Tech>
+            {((c.aspects ?? []) as Rec[]).length === 0 && ((c.changes ?? []) as string[]).map((t, j) => <p key={j} data-testid="rev-change-plain">{t}</p>)}
             {((c.flags ?? []) as string[]).map((t, j) => <Callout key={j} tone="warn" testid="rev-flag">{t}</Callout>)}
             {!c.valid && <Callout tone="danger">{String(c.error)}</Callout>}
           </div>
@@ -128,7 +167,7 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
       </div>
       <div data-testid="rev-impact" className="grid gap-1 text-sm">
         <p className="font-medium">What it touches</p>
-        <ul className="list-disc pl-5">{((impact.affected_rules ?? []) as Rec[]).map((a, i) => <li key={i} data-testid="rev-affected" data-link={a.link as string}>{a.title as string}: {a.meaning as string} ({a.severity as string}){a.unknown ? ", files unknown" : ""}</li>)}</ul>
+        <ul className="list-disc pl-5">{((impact.affected_rules ?? []) as Rec[]).map((a, i) => <li key={i} data-testid="rev-affected" data-link={a.link as string} data-ref-key={a.ref_key as string | undefined} tabIndex={-1}>{a.title as string}: {a.meaning as string} ({a.severity as string}){a.unknown ? ", files unknown" : ""}{Array.isArray(a.versions) && <span data-testid="rev-affected-versions"> - reached in {(a.versions as Rec[]).length} versions: {(a.versions as Rec[]).map((v) => `${v.view === "target" ? "accepted target" : "observed in the sources"} (${v.meaning as string})`).join("; ")}</span>}</li>)}</ul>
         {((impact.excluded ?? []) as string[]).map((t, i) => <Muted key={i}>{t}</Muted>)}
         {((draft.counterevidence ?? []) as Rec[]).map((c, i) => <Muted key={i} testid="rev-counter">{c.title as string}: {c.label as string}</Muted>)}
         {((draft.proposed_dependencies ?? []) as Rec[]).map((d, i) => <Muted key={i} testid="rev-dep">{d.from as string} {d.relation as string} {d.to as string}: {d.label as string}</Muted>)}
@@ -159,32 +198,20 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
         <p className="font-medium">Pending implementation (nothing is changed by this review)</p>
         <p data-testid="rev-counts">Automatic edits possible: {counts.AI_EDIT_SUPPORTED ?? 0}. By hand: {counts.MANUAL ?? 0}. Already as requested: {counts.NO_OP ?? 0}. Unresolved: {counts.UNRESOLVED ?? 0}.</p>
         {ops.map((o) => <p key={o.what as string} data-testid="rev-op" data-coverage={o.file_coverage as string}>{o.what as string} — rule change {String(o.rule_change).toLowerCase().replace(/_/g, " ")}, files {o.file_coverage as string}.</p>)}
-        {files.length > 0 && <ul className="list-disc pl-5" data-testid="rev-files">{files.map((f) => <li key={f.ref as string} data-testid="rev-file" data-action={f.action as string}>{f.ref as string} {f.path as string}{f.locator ? ` at ${f.locator as string}` : ""}: {f.action as string}{f.instruction ? ` — ${f.instruction as string}` : ""}{f.clarification ? ` [${(f.clarification as Rec).label as string}]` : ""}</li>)}</ul>}
-        {unresolved.map((u) => <p key={u.ref as string} data-testid="rev-unresolved">{u.ref as string}: {u.instruction as string}{u.clarification ? ` [${(u.clarification as Rec).label as string}]` : ""}</p>)}
+        {files.length > 0 && <ul className="list-disc pl-5" data-testid="rev-files">{files.map((f) => <li key={f.ref as string} data-testid="rev-file" data-action={f.action as string}>{f.ref as string} {f.path as string}{f.locator ? ` at ${f.locator as string}` : ""}: <span data-testid="rev-file-action">{FILE_ACTION_WORDS[f.action as string] ?? `state ${String(f.action)}`}</span>{f.instruction ? ` — ${f.instruction as string}` : ""}{f.clarification ? ` [${(f.clarification as Rec).label as string}]` : ""}{clarifyHere(f.ref as string, `${f.ref as string}: ${(f.instruction as string) ?? `${f.action as string} (${f.kind as string})`}`)}</li>)}</ul>}
+        {unresolved.map((u) => <div key={u.ref as string}><p data-testid="rev-unresolved">{u.ref as string}: {u.instruction as string}{u.clarification ? ` [${(u.clarification as Rec).label as string}]` : ""}</p>{clarifyHere(u.ref as string, `${u.ref as string}: ${u.instruction as string}`)}</div>)}
         {(draft.files_withheld as number) > 0 && <Muted testid="rev-withheld">{String(draft.files_withheld)} file detail(s) need evidence rights to be shown.</Muted>}
       </div>
       {(questions.length > 0 || blockers.length > 0) && (
         <div data-testid="rev-questions" className="grid gap-1 text-sm">
           <p className="font-medium">Open questions</p>
-          {questions.map((x) => <p key={x.ref as string} data-testid="rev-question" data-answered={String(!!x.clarification)}>{x.question as string}{x.clarification ? ` — ${(x.clarification as Rec).label as string}${(x.clarification as Rec).answer ? `: ${(x.clarification as Rec).answer as string}` : ""}` : ""}</p>)}
+          {questions.map((x) => <div key={x.ref as string}><p data-testid="rev-question" data-answered={String(!!x.clarification)}>{x.question as string}{x.clarification ? ` — ${(x.clarification as Rec).label as string}${(x.clarification as Rec).answer ? `: ${(x.clarification as Rec).answer as string}` : ""}` : ""}</p>{clarifyHere(x.ref as string, `Question: ${x.question as string}`)}</div>)}
           {blockers.map((b, i) => <Callout key={i} tone="warn" testid="rev-blocker">{b.text as string}</Callout>)}
         </div>
       )}
-      {can.clarify && openRefs.length > 0 && (
-        <div data-testid="rev-clarify" className="grid gap-2 rounded-md border border-border p-3">
-          <Field label="Clarify an open item" hint="Your answer is recorded with your name. It labels or answers the item; it changes no file and no rule.">
-            <select data-testid="rev-clarify-ref" className="rounded-md border border-border bg-surface p-2 text-sm" value={clarifyRef} onChange={(e) => setClarifyRef(e.target.value)}>
-              <option value="">Choose an item</option>
-              {openRefs.map((o) => <option key={o.ref} value={o.ref}>{o.text.slice(0, 160)}</option>)}
-            </select>
-          </Field>
-          <select data-testid="rev-clarify-disposition" className="rounded-md border border-border bg-surface p-2 text-sm" value={disposition} onChange={(e) => setDisposition(e.target.value)}>
-            {DISPOSITIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-          <TextArea data-testid="rev-clarify-answer" rows={2} maxLength={1000} placeholder="Your answer (required for an answer or a statement)" value={answer} onChange={(e) => setAnswer(e.target.value)} />
-          <div><Button data-testid="rev-clarify-submit" disabled={pending || !clarifyRef || ((disposition === "answered" || disposition === "resolved_by_person") && !answer.trim())} onClick={() => void run(clarify)}>Record clarification</Button></div>
-        </div>
-      )}
+      </div>
+      <aside className="grid gap-4 content-start min-w-0" aria-label="Decisions on this change" data-testid="rev-rail">
+        {note && <Callout tone={note.startsWith("The ") || note.includes("not") && !note.includes("Nothing") && !note.includes("not changed") ? "warn" : "info"} testid="rev-note">{note}</Callout>}
       <div data-testid="rev-decisions" className="grid gap-1 text-sm">
         <p className="font-medium">Decisions (each one is separate)</p>
         <Muted>{String(data.decisions_are_separate)}</Muted>
@@ -268,7 +295,10 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
           </div>
         )}
       </div>
+      </aside>
+      </div>
       <CodeRecommendations ws={ws} cid={cid} />
+      <ChangeAiPanels ws={ws} cid={cid} knowledgeMoved={data.knowledge_moved === true} />
       {data.commit ? <CodeCandidate ws={ws} cid={cid} /> : <Muted testid="code-candidate-later">{refusalWords("knowledge_not_committed")}</Muted>}
       {journey && (
         <div data-testid="rev-journey" data-scope={String(journey.scope)} data-knowledge-complete={String(journey.knowledge_only_complete)} data-implemented={String(journey.fully_implemented)} className="grid gap-2 rounded-md border border-border p-3 text-sm">
@@ -286,7 +316,6 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
           <Muted testid="rev-journey-statement">{String(journey.statement)}</Muted>
         </div>
       )}
-      {note && <Callout tone={note.startsWith("The ") || note.includes("not") && !note.includes("Nothing") && !note.includes("not changed") ? "warn" : "info"} testid="rev-note">{note}</Callout>}
       <Tech>
         <div data-testid="rev-technical" className="rounded-md border border-border p-3 text-xs grid gap-1">
           <p>semantic diff <code>{String(binding.semantic_diff_hash)}</code></p>

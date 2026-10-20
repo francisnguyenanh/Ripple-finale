@@ -13,7 +13,7 @@ import os
 import threading
 import time
 
-KEYS = ("ai_switch", "worker_claims")
+KEYS = ("ai_switch", "worker_claims", "request_assistant")
 #: the longest trial window the tool will record (minutes): the approved 90 minutes minus the 5 minutes the worker needs to finish a claim in flight before its hard stop
 MAX_WINDOW_MINUTES = 85
 _lock = threading.Lock()
@@ -83,6 +83,19 @@ def ai_on() -> bool:
         return True
     try:
         return get("ai_switch") == "on"
+    except Exception:                      # noqa: BLE001 - fail closed
+        return False
+
+
+def assistant_on() -> bool:
+    """The request assistant feature (RUX-06): off by the deployment setting `RIPPLE_REQUEST_ASSISTANT=off`, or by the runtime switch `request_assistant` (fail closed
+    when the switches are active and unreadable). Off stops NEW threads and questions and a queued answer before its provider call; history stays readable under its ACL."""
+    if (os.environ.get("RIPPLE_REQUEST_ASSISTANT") or "").strip().lower() == "off":
+        return False
+    if not enabled():
+        return True
+    try:
+        return get("request_assistant") == "on"
     except Exception:                      # noqa: BLE001 - fail closed
         return False
 

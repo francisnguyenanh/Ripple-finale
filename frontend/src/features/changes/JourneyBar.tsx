@@ -4,6 +4,7 @@ import { CheckCircle2, CircleAlert, CircleDot, Clock, Circle, PlayCircle, Rotate
 import { useSession } from "@/session";
 import * as React from "react";
 import { useFlow } from "./flow";
+import { TaskViewContext, responsibility } from "@/features/request-assistant/taskView";
 import { useStages } from "./StageCard";
 import { journey, type JState } from "./journey";
 
@@ -19,10 +20,11 @@ export function Journey() {
   const { data } = useFlow();
   const s = useSession();
   const { request } = useStages();
+  const shared = React.useContext(TaskViewContext);
   const [missing, setMissing] = React.useState<string | null>(null);
   const [all, setAll] = React.useState(false);
   if (!data || (!data.intent && !(data.chat && !data.chat.unavailable))) return null;
-  const steps = journey(data, { account: s.account, can: s.can, roles: s.roles });
+  const steps = journey(data, { account: s.account, can: s.can, roles: s.roles }, responsibility(shared?.tv));
   const open = steps.find((x) => x.state !== "done" && x.state !== "partial" && x.state !== "todo") ?? null;
   const counts = (Object.keys(WORD) as JState[]).map((k) => [k, steps.filter((x) => x.state === k).length] as const).filter(([, n]) => n > 0);
   const go = (x: (typeof steps)[number]) => (e: React.MouseEvent) => {

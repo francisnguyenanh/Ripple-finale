@@ -23,7 +23,7 @@ HOLD_SECONDS = 5
 DEFAULTS = {"lease_minutes": 45, "max_jobs_per_lease": 40, "max_provider_jobs_per_lease": 12, "pump_max_jobs": 3,
             "pump_seconds": 60, "min_remaining_usd": 0.5, "seed_revision_id": None}
 ALWAYS_HELD = ("explain", "sim.analysis", "change.draft", "gap.answer")
-PROVIDER_JOB_KINDS = ("extraction", "analysis", "gap.answer", "impact.judge", "change.draft", "intent.interpret", "explain", "sim.analysis", "knowledge.qa", "change.understand", "change.impact_deps", "change.draft_guidance", "ma.specialist", "document.variant", "knowledge.mining", "gap.interview_question")
+PROVIDER_JOB_KINDS = ("extraction", "analysis", "gap.answer", "impact.judge", "change.draft", "intent.interpret", "explain", "sim.analysis", "knowledge.qa", "change.understand", "change.impact_deps", "change.draft_guidance", "ma.specialist", "document.variant", "knowledge.mining", "gap.interview_question", "change.risk_memo", "ma.synthesis_memo", "ci.semantic_drift", "source.correspondence", "code.diff_proposal", "roi.analyst", "request.qa")
 
 
 def config() -> dict:

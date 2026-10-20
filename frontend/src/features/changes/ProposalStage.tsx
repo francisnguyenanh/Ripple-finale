@@ -10,6 +10,7 @@ import { useSession } from "@/session";
 import { draftResult } from "./DraftStage";
 import { useFlow } from "./flow";
 import { JobLine, useCreateStage } from "./StageBits";
+import { GuidedPreparation } from "./GuidedPreparation";
 import type { Rec } from "./types";
 import { isDone } from "./types";
 
@@ -38,7 +39,7 @@ export function DiffView({ diff }: { diff: Rec }) {
 }
 
 export function ProposalStage() {
-  const { ids, data, setIds, refresh } = useFlow();
+  const { ids, data, setIds, refresh, ws } = useFlow();
   const p = usePlain();
   const s = useSession();
   const notify = useNotify();
@@ -89,6 +90,9 @@ export function ProposalStage() {
   return (
     <StageCard title={stageTitle("proposal")} testid="flow-proposal" done={propDone} summary={propSummary}>
       <JobLine name="proposal" job={d.proposal} />
+      {ids.intent && !d.proposal && s.can("change.prepare") && dr && !staleDraft && (
+        <GuidedPreparation ws={ws} intentId={ids.intent} onReady={(pid) => { setIds({ proposal: pid, review: "", approval: "", apply: "" }); void refresh(); }} />
+      )}
       {bind && (bind.left_for_humans ?? []).length > 0 && (
         <div className="grid gap-2" data-testid="left-for-humans-list">
           <h3 className="font-semibold">Left for people (not part of this proposal)</h3>

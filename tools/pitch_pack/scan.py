@@ -3,7 +3,7 @@
   python -m tools.pitch_pack.scan <dir> [--private-terms FILE] [--max-bytes N]
 
 Finds secrets/tokens, emails, private paths, coordination/agent artifacts, private-split
-labels, and large binaries. Prints findings with MASKED values only (never the secret).
+labels, and large binaries. An export manifest at the root (SUBMISSION_MANIFEST.json) is scanned too, by its schema (see scan_manifest). Prints findings with MASKED values only (never the secret).
 Exit code 0 = clean, 1 = findings, 2 = usage error.
 """
 from __future__ import annotations
@@ -102,6 +102,51 @@ def scan_text(rel: str, text: str, private_terms: list[str]) -> list[Finding]:
     return out
 
 
+# The export manifest (developing export tool) lists every exported file: {"files": [{"path", "sha256"}], ...}. It is part of the FINAL tree and is scanned like any
+# file, with one structural distinction: a `files[].path` value that is a valid relative path of a file present in the tree is a file NAME, so the entropy heuristic
+# (which flags long random-looking strings) is not applied to exactly that path line. Every other rule (secrets, emails, private/local paths, credential URLs, private
+# terms) still applies to every line, path lines included; an invalid path (absolute, drive, backslash, traversal, URL, home) or a malformed manifest is a finding.
+MANIFEST_NAMES = {"SUBMISSION_MANIFEST.json"}
+_REL_PATH = re.compile(r"[A-Za-z0-9_.][A-Za-z0-9_.\-/ ()+,#=]*")                    # dotfiles allowed; "." / ".." segments refused below
+_PATH_LINE = re.compile(r'\s*"path": "([^"\\]*)",?\s*')
+_SHA = re.compile(r"[0-9a-f]{64}")
+
+
+def _valid_rel_path(p: str) -> bool:
+    if not (isinstance(p, str) and 0 < len(p) <= 400 and _REL_PATH.fullmatch(p)):
+        return False
+    parts = p.split("/")
+    return "" not in parts and ".." not in parts and "." not in parts and "://" not in p and not p.startswith("~")
+
+
+def scan_manifest(rel: str, text: str, private_terms: list[str], root: Path | None = None) -> list[Finding]:
+    out: list[Finding] = []
+    try:
+        doc = json.loads(text)
+        files = doc.get("files") if isinstance(doc, dict) else None
+        if not isinstance(files, list):
+            raise ValueError("files")
+    except ValueError:
+        return [Finding("manifest_malformed", rel, 0, "-")] + scan_text(rel, text, private_terms)
+    names: set[str] = set()
+    for i, f in enumerate(files):
+        p = f.get("path") if isinstance(f, dict) else None
+        if not _valid_rel_path(p) or (root is not None and not (root / p).is_file()):
+            out.append(Finding("manifest_bad_path", rel, 0, mask(str(p)), str(p)))
+            continue
+        if not (isinstance(f.get("sha256"), str) and _SHA.fullmatch(f["sha256"])):
+            out.append(Finding("manifest_bad_hash", rel, 0, mask(str(p)), str(p)))
+        names.add(p)
+    lines = text.splitlines()
+    for x in scan_text(rel, text, private_terms):
+        if x.rule == "high_entropy_token":
+            m = _PATH_LINE.fullmatch(lines[x.line - 1])
+            if m and m.group(1) in names and x.raw in m.group(1):
+                continue                                                                   # a listed file's name; that file is itself scanned
+        out.append(x)
+    return out
+
+
 def load_private_terms(path: str | None) -> list[str]:
     if not path:
         return []
@@ -140,7 +185,8 @@ def scan_dir(root: Path, private_terms: list[str] | None = None, max_bytes: int 
                 if size > 100_000:
                     findings.append(Finding("large_binary", rel, 0, f"{size} bytes"))
                 continue
-            findings.extend(scan_text(rel, data.decode("utf-8", "replace"), terms))
+            text = data.decode("utf-8", "replace")
+            findings.extend(scan_manifest(rel, text, terms, root) if rel in MANIFEST_NAMES else scan_text(rel, text, terms))
     return findings
 
 

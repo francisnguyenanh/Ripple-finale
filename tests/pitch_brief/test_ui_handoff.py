@@ -109,7 +109,7 @@ def test_requester_confirms_their_own_request_and_a_colleague_follows_it_from_th
         assert adm.url == link or adm.url.endswith(link.split(server.url)[1])      # same place, nothing re-created
         assert tid(adm, "action-confirm-intent").count() == 0                       # only the person who made it (or a confirmer) is offered it
         expect(tid(adm, "intent-owner-only")).to_contain_text(env.req)
-        expect(tid(adm, "next-action")).to_contain_text(env.req)
+        expect(tid(adm, "task-not-yours")).to_contain_text("requester")                 # one responsibility summary: the task frame names who holds the step
         # the requester confirms their own request: no administrator is involved
         tid(req, "action-confirm-intent").click()
         expect(tid(req, "request-status")).to_contain_text("Confirmed", timeout=WAIT)

@@ -9,7 +9,10 @@ import { Callout, Field, Muted, StatePill, Tech, TextArea, TextInput, Select } f
 import { useAction } from "@/lib/useAction";
 import { useNotify } from "@/lib/notify";
 import { useSession } from "@/session";
+import { answerText } from "@/lib/fmt";
 import type { Rec } from "@/features/changes/types";
+import { ConflictScan } from "./ConflictScan";
+import { GapInterview } from "./GapInterview";
 
 const q = encodeURIComponent;
 const KIND_WORDS: Record<string, string> = {
@@ -91,14 +94,33 @@ function GapCard({ ws, gap, onDone }: { ws: string; gap: Rec; onDone: () => Prom
       {canDecide ? (
         <div className="grid gap-3">
           {!unknown && kind === "conflicting_facts" && (
-            <fieldset className="grid gap-2" onChange={reset}>
-              <legend className="text-sm font-medium">Which one is the business rule?</legend>
-              {((gap.options ?? []) as Rec[]).map((o) => (
-                <label key={o.rule_id} className="flex items-center gap-2 text-sm">
-                  <input type="radio" name={`opt-${gap.gap_id}`} value={o.rule_id} checked={choice === o.rule_id} onChange={() => { setChoice(o.rule_id); reset(); }} />
-                  {o.label} <Tech><code>{o.rule_id}</code></Tech>
-                </label>
-              ))}
+            <fieldset className="grid gap-2" onChange={reset} data-testid="conflict-compare">
+              <legend className="text-sm font-medium">Which one is the business rule? Compare them first; choosing only prepares your answer.</legend>
+              <div className="grid gap-2 md:grid-cols-2">
+                {((gap.options ?? []) as Rec[]).map((o, idx, all) => {
+                  const c = (o.compare ?? null) as Rec | null;
+                  const others = all.filter((x) => x !== o).map((x) => (x.compare ?? {}) as Rec);
+                  const differs = (k: string) => others.some((x) => JSON.stringify(x[k]) !== JSON.stringify(c?.[k]));
+                  const row = (k: string, label: string, v: unknown) => (
+                    <p key={k} data-testid="conflict-field" data-field={k} data-differs={String(differs(k))} className={differs(k) ? "border-l-4 border-warning pl-2" : "pl-3"}>
+                      <span className="text-muted">{label}:</span> {Array.isArray(v) ? (v.length ? v.join("; ") : "none listed") : String(v ?? "unknown")}
+                      {differs(k) ? <span className="text-xs text-warning"> (differs)</span> : null}
+                    </p>);
+                  return (
+                    <label key={String(o.rule_id)} data-testid="conflict-card" data-selected={String(choice === o.rule_id)}
+                      className={`grid gap-1 rounded-md border p-3 text-sm ${choice === o.rule_id ? "border-primary" : "border-border"}`}>
+                      <span className="flex items-center gap-2 font-medium">
+                        <input type="radio" name={`opt-${gap.gap_id}`} value={String(o.rule_id)} checked={choice === o.rule_id} onChange={() => { setChoice(String(o.rule_id)); reset(); }} />
+                        {String.fromCharCode(65 + idx)}: {String(o.label)} <Tech><code>{String(o.rule_id)}</code></Tech>
+                      </span>
+                      {c ? [row("actor", "Who acts", c.actor), row("condition", "When", c.condition), row("outcome", "What happens", c.outcome),
+                            row("exceptions", "Exceptions", c.exceptions), row("scope", "Applies to", c.scope), row("evidence_count", "Source places", c.evidence_count)]
+                        : <Muted>The details of this option are not available.</Muted>}
+                    </label>
+                  );
+                })}
+              </div>
+              <Muted>Agreeing sources do not decide it, and the number of sources is not a vote. If both are right for different cases, leave the question open and describe the cases in your own words.</Muted>
             </fieldset>
           )}
           {!unknown && (kind === "missing_actor" || kind === "missing_outcome" || kind === "missing_exception") && (
@@ -143,6 +165,7 @@ function GapCard({ ws, gap, onDone }: { ws: string; gap: Rec; onDone: () => Prom
               }}>Confirm this decision</Button>
             )}
           </div>
+          {canRead && <GapInterview ws={ws} gapId={String(gap.gap_id)} onConfirmed={onDone} />}
           {error && <Callout tone="danger" testid="business-gap-error">{error}</Callout>}
           {reading && reading.status !== "READY" && (
             <Callout tone="warn" testid="business-gap-interpret-uncovered">
@@ -156,7 +179,7 @@ function GapCard({ ws, gap, onDone }: { ws: string; gap: Rec; onDone: () => Prom
             <div data-testid="business-gap-preview-result" data-source={reading && reading.status === "READY" ? "reading" : "controls"} className="rounded-md border border-border p-3 grid gap-1">
               <p className="text-sm font-medium">{shown.noop ? "Nothing would change" : reading && reading.status === "READY" ? "Read from your words - if you confirm:" : "If you confirm:"}</p>
               <ul className="list-disc pl-5 text-sm">{((shown.summary ?? []) as string[]).map((t, i) => <li key={i}>{t}</li>)}</ul>
-              {reading && reading.status === "READY" && <Muted>Read as: {JSON.stringify(reading.proposed_answer)} from "{reading.quote}". Your own words are what gets recorded.</Muted>}
+              {reading && reading.status === "READY" && <Muted>Read as: {answerText(reading.proposed_answer)} from "{reading.quote}". Your own words are what gets recorded.</Muted>}
               <Tech><Muted>preview <code>{shown.preview_hash}</code> on snapshot <code>{shown.base_snapshot_id}</code></Muted></Tech>
             </div>
           )}
@@ -247,6 +270,7 @@ function Suggestions({ ws, proposals, onChanged }: { ws: string; proposals: Prop
 }
 
 export function BusinessGaps({ ws }: { ws: string }) {
+  const s = useSession();
   const [tick, setTick] = React.useState(0);
   const [data, setData] = React.useState<Queue | null>(null);
   const [err, setErr] = React.useState<ApiError | null>(null);
@@ -261,6 +285,7 @@ export function BusinessGaps({ ws }: { ws: string }) {
     <div className="grid gap-4" data-testid="business-gaps" data-count={data.gaps.length}>
       <KnowledgeVersion ws={ws} refreshKey={tick} onAccepted={refresh} />
       {data.proposals && <Suggestions ws={ws} proposals={data.proposals} onChanged={refresh} />}
+      {s.can("knowledge.confirm") && <ConflictScan ws={ws} canScan={s.can("ai.use")} />}
       {data.critical_accepted_unknown > 0 && <Callout tone="warn" testid="business-gaps-unknown">{data.critical_accepted_unknown} important question(s) are left open on purpose.</Callout>}
       {data.gaps.length === 0 ? <Muted testid="business-gaps-empty">No business question is open.</Muted>
         : data.gaps.map((g) => <GapCard key={g.gap_id} ws={ws} gap={g} onDone={refresh} />)}
