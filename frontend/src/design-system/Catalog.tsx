@@ -32,7 +32,8 @@ function Block({ id, title, children }: { id: string; title: string; children: R
 }
 
 // Synthetic task views (contract ripple-request-task/1) and assistant messages: illustrative only, never read from a server.
-const STEPS = (states: Record<string, string>, labels: [string, string][], par: string[] = []) => labels.map(([code, label]) => ({ code, label, state: states[code] ?? "future", ...(par.includes(code) ? { parallel_group: "after_knowledge_decision" } : {}) }));
+const STEPS = (states: Record<string, string>, labels: [string, string][], par: string[] = [], phases: Record<string, string> = {}) => labels.map(([code, label]) => ({ code, label, state: states[code] ?? "future",
+  ...(phases[code] ? { phase: phases[code] } : {}), ...(par.includes(code) ? { parallel_group: "after_knowledge_decision" } : {}) }));   // phase: the server's stages[].phase
 const BC_STEPS: [string, string][] = [["understand", "Request understood and confirmed"], ["draft", "Draft of the knowledge change"], ["clarify", "Open questions answered"], ["knowledge_decision", "Knowledge decision"],
   ["commit", "Knowledge committed"], ["file_decision", "File edits decided"], ["source_apply", "Source edits applied"], ["readback", "Source read back"]];
 const TASK_APPROVER = {
@@ -43,7 +44,7 @@ const TASK_APPROVER = {
     { code: "decide_file_writes", label: "Decide the proposed file edits", required: true, holder_label: "an approver", eligible_me: true, obligation_me: false, state: "future", step: "file_decision" }],
   waiting_on: [], expected_deliverables: [{ code: "knowledge_decision", label: "A recorded knowledge decision (approve, reject or request changes) with a reason; approving does not commit anything" },
     { code: "later", later: true, label: "Later, by other steps: the commit by a knowledge owner; the decision on the proposed file edits" }],
-  stages: STEPS({ understand: "done", draft: "done", clarify: "done", knowledge_decision: "current" }, BC_STEPS, ["commit", "file_decision"]),
+  stages: STEPS({ understand: "done", draft: "done", clarify: "done", knowledge_decision: "current" }, BC_STEPS, ["commit", "file_decision"], { knowledge_decision: "awaiting_decision" }),
 };
 const TASK_JUDGE = {
   title: "Manager approval limit: 1,000,000 JPY to 500,000 JPY", as_of: "2026-10-20T10:00:00Z", request_ref: { family: "intent_flow", id: "intent-catalog-2" },
@@ -51,7 +52,7 @@ const TASK_JUDGE = {
   obligations: [{ code: "ask_draft", label: "Ask for the AI draft of the change", required: true, holder_label: "the requester", eligible_me: true, obligation_me: false, state: "current", step: "draft", reason: "the requester is asked; your role may also do it" }],
   waiting_on: [{ holder: "requester", holder_label: "the requester", code: "ask_draft", step: "draft" }],
   expected_deliverables: [{ code: "draft", label: "An AI draft of the change with checked citations" }],
-  stages: STEPS({ conversation: "done", intent: "done", draft: "current" }, [["conversation", "Request stated in a conversation"], ["intent", "Request confirmed"], ["draft", "AI draft"], ["proposal", "Proposal prepared"]]),
+  stages: STEPS({ conversation: "done", intent: "done", draft: "current" }, [["conversation", "Request stated in a conversation"], ["intent", "Request confirmed"], ["draft", "AI draft"], ["proposal", "Proposal prepared"]], [], { draft: "not_started" }),
 };
 const SAMPLE_MESSAGES: Record<string, unknown>[] = [
   { message_id: "m1", state: "answered", question: "What should I do next?", current: true,

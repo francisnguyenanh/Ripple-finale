@@ -8,10 +8,11 @@ import { useAction } from "@/lib/useAction";
 import { useParam } from "@/lib/param";
 import { useSession } from "@/session";
 import type { Rec } from "@/features/changes/types";
+import { RunHold } from "./RunHold";
 
 const q = encodeURIComponent;
 const STATUS_WORDS: Record<string, string> = { ANSWERED: "Answered", PARTIAL: "Partly answered", NEEDS_CLARIFICATION: "More detail needed", ABSTAINED: "Not answered" };
-const JOB_WORDS: Record<string, string> = { waiting_for_approval: "Waiting to start", running: "Working on it", failed: "Could not answer", cancelled: "Cancelled" };
+const JOB_WORDS: Record<string, string> = { waiting_for_approval: "Waiting to start", waiting_for_slot: "Allowed, waiting for a worker slot", running: "Working on it", failed: "Could not answer", cancelled: "Cancelled" };
 const REASON_WORDS: Record<string, string> = {
   authority_revoked: "The person who asked no longer has permission to ask.",
   snapshot_moved: "The business knowledge changed before the answer was made. Ask again to use the latest version.",
@@ -84,6 +85,7 @@ export function BusinessAsk({ ws }: { ws: string }) {
   const [data, setData] = React.useState<Rec | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
   const [followUp, setFollowUp] = React.useState(false);
+  const [reload, setReload] = React.useState(0);
   const askWhy = React.useId();
   const mode = s.mode;
   React.useEffect(() => {
@@ -95,7 +97,7 @@ export function BusinessAsk({ ws }: { ws: string }) {
         const r = await api<Rec>("GET", `/v2/business/questions/${q(qid)}?workspace_id=${q(ws)}&mode=${mode}`);
         if (!live) return;
         setData(r); setErr(null);
-        if (r.status === "running" || r.status === "waiting_for_approval") timer = setTimeout(() => void tick(), 1500);
+        if (r.status === "running" || r.status === "waiting_for_approval" || r.status === "waiting_for_slot") timer = setTimeout(() => void tick(), 1500);
       } catch (e) {
         if (!live) return;
         if (e instanceof ApiError) setErr(e.status === 404 || e.status === 403 ? "This question is not available to your account." : "The answer could not be loaded.");
@@ -104,7 +106,7 @@ export function BusinessAsk({ ws }: { ws: string }) {
     };
     void tick();
     return () => { live = false; if (timer) clearTimeout(timer); };
-  }, [qid, ws, mode]);
+  }, [qid, ws, mode, reload]);
   const canAsk = s.can("knowledge.answer") && s.can("ai.use");
   const submit = async () => {
     const body: Rec = { workspace_id: ws, question: question.trim(), view };
@@ -129,7 +131,8 @@ export function BusinessAsk({ ws }: { ws: string }) {
         </div>
       ) : <Muted testid="qa-no-ask">You can read answers, but your role cannot ask new questions.</Muted>}
       {err && <Callout tone="danger" testid="qa-error">{err}</Callout>}
-      {data && data.status !== "done" && data.status !== "failed" && data.status !== "cancelled" && <Callout tone="wait" testid="qa-pending">{JOB_WORDS[data.status as string] ?? "Working on it"}...</Callout>}
+      {data && data.status !== "done" && data.status !== "failed" && data.status !== "cancelled" && <div data-testid="qa-pending" data-status={String(data.status)}>
+        <RunHold ws={ws} status={String(data.status)} hold={data.hold as Rec | undefined} onChanged={() => setReload((n) => n + 1)} /></div>}
       {data && (data.status === "failed" || data.status === "cancelled") && <Callout tone="danger" testid="qa-failed">{JOB_WORDS[data.status as string]}: {reasonText(data.reason as string | null)}</Callout>}
       {data && data.status === "done" && data.answer && <>
         <Muted testid="qa-question">Question: {String(data.question)}</Muted>

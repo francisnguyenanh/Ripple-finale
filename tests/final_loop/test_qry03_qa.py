@@ -223,7 +223,7 @@ def test_authority_is_rechecked_when_the_job_runs(qa_env):
     q = qa_env
     model = use(q, lambda p: obj("ABSTAINED"))
     r = ask(q, q.req, "What is the manager approval threshold?")
-    assert r.status_code == 200 and r.json()["status"] in ("running", "waiting_for_approval")
+    assert r.status_code == 200 and r.json()["status"] in ("running", "waiting_for_approval", "waiting_for_slot")
     PostgresIdentityStore(q.env.dsn).revoke_membership(q.env.tenant, f"p-{q.env.nonce}", q.env.ws, q.env.req)                                  # revoked before the worker runs it
     got = settle(q, q.admin, r.json()["question_id"])
     assert got["status"] == "failed" and got["reason"].startswith("authority_revoked") and model.calls == 0

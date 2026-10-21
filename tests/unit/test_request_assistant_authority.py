@@ -26,14 +26,14 @@ def ids(p, kind):
 
 
 def run(p, text, refs, kind="fact", outcome="answered"):
-    return ra.check_answer({"outcome": outcome, "answer_blocks": [{"text": text, "fact_refs": refs, "kind": kind}], "limitations": []}, p, LIMITS)
+    return ra.check_answer({"outcome": outcome, "answer_blocks": [{"text": text, "fact_refs": refs, "kind": kind}], "limitations": []}, p, LIMITS, legacy=True)
 
 
 def only_typed(p, text, refs, kind="fact", **assertion):
     """Checks v4 (AIG-01): a RIGHT authority claim in free text is still refused; the same claim is kept only as a typed assertion, rendered by the server."""
     assert run(p, text, refs, kind)["rejected"][0]["reason"] == "authority_in_free_text", text
     a = {"subject": "self", "polarity": True, "scope": "current", "fact_ref": refs[0], **assertion}
-    out = ra.check_answer({"outcome": "answered", "answer_blocks": [], "limitations": [], "authority_assertions": [a]}, p, LIMITS)
+    out = ra.check_answer({"outcome": "answered", "answer_blocks": [], "limitations": [], "authority_assertions": [a]}, p, LIMITS, legacy=True)
     assert out["status"] == "answered" and out["blocks"][0]["kind"] == "authority", (text, out)
     return out["blocks"][0]["text"]
 
@@ -60,7 +60,7 @@ def test_you_versus_they_and_the_p5_sentence():
     o = ids(viewer, "obligation")
     p5 = run(viewer, "You may not approve this request yourself at this current stage as you hold the obligation for the current step.", o, "suggestion")
     assert p5["status"] == "refused" and p5["rejected"][0]["reason"] == "contradicts_cited_obligation"         # not an empty "success"
-    assert only_typed(viewer, "You do not hold the current step; the requester holds it.", o, relation="holds", polarity=False) ==         "This step is not yours: Ask for the AI draft (held by the requester)."
+    assert only_typed(viewer, "You do not hold the current step; the requester holds it.", o, relation="holds", polarity=False) ==         "This step is not yours: Ask for the AI draft (held by the person who asked)."
 
 
 def test_permission_is_not_assignment_admin_may_but_is_not_asked():
@@ -102,7 +102,7 @@ def test_a_partly_refused_answer_is_partial_and_a_fully_refused_one_is_refused()
     o = ids(p, "obligation")
     st = next(f["id"] for f in p["facts"] if f["kind"] == "state")
     two = ra.check_answer({"outcome": "answered", "answer_blocks": [{"text": "The current stage is in the facts.", "fact_refs": [st], "kind": "fact"},
-                                                                    {"text": "The requester must decide it.", "fact_refs": o, "kind": "fact"}], "limitations": []}, p, LIMITS)
+                                                                    {"text": "The requester must decide it.", "fact_refs": o, "kind": "fact"}], "limitations": []}, p, LIMITS, legacy=True)
     assert two["status"] == "partial" and len(two["blocks"]) == 1 and two["rejected"][0]["reason"] == "holder_not_grounded"
 
 
@@ -121,4 +121,4 @@ def test_possessive_and_assigning_claims_need_a_step_that_is_the_readers():
     assert ra.authority_problem("You should ask for the AI draft.", [current_action], "suggestion") is None
     for text in ("No, the next step is not yours; it is waiting on the requester.", "The requester holds the next step.", "You may also do it, but you do not need to."):
         assert ra.authority_problem(text, [may_not_asked, waiting, permitted], "fact") is None, text
-    assert ra.CHECKS_VERSION == "request-assistant-checks/6"
+    assert ra.CHECKS_VERSION == "request-assistant-checks/13"

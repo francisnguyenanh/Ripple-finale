@@ -41,9 +41,7 @@ def rq_ui(qa_env, monkeypatch, tmp_path):                  # noqa: F811
     from tests.final_loop.test_chg02_impact import confirmed
     cid2, _ = confirmed(q, ACTOR_REQ, [OP_ACTOR])                                            # a second request, to switch to (before the assistant stub is set)
     q.cid2 = cid2
-    model = Model(lambda p: answer(blocks=[("The current stage is shown in the facts.", [fact_id(p, "state"), fact_id(p, "impact")], "fact")],
-                                   assertions=[{"subject": "self", "fact_ref": own_obligation(p), "relation": "holds", "polarity": True, "scope": "current"},
-                                               {"subject": "self", "fact_ref": own_obligation(p), "relation": "may", "polarity": False, "scope": "current"}]))   # false: corrected
+    model = Model(lambda p: answer(blocks=[("The current stage is shown in the facts.", [fact_id(p, "state"), fact_id(p, "impact")], "fact")]))   # answer/5: no authority from the model
     q.monkeypatch.setattr(explain, "_client_for_model", lambda m: model)
     worker = LiveWorker(q.env).start()
     server = ServerThread().start()
@@ -73,6 +71,10 @@ def test_task_frame_and_private_assistant_on_a_business_change(rq_ui, pw_browser
     assert frame.locator('[data-testid="task-map-step"]').count() == 8
     assert "task=map" in page.url                                                                         # RUX-03: the view is in the URL
     assert frame.locator('[data-testid="task-map-step"][data-parallel="after_knowledge_decision"]').count() == 2   # commit and file decision: parallel, not serialised
+    decision = frame.locator('[data-testid="task-map-step"][data-step="knowledge_decision"]')                      # D4: the record's phase, not a "running" badge
+    expect(decision).to_have_attribute("data-phase", "awaiting_decision")
+    expect(decision.get_by_test_id("status-badge")).to_have_text("Waiting for a decision")
+    expect(frame.locator('[data-testid="task-map"] [data-testid="status-badge"][data-state="running"]')).to_have_count(0)    # nothing runs at this stage
     assert frame.locator('[data-testid="task-map-visual"] li[data-parallel="after_knowledge_decision"] [data-step]').count() == 2   # EUI-04: stacked in one column
     assert frame.get_by_test_id("task-map-visual").get_attribute("aria-hidden") == "true"                    # the list stays the text equivalent
     frame.locator("#task-step-knowledge_decision").click()
@@ -110,12 +112,12 @@ def test_task_frame_and_private_assistant_on_a_business_change(rq_ui, pw_browser
     panel.get_by_test_id("assistant-ask").click()
     msg = panel.locator('[data-testid="assistant-message"]').first
     expect(msg).to_have_attribute("data-state", "answered", timeout=60000)
-    expect(msg.locator('[data-testid="assistant-block"]')).to_have_count(3)
-    expect(msg.locator('[data-testid="assistant-block"][data-kind="authority"]').first).to_contain_text("Who acts: You hold the current step")   # AIG-01: the server's sentence
-    expect(msg.locator('[data-testid="assistant-block"][data-corrected="true"]')).to_contain_text("corrected: the assistant's claim did not match the task record")   # checks/6
-    expect(msg.locator('[data-testid="assistant-block"][data-corrected="true"]')).to_contain_text("You may do this")
-    msg.locator('[data-testid="assistant-block"][data-corrected="true"]').scroll_into_view_if_needed()
-    _shot(page, "6_corrected_authority")
+    expect(msg.locator('[data-testid="assistant-block"][data-kind="authority"]').first).to_contain_text("Who acts: You hold the current step")   # from the task record
+    expect(msg.locator('[data-testid="assistant-block"][data-kind="authority"]').first).to_contain_text("Task record")
+    expect(msg.locator('[data-testid="assistant-block"][data-kind="fact"]')).to_have_count(1)                 # the model's own block, labelled AI
+    assert msg.locator('[data-testid="assistant-block"][data-corrected="true"]').count() == 0
+    msg.locator('[data-testid="assistant-block"][data-kind="authority"]').first.scroll_into_view_if_needed()
+    _shot(page, "6_task_record_authority")
     expect(msg.get_by_test_id("assistant-next")).to_contain_text("approve")
     assert model.calls == 1 and counts(env)["v2_business_decisions"] == before["v2_business_decisions"]   # "I agree" approved nothing
     assert _threads(env, cid) == 1                                                                         # the first ask created the one private thread

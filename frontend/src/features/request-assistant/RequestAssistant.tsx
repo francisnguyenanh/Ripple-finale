@@ -3,7 +3,7 @@
 // "Ask" send one paid question (stated next to the buttons); "Edit question" only fills the composer. The first question creates the private thread in the same
 // idempotent call. "Go to" chips focus an existing control on the page and never submit it. Answers show their blocks as facts, interpretations or suggestions with the
 // facts they cite; refused blocks are counted, not shown. Who holds a step or may act ("Who acts") is a sentence written by the server from a checked assertion, never the
-// model's own wording (AIG-01); a claim the task record contradicts is replaced by the record's sentence, marked corrected (checks/6);
+// model's own wording: since answer/5 the server writes it from the reader's task record (origin task_record); stored checks/6 answers may show a corrected sentence;
 // an answer stored under older checks says so and hides its free-text authority statements. An answer asked under different access is withheld until asked again. The assistant never acts: next steps are
 // the request's own controls, named here, never submitted from the chat. "I agree" in the chat is not an approval.
 import * as React from "react";

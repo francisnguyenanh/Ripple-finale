@@ -27,29 +27,93 @@ def stage_block(p):
     return ("The stage is in the facts.", [fact_id(p, "state")], "fact")
 
 
-def test_typed_authority_is_rendered_by_the_server_free_authority_is_refused_and_the_result_carries_its_identity(ra_env):
+def test_the_record_states_authority_prose_authority_is_refused_and_the_result_carries_its_identity(ra_env):
+    """answer/5 end to end: the authority section comes from the asker's task record (origin task_record), the model's prose claim is refused and counted, the
+    model's explanation is kept, the prompt shows the server's section as data, and the result carries its identity."""
     q = ra_env
     cid, _approver = prepared(q)
 
     def model_fn(p):
         act = fact_id(p, "action")
         return answer(blocks=[("The change waits for the knowledge decision before any file is edited.", [fact_id(p, "state")], "interpretation"),
-                              ("You can approve the knowledge change.", [act], "fact")],
-                      assertions=[{"subject": "self", "fact_ref": act, "relation": "may", "polarity": True, "scope": "current"},          # false for the requester
-                                  {"subject": "holder", "fact_ref": current_obligation(p), "relation": "holds", "polarity": True, "scope": "current"}])
+                              ("You can approve the knowledge change.", [act], "fact")])                       # false for the requester, and prose authority anyway
     model = use(q, model_fn)
     t = thread(q, q.req, cid)
     ask(q, q.req, t["thread_id"], "Can I approve it, and who decides?", "key-0040-aaaa", 0)
     m = settle(q, q.req, t["thread_id"])["messages"][0]
     reasons = sorted(r["reason"] for r in m["answer"]["rejected"])
     blocks = m["answer"]["blocks"]
-    assert model.calls == 1 and m["answer"]["status"] == "partial" and [b["kind"] for b in blocks] == ["authority", "authority", "interpretation"]
-    assert "assertion_contradicts_fact" in reasons and ("contradicts_cited_permission" in reasons or "authority_in_free_text" in reasons)
-    assert blocks[0].get("corrected") is True and blocks[0]["text"].startswith("You may not do this:")      # checks/6: the false "may" is answered by the record
-    assert "holds this step" in blocks[1]["text"] and not blocks[1].get("corrected") and "legacy_checks" not in m["answer"]
+    auth = [b for b in blocks if b["kind"] == "authority"]
+    assert model.calls == 1 and m["answer"]["status"] == "partial" and auth and all(b["origin"] == "task_record" for b in auth)
+    assert [b["kind"] for b in blocks if b["kind"] != "authority"] == ["interpretation"]
+    assert reasons and reasons[0] in ("contradicts_cited_permission", "authority_in_free_text", "unbound_affirmation")
+    from infra.adapters import v2_request_assistant as vra                                       # the section is exactly the record's rendering for this asker
+    pack_now = vra.build_context(q.env.store, q.env.tenant, q.env.ws, "business_change", cid, {"tenant_id": q.env.tenant, "workspace_id": q.env.ws,
+                                 "account_id": q.env.req, "roles": ("requester",)})
+    assert [(b["text"], b["fact_refs"]) for b in auth] == [(x["text"], x["fact_refs"]) for x in ra.authority_summary(pack_now["facts"])]
+    assert m["answer"]["authority_accounting"]["source"] == "task_record" and m["answer"]["authority_accounting"]["model_prose_authority_refused"] == 1
     assert (m["answer"]["checks_version"], m["answer"]["answer_schema"], m["answer"]["locale"], m["answer"]["context_version"]) == \
         (ra.CHECKS_VERSION, ra.ANSWER_SCHEMA, "en", ra.CONTEXT_VERSION)
-    assert "authority_assertions" in model.prompts[0]
+    assert "<authority>" in model.prompts[0] and "authority_assertions" not in model.prompts[0]
+
+
+def test_a_role_named_in_a_business_explanation_is_kept_and_a_third_person_authority_claim_is_refused_and_counted(ra_env):
+    """checks/9 through the worker (class of RQA-DECLINE H2): naming the approver while explaining the stage is not an authority claim; a mixed sentence that adds
+    who must act, and a third-person permission claim, are refused and counted as prose authority."""
+    q = ra_env
+    cid, _approver = prepared(q)
+
+    def model_fn(p):
+        st = fact_id(p, "state")
+        return answer(blocks=[("The current stage is the knowledge decision, and the reason given is to state the scope of the change before the approver decides.", [st], "fact"),
+                              ("The approver reviewed the draft, and the requester has to answer it now.", [st], "fact"),
+                              ("Only the approver can approve this change.", [st], "fact")])
+    model = use(q, model_fn)
+    t = thread(q, q.req, cid)
+    ask(q, q.req, t["thread_id"], "Where is it and what is the reason?", "key-0041-aaaa", 0)
+    m = settle(q, q.req, t["thread_id"])["messages"][0]
+    kept = [b["text"] for b in m["answer"]["blocks"] if b["kind"] != "authority"]
+    assert model.calls == 1 and m["answer"]["status"] == "partial" and m["answer"]["checks_version"] == ra.CHECKS_VERSION
+    assert kept == ["The current stage is the knowledge decision, and the reason given is to state the scope of the change before the approver decides."]
+    assert len(m["answer"]["rejected"]) == 2 and all(r["reason"] in ra.AUTHORITY_TEXT_REASONS for r in m["answer"]["rejected"])
+    assert m["answer"]["authority_accounting"]["model_prose_authority_refused"] == 2
+
+
+def test_one_cause_rule_and_guarded_prose_through_the_worker_for_two_readers(ra_env):
+    """checks/10 through ask -> worker -> store, for the requester and the approver of the same request: the prompt lists exactly the pack's facts that record a
+    reason (the validator's rule); a stage restated as a cause is refused and the withheld why is said; the stage as a fact and a business rule naming a title are
+    kept; an authority claim by a title in a block or in a limitation is refused and counted; a decline by the assistant is kept."""
+    q = ra_env
+    cid, approver = prepared(q)
+    from infra.adapters import v2_request_assistant as vra
+    for client, account, roles, key in ((q.req, q.env.req, ("requester",), "key-0042-aaaa"), (approver, None, ("change_approver",), "key-0043-aaaa")):
+        def model_fn(p):
+            st = fact_id(p, "state")
+            return answer(blocks=[("The request is at the knowledge decision stage.", [st], "fact"),
+                                  ("The request is stopped because the knowledge decision is still open.", [st], "cause"),
+                                  ("Purchases from high-risk suppliers go to the Finance Controller regardless of amount.", [st], "interpretation"),
+                                  ("The Finance Controller has to approve it.", [st], "fact")],
+                          limitations=["The assistant cannot approve this request; it only reads and explains.", "Only the Finance Controller can approve it."])
+        model = use(q, model_fn)
+        t = thread(q, client, cid)
+        ask(q, client, t["thread_id"], "Why is it here, and can you approve it?", key, 0)
+        m = settle(q, client, t["thread_id"])["messages"][0]
+        a = m["answer"]
+        line = next(l for l in model.prompts[0].split(chr(10)) if "which for this request are:" in l)
+        listed = line.split("which for this request are: ", 1)[1].split(". The stage", 1)[0]
+        assert a["checks_version"] == ra.CHECKS_VERSION and a["status"] == "partial"
+        assert [b["text"] for b in a["blocks"] if b["kind"] != "authority"] == ["The request is at the knowledge decision stage.",
+                                                                              "Purchases from high-risk suppliers go to the Finance Controller regardless of amount."]
+        assert sorted((r["kind"], r["reason"]) for r in a["rejected"]) == [("cause", "cause_without_cause_fact"), ("fact", "authority_in_free_text"),
+                                                                           ("limitation", "authority_in_free_text")]
+        assert a["authority_accounting"]["model_prose_authority_refused"] == 2
+        assert a["limitations"][0] == "The assistant cannot approve this request; it only reads and explains."
+        note = [x for x in a["limitations"] if x.startswith("An explanation of why was not shown: ")]
+        assert len(note) == 1 and (("it did not cite" in note[0]) == (listed != "(none)"))
+        if account:                                                                              # the list is the validator's rule on the asker's own pack
+            pk = vra.build_context(q.env.store, q.env.tenant, q.env.ws, "business_change", cid, {"tenant_id": q.env.tenant, "workspace_id": q.env.ws,
+                                   "account_id": account, "roles": roles})
+            assert listed == (", ".join(f"{f['id']} [{f['kind']}]" for f in ra.cause_basis(pk["facts"])) or "(none)")
 
 
 def test_enqueue_and_worker_select_the_same_pack_under_reversed_enumeration_and_another_read_time(ra_env, monkeypatch):
@@ -78,7 +142,7 @@ def test_enqueue_and_worker_select_the_same_pack_under_reversed_enumeration_and_
     monkeypatch.setattr(vra, "build_context", build)
     monkeypatch.setattr(v2_request_tasks, "task_view", tv)
     monkeypatch.setattr(v2_business_review, "review_view", review)
-    model = use(q, lambda p: answer(blocks=[stage_block(p)], assertions=[holds_mine(p)]))
+    model = use(q, lambda p: answer(blocks=[stage_block(p)]))
     t = thread(q, approver, cid)
     ask(q, approver, t["thread_id"], "What next?", "key-0041-bbbb", 0)
     at_ask = packs[-1]
@@ -144,13 +208,13 @@ def test_an_answer_stored_under_older_checks_is_shown_with_a_note_and_without_fr
     old.pop("answer_schema", None)
     with q.env.store._tx() as cur:
         cur.execute("UPDATE v2_request_messages SET answer=%s WHERE tenant_id=%s AND workspace_id=%s AND message_id=%s", (json.dumps(old), q.env.tenant, q.env.ws, m["message_id"]))
-    calls = model.calls
+    calls, n_stored = model.calls, len(old["blocks"])
     shown = read(q, approver, t["thread_id"]).json()["messages"][0]["answer"]
-    assert shown["legacy_checks"] is True and shown["legacy_withheld"] == 1 and [b["text"] for b in shown["blocks"]] == ["The stage is in the facts."]
+    assert shown["legacy_checks"] is True and shown["legacy_withheld"] == 1 and [b["text"] for b in shown["blocks"] if b.get("origin") != "task_record"] == ["The stage is in the facts."]
     with q.env.store._tx() as cur:
         cur.execute("SELECT answer FROM v2_request_messages WHERE tenant_id=%s AND workspace_id=%s AND message_id=%s", (q.env.tenant, q.env.ws, m["message_id"]))
         stored = cur.fetchone()[0]
-    assert len((stored if isinstance(stored, dict) else json.loads(stored))["blocks"]) == 2 and model.calls == calls    # not rewritten, nothing regenerated on read
+    assert len((stored if isinstance(stored, dict) else json.loads(stored))["blocks"]) == n_stored and model.calls == calls    # not rewritten, nothing regenerated on read
 
 
 def test_every_shown_impact_rule_is_its_own_fact_even_when_rules_share_a_link_kind(ra_env):
@@ -169,3 +233,16 @@ def test_every_shown_impact_rule_is_its_own_fact_even_when_rules_share_a_link_ki
     assert len({r["link"] for r in rules}) < len(rules), "precondition: at least two shown rules share a link kind"
     assert rules and len(impact) == min(len(rules), vra.IMPACT_LIMIT)
     assert len({f["key"] for f in impact}) == len(impact) and all(f["key"].startswith("impact:rk-") for f in impact)
+
+
+def test_an_old_shape_model_object_is_a_schema_violation_and_leaves_no_partial_answer(ra_env):
+    """C-2: a model object that still carries authority assertions (answer/2-4 shape) is never read on answer/5: the whole answer is unavailable."""
+    q = ra_env
+    cid, _approver = prepared(q)
+    model = use(q, lambda p: answer(blocks=[stage_block(p)], assertions=[{"subject": "self", "fact_ref": current_obligation(p), "relation": "holds", "polarity": True,
+                                                                          "scope": "current"}]))
+    t = thread(q, q.req, cid)
+    ask(q, q.req, t["thread_id"], "Is the next step mine?", "key-0090-aaaa", 0)
+    m = settle(q, q.req, t["thread_id"])["messages"][0]
+    assert model.calls == 1 and m["state"] == "unavailable" and m["answer"]["blocks"] == []
+    assert any(k in (m["answer"].get("reason") or "") for k in ("schema_violation", "keys"))

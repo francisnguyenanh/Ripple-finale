@@ -37,7 +37,7 @@ EXTRA = {
     ("change_risk_memo", "prompt_template"): {"status": "insufficient", "statements": [], "open_questions": [NOTE]},
     ("ma_synthesis_memo", "prompt_template"): {"status": "insufficient", "statements": [], "open_questions": [NOTE]},
     # request assistant (2026-10-20): the panel shows "The facts do not answer this" with the simulated note; a real answer needs an approved live window
-    ("request_assistant", "prompt_template"): {"outcome": "insufficient_context", "answer_blocks": [], "limitations": [NOTE], "authority_assertions": []},
+    ("request_assistant", "prompt_template"): {"outcome": "insufficient_context", "answer_blocks": [], "limitations": [NOTE]},   # answer/5: no authority field from a model
 }
 RUBRIC_DECLINES = {"You are the SCENARIO DESIGNER": {"status": "UNSURE", "scenarios": [], "notes": [NOTE]},
                    "You are the ASSUMPTION CRITIC": {"status": "UNSURE", "findings": [], "disputes": [], "notes": [NOTE]},
@@ -61,30 +61,57 @@ EXTRA_BY_NAME = {f"{name}:{key}": decline for (name, key), decline in EXTRA.item
 _NUM = re.compile(r"(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+)(?![\w.])")
 
 
-def numeric_understanding(prompt: str):
-    """RULES, not a model: a request of the form "... <rule words> ... from <old> to <new> ..." becomes ONE set_value operation on the single shown rule whose text holds
-    <old>; anything else returns None (the generic decline). Numbers are copied from the request; nothing is invented. Labelled SIMULATED in every result."""
+def _parts(prompt: str):
     try:
         request = prompt.split("<request>" + chr(10), 1)[1].split(chr(10) + "</request>", 1)[0].strip()
         rules_block = prompt.split("<rules>" + chr(10), 1)[1].split(chr(10) + "</rules>", 1)[0]
     except IndexError:
-        return None
-    m = re.search(r"from\s+" + _NUM.pattern + r"(?:\s*[A-Za-z]{2,4})?\s+to\s+" + _NUM.pattern, request, re.I)
-    if not m:
-        return None
-    old, new = m.group(1).replace(",", ""), m.group(2).replace(",", "")
-    rules = re.findall(r"- id=(\S+) authority=\S+ status=\S+" + chr(10) + r"  text: (.*)", rules_block)
-    hits = [(rid, text) for rid, text in rules if re.search(r"(?<![\d.])" + re.escape(old) + r"(?![\d])", text.replace(",", ""))]
-    if len(hits) > 1:                                                # several rules hold the old number: keep the ones sharing the most words with the request
-        words = set(re.findall(r"[a-z]{5,}", request.lower()))
-        scored = sorted(((len(words & set(re.findall(r"[a-z]{5,}", t.split(" | ", 1)[0].lower()))), rid) for rid, t in hits), reverse=True)   # title words only (scope/actor words are shared by many rules)
-        hits = [h for h in hits if h[0] == scored[0][1]] if scored[0][0] > (scored[1][0] if len(scored) > 1 else -1) else hits
+        return None, []
+    rules = [(rid, text, text.split(" | ", 1)[0]) for rid, text in re.findall(r"- id=(\S+) authority=\S+ status=\S+" + chr(10) + r"  text: (.*)", rules_block)]
+    return request, rules
+
+
+def _words(s: str) -> set:
+    return set(re.findall(r"[a-z]{5,}", s.lower())) - {"should", "become", "change", "raise", "lower", "please", "would", "which", "their", "there", "about"}
+
+
+def rule_understanding(prompt: str) -> dict:
+    """RULES, not a model (F-ACC-3, 2026-10-21), labelled SIMULATED in every result; nothing is invented, every number is copied from the request:
+    - READY: one numeric change on ONE shown rule. The new value follows "to" / "become(s)" / "into"; the rule is the single shown rule that holds the other number of
+      the request (the old value), or else the single rule whose title shares the most words with the request (at least two).
+    - CLARIFY, with one concrete next sentence (the input stays open, so the person writes the request again): a new value with several candidate rules (they are
+      named), or a rule without a new value.
+    - UNSUPPORTED: anything that is not a change of one number of a shown rule (a change of actor, scope or exception needs a real model in an approved live window)."""
+    request, rules = _parts(prompt)
+    if request is None:
+        return dict(DECLINES["change_understand"])
+    nums = [n.replace(",", "") for n in _NUM.findall(request)]
+    m = re.search(r"\b(?:to|becomes?|into)\s+" + _NUM.pattern, request, re.I)
+    new = m.group(1).replace(",", "") if m else None
+    others = [n for n in nums if n != new]
+    hits = [r for r in rules if any(re.search(r"(?<![\d.])" + re.escape(o) + r"(?![\d])", r[1].replace(",", "")) for o in others)] if others else []
     if len(hits) != 1:
-        return None
-    hits = [hits[0][0]]
-    return {"status": "READY", "message": "SIMULATED reading (rules, not a model): one numeric change, numbers copied from your words. Please check it.",
-            "operations": [{"kind": "set_value", "rule_id": hits[0], "candidate_rule_ids": [hits[0]], "desired": {"value": int(new)}, "user_quote": request[:400]}],
-            "questions": [], "assumptions": ["Only the number changes; scope, actor and conditions are read by a person."]}
+        ask = _words(request)
+        scored = sorted(((len(ask & _words(title)), rid, title) for rid, _text, title in rules if _NUM.search(title)), reverse=True)
+        best = [s for s in scored if s[0] >= 2 and s[0] == (scored[0][0] if scored else 0)]
+        if len(best) == 1 and not hits:
+            hits = [r for r in rules if r[0] == best[0][1]]
+        elif len(hits) > 1 or len(best) > 1:
+            names = [h[2] for h in hits] if len(hits) > 1 else [b[2] for b in best]
+            return {"status": "CLARIFY", "message": "SIMULATED reading (rules, not a model): several rules match your words.", "operations": [],
+                    "questions": [f"Which rule do you mean: {' or '.join(repr(n) for n in names[:3])}? Write the request again with words from that rule and the new value."],
+                    "assumptions": []}
+    if len(hits) == 1 and new is None:
+        return {"status": "CLARIFY", "message": "SIMULATED reading (rules, not a model): the rule is clear, the new value is missing.", "operations": [],
+                "questions": [f"What should the new value of {hits[0][2]!r} be? Write it as: change it to <number> JPY."], "assumptions": []}
+    if len(hits) == 1:
+        rid = hits[0][0]
+        return {"status": "READY", "message": "SIMULATED reading (rules, not a model): one numeric change, numbers copied from your words. Please check it.",
+                "operations": [{"kind": "set_value", "rule_id": rid, "candidate_rule_ids": [rid], "desired": {"value": int(new)}, "user_quote": request[:400]}],
+                "questions": [], "assumptions": ["Only the number changes; scope, actor and conditions are read by a person."]}
+    return {"status": "UNSUPPORTED", "operations": [], "questions": [], "assumptions": [],
+            "message": ("SIMULATED reading (rules, not a model): it only understands a change of one number on one shown rule, e.g. "
+                        "'Raise the manager approval threshold to 2,500,000 JPY'. Other changes need a real model in an approved live window.")}
 
 
 class SimFinal:
@@ -100,7 +127,7 @@ class SimFinal:
         for name, marker in self.markers.items():
             if marker and prompt.startswith(marker):
                 self.calls += 1
-                obj = numeric_understanding(prompt) if name == "change_understand" else None
+                obj = rule_understanding(prompt) if name == "change_understand" else None
                 return self._reply(prompt, obj or DECLINES.get(name) or EXTRA_BY_NAME[name])
         for rubric, decline in RUBRIC_DECLINES.items():
             if rubric in prompt:

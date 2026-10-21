@@ -44,8 +44,8 @@ def _obligation(code, label, *, required=True, holder, holder_label, eligible_me
             "obligation_me": bool(eligible_me and (assigned_me if obligation_me is None else obligation_me)), "state": state, **({"reason": reason} if reason else {})}
 
 
-def _steps(spec, states: dict) -> list:
-    return [{"code": c, "label": l, "state": states.get(c, "future")} for c, l in spec]
+def _steps(spec, states: dict, phases: dict | None = None) -> list:
+    return [{"code": c, "label": l, "state": states.get(c, "future"), **({"phase": phases[c]} if phases and c in phases else {})} for c, l in spec]
 
 
 # ---- intent_flow ---------------------------------------------------------------------------------------------------------------------------------------------------
@@ -249,6 +249,7 @@ def _business_view(store, tenant, ws, rid, authority) -> dict:
         stage = {"code": "NOT_CONFIRMED", "label": "The request is not confirmed yet", "family_state": rec.get("execution_status")}
         return _dto("business_change", rid, None, title, stage, obligations, waiting, blockers, actions, _steps(BUSINESS_STEPS, states), {}, inputs, deliverables)
     can, draft = view["can"], view["draft"]
+    phases = {}
     states.update(understand="done", draft="done")
     inputs += [{"kind": "draft", "ref": rid, "label": "Rule before / after and the proposed relation updates"}]
     is_admin_only = "admin" in roles and "change_approver" not in roles
@@ -325,6 +326,8 @@ def _business_view(store, tenant, ws, rid, authority) -> dict:
         src = view["source"]
         if src["job"] is not None:
             states["source_apply"] = {"COMPLETED": "done", "FAILED": "failed", "CANCELLED": "failed"}.get(src["job"].get("status"), "current")
+            if states["source_apply"] == "current":
+                phases["source_apply"] = "running"                                        # the apply job exists and has not finished
         elif f is not None and f["action"] == "approve" and committed is not None:
             states["source_apply"] = "current"
             obligations.append(_obligation("apply_source_edits", "Apply the approved source edits", holder="role_pool", holder_label="a person who may apply changes",
@@ -350,7 +353,7 @@ def _business_view(store, tenant, ws, rid, authority) -> dict:
     if moved or changes_requested:                                                        # the way forward the projection names is also an action with its own predicate
         actions.append({"action": "restate_request", "label": BUSINESS_ACTION_LABEL["restate_request"], "allowed": restate_ok, "serves": BUSINESS_SERVES["restate_request"],
                         **({} if restate_ok else {"reason": "AI use is switched off for you" if "intent.create" in perms else "your role cannot state a change request"})})
-    return _dto("business_change", rid, None, title, stage, obligations, waiting, blockers, actions, _steps(BUSINESS_STEPS, states), axes, inputs, deliverables)
+    return _dto("business_change", rid, None, title, stage, obligations, waiting, blockers, actions, _steps(BUSINESS_STEPS, states, phases), axes, inputs, deliverables)
 
 
 # what each business action is called for a reader, and which obligation it serves (an action is a recommended next step only for an obligation the reader is asked to do now)
@@ -396,6 +399,31 @@ INTENT_DELIVERABLE = {"NEEDS_CHECK": "The check that must hold after the change,
 
 
 # ---- shared --------------------------------------------------------------------------------------------------------------------------------------------------------
+# Step phase (D4, 2026-10-21): where a step stands, derived from what the record holds for it (a system wait or a running job, the current obligation's kind, the
+# step state), so "current" is never read as "running". A current step with no recorded wait, obligation or running work is `unknown`, said as such.
+PHASE_LABEL = {"done": "done", "failed": "failed or stopped", "blocked": "blocked", "future": "later", "not_applicable": "not needed", "partial": "partly done",
+               "running": "in progress (the system is working on it)", "not_started": "current step, not started yet",
+               "awaiting_decision": "current step, waiting for a decision", "awaiting_action": "current step, waiting for an action",
+               "awaiting_other_step": "waiting until another step is done", "unknown": "current step; the record does not show what it is waiting for"}
+START_CODES = frozenset({"ask_draft", "continue_analysis", "needs_check", "run_review", "prepare_approval", "restate_request", "ready_to_apply", "apply_source_edits"})
+DECISION_CODES = frozenset({"decide_knowledge", "decide_file_writes", "awaiting_decision", "awaiting_result", "needs_attention"})
+
+
+def _phase(stage: dict, obligations: list, waiting: list) -> str:
+    if stage.get("phase"):                                                                 # set by the family view from a job it read (e.g. a running source apply)
+        return stage["phase"]
+    st, code = stage["state"], stage["code"]
+    if st not in ("current", "waiting"):
+        return st if st in PHASE_LABEL else "unknown"
+    if any(w.get("step") == code and w.get("holder") == "system" for w in waiting):
+        return "running"
+    here = [o for o in obligations if o.get("step") == code and o.get("state") == "current"]
+    here = [o for o in here if o.get("required")] or here
+    if here:
+        c = here[0]["code"]
+        return "not_started" if c in START_CODES else "awaiting_decision" if c in DECISION_CODES else "awaiting_action"
+    return "awaiting_other_step" if st == "waiting" else "unknown"
+
 
 def _dto(family, rid, canonical, title, stage, obligations, waiting, blockers, actions, stages, axes, inputs, deliverables, coverage=None, at=None) -> dict:
     asked_now = {o["code"] for o in obligations if o["obligation_me"] and o["state"] == "current"}
@@ -411,6 +439,9 @@ def _dto(family, rid, canonical, title, stage, obligations, waiting, blockers, a
         for s in stages:
             if s["code"] in par:
                 s["parallel_group"] = par[s["code"]]
+    for s in stages:                                                                        # what the record shows for each step, never guessed from the word "current"
+        s["phase"] = _phase(s, obligations, waiting)
+        s["phase_label"] = PHASE_LABEL[s["phase"]]
     return {"schema": SCHEMA, "request_ref": {"family": family, "id": rid, **({"canonical_ref": {"family": family, "id": canonical}} if canonical else {})},
             "title": title, "as_of": _now(), "availability": "available", "stage": stage, "obligations": obligations, "waiting_on": waiting, "blockers": blockers,
             "input_refs": inputs, "expected_deliverables": deliverables, "permitted_actions": actions, "stages": stages, "completion_axes": axes, "coverage": coverage or {},

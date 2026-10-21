@@ -65,6 +65,9 @@ def test_intent_request_task_frame_map_my_work_and_no_call_on_open(env, ch, pw_b
         _shot(page, "2_task_frame_requester")
         frame.get_by_test_id("task-mode-map").click()
         expect(frame.locator('[data-testid="task-map-step"][data-step="draft"]').get_by_test_id("task-map-yours")).to_be_visible()
+        draft = frame.locator('[data-testid="task-map-step"][data-step="draft"]')                                 # D4: current but not started: never a "running" badge
+        expect(draft).to_have_attribute("data-phase", "not_started")
+        expect(draft.get_by_test_id("status-badge")).to_have_text("Not started")
         frame.get_by_test_id("assistant-launch").click()
         panel = frame.get_by_test_id("request-assistant")
         expect(panel.get_by_test_id("assistant-question")).to_be_visible(timeout=WAIT)                 # EUI-02: no Start step

@@ -47,6 +47,13 @@ such records to every `project.read` member).
 - The route adds `features: {request_assistant: on|off}` (the page hides the launcher; the assistant routes refuse by themselves).
 - `stages[]`: the family's canonical steps `{code, label, state: done|current|waiting|blocked|failed|future|not_applicable, parallel_group?}` in order; steps done by different
   people in either order share a `parallel_group` (business change: knowledge commit and file decision, `after_knowledge_decision`).
+- `stages[].phase` / `phase_label` (2026-10-21): where the step stands, derived from what the record holds for it, never from the word `current`:
+  - `running` = a system wait or an unfinished job on the step ("in progress");
+  - `not_started` = the current obligation starts the step's work (ask for the draft, run the analysis / review, prepare the approval, apply, state a new request);
+  - `awaiting_decision` = the current obligation is a decision; `awaiting_action` = another current obligation (confirm, answer, respond, commit);
+  - `awaiting_other_step` = the step waits until another step is done; `blocked`, `failed` (failed or stopped), `done`, `future`, `not_applicable` follow the state;
+  - `unknown` = a current step with no recorded wait, obligation or running work, shown as such.
+  The task frame shows this phase (a spinning "in progress" badge only for `running`); the request assistant's context states the same phases.
 - Work list `GET /v2/work/inbox` (RUX-04) places every readable request of both families by this projection only: `sections` = `mine` (a current required obligation the
   reader is asked to do), `optional`, `blocked` (the reader's request that nobody can move on its current path), `waiting_human`, `waiting_system`, `recent`; each item
   carries `family`, `page`, `params`, `stage`, `step`, `blocked`, `blockers`; a request whose view fails is counted in `unavailable`, never shown as "no work". The legacy
@@ -143,3 +150,51 @@ Support tier: the confirmed request, rule changes, impact, current decisions. Hi
   3. the server corrections: `authority` blocks with `corrected: true`, `origin: "server_correction"` and `corrects: <index of the refused assertion>`.
 - **`authority_accounting`:** model_assertions, model_kept, model_contradicted, model_unsupported, model_unknown_fact, server_corrections, shown_authority and shown_from_model. Evaluations score the model from the `model_*` counts only: a contradicted assertion is a model error even when the reader sees the corrected sentence. What the reader sees is scored separately (`aig-03-scorer/2`, developing tool).
 - **Q2:** collected under checks/5 and scored by `aig-03-q2-scorer/1`. It stays as recorded and says nothing about checks/6 live behaviour.
+
+### 6.z Server-stated authority (`request-assistant-answer/5`, `request-assistant-checks/13`, config version 9, `request-assistant-context/3`; supersedes the model-chosen assertions of 6.y for new answers)
+- **Responsibility split:**
+  - Who holds each step, what the reader may do and who the request is waiting on comes only from the reader's task record, filtered by the reader's rights and bound to the pack version.
+  - The model does not state it and is not the source for it.
+  - The model's part is the why: it understands the question, explains causes and blockers from the cited facts, links evidence, distinguishes same-stage / same-holder requests by their own causes, says what is unknown, and refuses honestly when the question is out of scope.
+- **Authority section** (`blocks` with `kind: authority`, `origin: task_record`), rendered by the server from the pack:
+  - every current or blocked step with the reader's relation:
+    - "You hold the current step: X" (`(optional)` when not required) only when the record assigns it to the reader;
+    - "This step is not assigned to you: X. It is open to G; you may act on it, but you are not asked to / you cannot act on it now" for a pool step;
+    - "This step is not yours: X (held by N)" for a named holder;
+    - "This step is blocked: X";
+  - each wait ("The request is waiting on N");
+  - each action the reader may do that is not their current step;
+  - "No step on this request is open right now" when the record has neither steps nor waits.
+  - At most 6 sentences. Assignment comes only from the record (`obligation_me` / `assigned`), never from a role or from eligibility.
+  - The same section is given to the model in the prompt as data; it must not restate or contradict it.
+- **Requests to act (config version 7):** the assistant only reads and explains. When the question asks it to perform an action, the model is instructed to say in `limitations` that the assistant does not perform that action, then it may explain or point to the valid step from the facts. An instruction to ignore or change its instructions is not followed; any legitimate part of the question is still answered. A question that only asks how something is done is answered, not declined. This is model behaviour (evaluated live, not guaranteed by a check); no path to perform an action exists either way.
+- **Model output:** exactly `{outcome, answer_blocks[], limitations[]}`. The provider schema has no authority field. An object that still carries one is a `schema_violation`: the whole answer is unavailable, never re-read.
+- **Kept / refused:**
+  - Every explanation block keeps all its checks: offered facts only, numbers in cited facts, cause blocks need a cause fact, and no who-holds / may / must / waiting prose. Prose authority is refused and counted (`authority_accounting.model_prose_authority_refused`, including a third-person holder claim not grounded in a cited step).
+  - **Causes (checks/10, config version 8):** a `cause` block must cite at least one fact that records a reason: a blocker, decision, open question, rule change, impact or review note (`CAUSE_FACTS`). The stage, steps, waits, obligations, actions and the request itself say what is asked and where it stands; they belong in `fact` blocks. The prompt lists exactly this pack's reason facts (`cause_basis`), so the model and the validator apply one rule. A cause without one is refused, never relabelled. The server then adds "An explanation of why was not shown: …", saying whether the pack records no reason or the block did not cite it. Whether a grounded cause actually answers the question is not decided by a check; it is part of the usefulness evaluation.
+  - **Authority prose (checks/9–10):** naming a role is not an authority claim by itself.
+    - A third-person claim needs the role as the subject of a holding, obligation or permission predicate in the same clause ("the approver must / can / cannot decide", also after an elliptical ", and must …"). A new clause with its own subject (", and the reason given is to …") is a business description.
+    - Claims about THIS request by anyone, whatever the title or name, are caught by structure, not by a list of titles: a decision act with the request or one of its steps as object ("the Finance Controller has to approve it", "someone in finance has to sign this off", "Hanako will approve this request"); a passive with an agent ("it must be decided by …"); "the decision lies with …"; "… is the approver for this request"; "it is X's call"; "waiting on …"; and (checks/11) a statement that who acts is not stated or unknown ("the facts do not state who holds …"), since the server section states it.
+    - A business rule about a class of cases ("purchases from high-risk suppliers go to the Finance Controller") is kept. The assistant as subject ("the assistant cannot approve this request") is a decline and is kept.
+    - **Protection level:** this is a lexical defence in depth, not a parser. A claim with none of these structures (for example "Hanako decides next") is not caught. The authority the reader can rely on is the server section. Residual model prose is measured in the live evaluation by a manual review of every shown sentence (scorer `aig-03-scorer/8`: critical wrong to the reader = audit + manual flags).
+  - **Stage reason and status (context/3, checks/12; D1 / D4):**
+    - The step fact states each step's recorded phase. Without a recorded blocker, a `stage_reason` fact (a reason fact a cause may cite) says what the record shows for the current step(s), e.g. "AI draft: current step, not started yet"; parallel steps are listed together. It never says that nothing blocks the request.
+    - With a recorded blocker, the blocker is the reason and no stage reason is added. A current step whose phase the record does not show, or an unfinished request without a current step, gives a `reason_gap` fact (not a reason): the cause is not determined, and the model is told to say so.
+    - A status the model states must agree with the recorded phases: "underway / in progress / being written" needs a running step; "stopped / halted / stalled" needs a blocker or a blocked / failed step; negated phrases are not claims. Otherwise the block or limitation is refused (`status_contradicts_record`) and the live audit treats a shown one as a problem.
+  - **Who acts (config version 9; D2):** the server section answers who holds each step, who may act and the next step; the model uses it to understand the question, does not repeat it and never says that the facts or the system do not state who acts (refused by checks/11; checks/13 also refuses the same claim about "the person / holder who holds, acts or decides", while "the facts do not name the people who asked" stays a limitation).
+  - **Limitations (checks/10):** the model's limitations are shown to the reader ("Not covered: …") and pass the same authority guard. A refused limitation is listed in `rejected` (`kind: limitation`) and counted as prose authority. The server's own notes are added after the guard and are never filtered.
+  - A wrong explanation is refused on its own; the authority section never keeps or excuses it.
+  - Status `refused` means the model's answer kept nothing. The authority section is still shown but never counts as an answer (`semantic_success` ignores it).
+- **Coverage and missing information (server notes in `limitations`):**
+  - every offered blocker no kept explanation cites → "Not explained in this answer: …". This is a disclosure, never an explanation;
+  - when the pack omitted facts (support / history tiers, upstream caps) → "Some facts about this request were not available to the assistant: N omitted" (counts only);
+  - a refused cause → "An explanation of why was not shown: …" (checks/10);
+  - none of these notes on an out-of-scope answer.
+- **Unchanged:**
+  - context built under the reader's rights before the model;
+  - the worker rebuilds the pack under the asker's CURRENT roles and refuses on a changed manifest (`context_changed`) or revoked permission (`authority_revoked`) before the call;
+  - stored answers are labelled historical when the request moved, and withheld when access changed;
+  - the raw model object is stored for evaluation only and never returned;
+  - answers stored under checks/4–7 are shown as stored; older ones keep the legacy view; nothing is regenerated;
+  - the assistant never acts.
+- **Evaluation:** model quality is the explanation (supported claims, causes, usefulness, honest refusals; prose authority counts as a model error). Authority / status correctness is a server property, verified deterministically against the record. The final answer is scored as the reader sees it.

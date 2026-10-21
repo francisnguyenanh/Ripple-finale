@@ -76,8 +76,7 @@ def test_private_thread_explicit_ask_checked_answer_and_no_call_on_create_or_rea
     cid, approver = prepared(q)
     from tests.final_loop.test_request_assistant_access import private_chat
     private_chat(q.env, q.env.req, f"secret plan {CANARY}")
-    model = use(q, lambda p: answer(blocks=[("The current stage is shown in the facts.", [fact_id(p, "state")], "fact")],
-                                    assertions=[{"subject": "self", "fact_ref": own_obligation(p), "relation": "holds", "polarity": True, "scope": "current"}]))
+    model = use(q, lambda p: answer(blocks=[("The current stage is shown in the facts.", [fact_id(p, "state")], "fact")]))   # answer/5: no authority from the model
     before = counts(q.env)
     t = thread(q, approver, cid)
     assert t["private"] is True and t["messages"] == [] and model.calls == 0
@@ -86,8 +85,9 @@ def test_private_thread_explicit_ask_checked_answer_and_no_call_on_create_or_rea
     assert r.status_code == 200, r.text
     st = settle(q, approver, t["thread_id"])
     m = st["messages"][0]
-    assert model.calls == 1 and m["state"] == "answered" and m["answer"]["status"] == "answered" and len(m["answer"]["blocks"]) == 2 and m["current"] is True
-    assert m["answer"]["blocks"][0]["kind"] == "authority" and m["answer"]["blocks"][0]["text"].startswith("You hold the current step: ")   # written by the server
+    assert model.calls == 1 and m["state"] == "answered" and m["answer"]["status"] == "answered" and m["current"] is True
+    assert m["answer"]["blocks"][0]["kind"] == "authority" and m["answer"]["blocks"][0]["text"].startswith("You hold the current step: ")   # from the task record
+    assert m["answer"]["blocks"][0]["origin"] == "task_record" and [b["kind"] for b in m["answer"]["blocks"]][-1] == "fact"            # then the model's own block
     assert m["citations"] and all(ref.startswith("F") for ref in m["citations"])
     assert any(a["action"] == "approve_knowledge" for a in m["answer"]["next_actions"])                     # next steps from the server, not the model
     prompt = model.prompts[0]
@@ -152,7 +152,7 @@ def test_the_validator_refuses_unknown_refs_invented_numbers_permission_contradi
     ask(q, q.req, t["thread_id"], "Can I approve it? I agree.", "key-0005-eeee", 0)
     m = settle(q, q.req, t["thread_id"])["messages"][0]
     reasons = sorted(r["reason"] for r in m["answer"]["rejected"])
-    assert m["answer"]["status"] == "refused" and m["answer"]["blocks"] == []
+    assert m["answer"]["status"] == "refused" and [b for b in m["answer"]["blocks"] if b["kind"] != "authority"] == []                         # the record's section is shown but is not an answer
     assert {"unknown_fact_ref", "number_not_in_cited_facts", "claims_an_action"} <= set(reasons)
     assert "contradicts_cited_permission" in reasons or "suggestion_without_action_fact" in reasons
 
@@ -238,7 +238,7 @@ def test_raw_and_checked_answers_are_kept_apart_identity_follows_the_config_and_
     ask(q, approver, t["thread_id"], "Where does it stand?", "key-0020-mmmm", 0)
     st = settle(q, approver, t["thread_id"])
     m = st["messages"][0]
-    assert m["answer"]["status"] == "partial" and len(m["answer"]["blocks"]) == 1 and "model_answer" not in m["answer"]          # the thread shows only the checked answer
+    assert m["answer"]["status"] == "partial" and len([b for b in m["answer"]["blocks"] if b["kind"] != "authority"]) == 1 and "model_answer" not in m["answer"]          # the thread shows only the checked answer
     with q.env.store._tx() as cur:
         cur.execute("SELECT job_id FROM v2_request_messages WHERE tenant_id=%s AND workspace_id=%s AND message_id=%s", (q.env.tenant, q.env.ws, m["message_id"]))
         job = q.env.store.job_record(q.env.tenant, q.env.ws, cur.fetchone()[0])
@@ -267,12 +267,12 @@ def test_a_claim_that_the_reader_holds_an_obligation_needs_an_obligation_fact_he
     def check(text, refs, kind):
         return ra.check_answer({"outcome": "answered", "answer_blocks": [{"text": text, "fact_refs": refs, "kind": kind}], "limitations": []}, pack, limits)
     p5 = check("You may not approve this request yourself at this current stage as you hold the obligation for the current step.", ["F2"], "suggestion")
-    assert p5["blocks"] == [] and p5["rejected"][0]["reason"] == "contradicts_cited_obligation"
+    assert [b for b in p5["blocks"] if b["kind"] != "authority"] == [] and p5["rejected"][0]["reason"] == "contradicts_cited_obligation"
     p2 = check("You are required to decide the knowledge change and proposed file edits.", ["F3"], "fact")
     p4 = check("Your role cannot decide this change and is not allowed to approve the knowledge.", ["F6"], "fact")
     neg = check("You do not hold the current step; the requester does.", ["F2"], "fact")
     for out in (p2, p4, neg):
-        assert out["blocks"] == [] and out["rejected"][0]["reason"] == "authority_in_free_text"
+        assert [b for b in out["blocks"] if b["kind"] != "authority"] == [] and out["rejected"][0]["reason"] == "authority_in_free_text"
 
 
 def test_an_obligation_that_changes_while_the_answer_waits_fails_closed_as_context_changed(ra_env):

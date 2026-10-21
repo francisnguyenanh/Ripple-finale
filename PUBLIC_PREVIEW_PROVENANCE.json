@@ -2,46 +2,43 @@
   "schema": "ripple-public-preview-provenance/1",
   "source_repository": "private development repository (not named here)",
   "source_branch": "final-dev",
-  "source_commit": "7cba7a6273b11b006493cbd5a5f87dfa561b69fd",
+  "source_commit": "7f1754c8941472fe7fc6a39692d46f08349c688c",
   "export_manifest": "SUBMISSION_MANIFEST.json",
-  "export_manifest_sha256": "69407ff84abe672d0ab0f58d6701c72cbb00951cede5ad581001084bce81763d",
-  "export_manifest_sha256_git": "96d346e6581ddca082be5978b0d8e5827b8b16bf2e63bfad5721e511dfae76ff",
+  "export_manifest_sha256": "3b2f4d66ec5bc08332147ab2023e9642b0825c35e38726b56f9a05a4b59cac5a",
+  "export_manifest_sha256_git": "2707ff128d6b6d9812786a2a1e526b6821c9d879e1e5d5997e14150d9c92f239",
   "export_manifest_hash_note": "export_manifest_sha256 is the manifest file as written on disk by the export (CRLF). Under the shipped .gitattributes (text=auto eol=lf) Git stores and checks it out with LF, so a downloaded or checked-out manifest hashes to export_manifest_sha256_git. Same content; the manifest is unchanged. The manifest does not list itself.",
-  "export_overall_sha256": "2c7f561c19d74e951590e47643b5297f58d7b0156ee72bf15f7fd101f859e2fd",
-  "export_file_count": 1449,
+  "export_overall_sha256": "7625d338b372da7fca5bdd962ceb570bf60696c82842cd377b09ceaeacad73d1",
+  "export_file_count": 1458,
   "export_tool": {
     "tool_sha256": "e4a43fea5048b4386b80742f763ef0be87ca96c187b46d0f2e822ba3a3121923",
     "policy_sha256": "21ae01f53daef2eb60c35d1acd6b0008729aa40e321c73ba2f23e53a01da3f48",
     "note": "equal to the export tool and policy files at the source commit"
   },
-  "eol_policy": "Shipped .gitattributes: '* text=auto eol=lf'; reference_system/** and the Harbor sample input '-text' (exact bytes); Harbor sample data 'text eol=crlf'. Manifest hashes are raw bytes. Under this policy a checkout reproduces the manifest's raw bytes whatever core.autocrlf says (checked below).",
+  "eol_policy": "Shipped .gitattributes: '* text=auto eol=lf'; reference_system/** and the Harbor sample input '-text' (exact bytes); Harbor sample data 'text eol=crlf'. Manifest hashes are raw bytes.",
+  "approval": "The owner approved source 7f1754c8 as the preview source and authorised this publication (2026-10-21).",
   "previous_public": {
-    "commit": "8dcbba2a0f32fc7d8fd0b8a593ec936e9645cbdd",
-    "source_commit": "cadf555d6bac46ef10165f42c2a28ee98d1ecf24",
-    "export_overall_sha256": "27eaa173f80547d5d69012899cbbaa7bee680956cb0f148f3a012b5f2627ecd0",
-    "readme_sha256_published": "f203beb3db9c97678da968c6d7ee560ec0a5e234a59d2325d73159038a1b6444",
-    "note": "The provenance record of that commit (its checks: 1367 passed, 3 skipped, 1 deselected; rehearsal smoke) describes that tree and remains in its history. It is not a result for this tree. Earlier public commits: 20f5de6 (tag preview-3), 0aff169 (preview-2), 840ca8b (preview-1)."
+    "commit": "c72d700eecc6cace7b930b4c20c754fd928e684d",
+    "source_commit": "7cba7a6273b11b006493cbd5a5f87dfa561b69fd",
+    "export_overall_sha256": "2c7f561c19d74e951590e47643b5297f58d7b0156ee72bf15f7fd101f859e2fd",
+    "readme_sha256_published": "1c60aacd9630d6cec452a08010c4a319d9a5ce11b4e809b756fcf799c8d48785",
+    "note": "The provenance record of that commit (including its run of tests/contract tests/unit: 1379 passed, 3 skipped, 1 deselected, and a rehearsal smoke) describes that tree and remains in its history. It is not a result for this tree. Earlier public commits: 8dcbba2, 20f5de6 (tag preview-3), 0aff169 (preview-2), 840ca8b (preview-1)."
   },
   "corrections_to_previous_public": [
     {
-      "claim": "README of 8dcbba2, section 4c E and section 12: an assistant citation shows a source excerpt (the stored value) for a YAML key",
-      "fact": "In the build of source cadf555 the citation route had no access to the stored source bytes and returned no excerpt; the excerpt never reached a reader. Its test did not exercise the YAML branch. Fixed in this snapshot (excerpt read from the pinned bytes; regression test in tests/final_loop/test_eui03_file_diff.py).",
-      "found_by": "the development repository's own follow-up work (recorded there), reported with this checkpoint"
-    },
-    {
-      "claim": "README of 8dcbba2 (and of tag preview-3), section 7 optional extensions: no product-created pull request on a real repository",
-      "fact": "The product had opened one pull request on a private sandbox repository under the owner's authorisation (not merged). The README now says so; its human review is still open."
+      "claim": "README of c72d700, section 7 and section 11: the pull request on the private sandbox repository had its human review still open",
+      "fact": "Project records document an agent self-check; they do not record a GitHub review. The owner accepted that pull request within the sandbox scope on 2026-10-21; it is not merged. The README now keeps these three layers apart."
     }
   ],
+  "earlier_corrections_kept": "The corrections recorded with c72d700 (assistant citation excerpt that did not reach the reader in the cadf555 build; the sandbox pull request that earlier READMEs said did not exist) remain in that commit's record and are summarised in README section 12.",
   "update_from_previous_public": {
     "method": "snapshot synchronisation from the clean export of the source commit; no history from the development repository was merged",
-    "product_files_added": 11,
-    "product_files_changed": 43,
+    "product_files_added": 9,
+    "product_files_changed": 28,
+    "product_files_renamed": 1,
+    "product_files_note": "38 product files in all, as listed by the development repository's handoff for this source; the built bundle app/ui_next/assets/index-B1PNtip5.js is replaced by index-QRI4FbXv.js (Git records it as a rename)",
     "files_removed": [
-      "app/ui_next/assets/index-DbCkWK9g.js",
-      "app/ui_next/assets/style-CjEQhePU.css"
+      "app/ui_next/assets/index-B1PNtip5.js"
     ],
-    "files_removed_reason": "built bundle of the previous snapshot, replaced by index-B1PNtip5.js and style-C6Ino6rs.css of this export (vendor and runtime chunks unchanged)",
     "replaced_from_export": [
       "SUBMISSION_MANIFEST.json"
     ]
@@ -49,9 +46,9 @@
   "public_changes": [
     {
       "path": "README.md",
-      "reason": "preview-specific statements: snapshot; owner acceptance of the desktop screens captured in two review galleries (not production readiness); request assistant Q3 live diagnostic (self-authored, non-independent) with model results separated from server-guard and shown results; deploy segments of the code extension mock-only; the simulation that seemed to hang during a gallery capture (refused correctly with knowledge_moved; fault in the capture script); corrections to the previous public README; checks on this tree; provenance pointer",
+      "reason": "preview-specific statements: snapshot; changes since source 7cba7a6 (server-stated authority in the request assistant, business rules read from sources in the interface, AI runs held for a second person, status words, wide tables, rehearsal defaults); owner acceptances with exact scopes (session 1 rows by hand vs accepted automated evidence; C1-C5 automated evidence; captured desktop screens; sandbox PR #2 within its scope, not merged); RQA-05 PARTIAL, live checks 12 not met (P3), checks 13 by tests and replay only, no full live run on this build; A4/A5/A19 without a real model; REL-03 open; no production readiness or deploy; where each piece of evidence comes from",
       "sha256_in_export": "05ef5e4b40f14862408be2580a8c4cb20b7804a3d3ef7a063213e28c3c68ce2a",
-      "sha256_published": "1c60aacd9630d6cec452a08010c4a319d9a5ce11b4e809b756fcf799c8d48785",
+      "sha256_published": "26bc837cd65f17ca42af56c8b5ecbf97d9a18aeb86de2503e312844fe8b8631c",
       "sha256_published_scope": "README.md as committed in the public commit that contains this file (LF bytes, identical to the Git blob)"
     }
   ],
@@ -59,55 +56,47 @@
     "PUBLIC_PREVIEW_PROVENANCE.json"
   ],
   "images_added": [],
-  "images_note": "No screenshots are included in the repository. The accepted review galleries are review material outside it.",
-  "manifest_scope": "SUBMISSION_MANIFEST.json describes the export of the source commit and is kept unchanged. README.md was rewritten after export (public_changes) and this file was added; every other listed file is reproduced byte for byte by a checkout (checks_on_this_tree).",
-  "owner_review": "The owner authorised this update for publication. The owner accepted the desktop interface of the screens and states captured in two review galleries; this is not acceptance of uncaptured screens, narrow widths, AI quality, real integrations or production readiness.",
-  "checks_on_this_tree": {
+  "manifest_scope": "SUBMISSION_MANIFEST.json describes the export of the source commit and is kept unchanged. README.md was rewritten after export (public_changes) and this file was added; every other listed file is reproduced byte for byte by a checkout (checks_for_this_tree).",
+  "evidence_policy": "This repository is for reading source, README and progress. Product verification is done in the development repository; results quoted in the README come from its record unless stated otherwise. For this update only packaging and content checks were made; no tests, build, database, server or browser were run.",
+  "checks_for_this_tree": {
     "date": "2026-10-21",
-    "provider": "none",
     "runs": [
       {
         "check": "export tool of the source commit: verify on the export directory",
-        "result": "exit 0; files=1450 problems=0 broken_relative_links=0; publication scan of the final tree including the manifest exit 0"
+        "result": "exit 0; files=1459 problems=0 broken_relative_links=0; publication scan of the final tree including the manifest exit 0 (as handed over by the development repository; rechecked)"
       },
       {
         "check": "export tool of the source commit: eol-check on the export directory",
-        "result": "exit 0; 1449 files, 2 checkouts (autocrlf true and false), problems 0"
+        "result": "exit 0; 1458 files, 2 checkouts (autocrlf true and false), problems 0"
       },
       {
-        "check": "raw-byte comparison of the preview tree with the manifest sha256, checked out with core.autocrlf=true and with core.autocrlf=false",
+        "check": "content of the copy against the manifest: raw bytes of every listed file, checked out with core.autocrlf=true and with core.autocrlf=false",
         "result": "see raw_byte_result"
       },
       {
-        "check": "bundle references: app/ui_next/index.html, module imports and stylesheet urls",
-        "result": "index-B1PNtip5.js, rolldown-runtime-CbXtAM7H.js, vendor-DE6nbGDD.js, style-C6Ino6rs.css and 14 font files present; served by the rehearsal smoke"
+        "check": "scope: no development folder, agent instruction files, secrets, keys, environment files, logs, databases, caches or installed dependencies in the tracked tree",
+        "result": "none found"
       },
       {
-        "check": "README relative links and in-page anchors",
-        "result": "126 links, 0 missing targets, 0 unknown anchors"
+        "check": "bundle reference: app/ui_next/index.html points to index-QRI4FbXv.js, rolldown-runtime-CbXtAM7H.js, vendor-DE6nbGDD.js, style-C6Ino6rs.css, all present",
+        "result": "ok"
       },
       {
-        "check": "pytest tests/contract tests/unit -q -p no:cacheprovider (no DSN, no provider; virtual environment of the earlier rehearsal, unchanged requirements files; Python 3.14.2), on this tree before the README rewrite",
-        "result": "1379 passed, 3 skipped, 1 deselected, 0 failed",
-        "deselected_reason": "marked live_llm (it would make a real provider call); excluded by pytest.ini addopts; not run"
-      },
-      {
-        "check": "rehearsal smoke: python -m tools.judge_local.run_local on a throwaway PostgreSQL 16 container (tmpfs, own port, removed afterwards), GET /app-next/, its four bundle files and every chunk and font they reference",
-        "result": "HTTP 200 for the page, the four bundle files (bytes equal to the manifest) and 15 referenced chunks/fonts; three rehearsal accounts created; no error in the server log; server stopped"
+        "check": "README relative links and in-page anchors; no internal references",
+        "result": "129 links, 0 missing targets, 0 unknown anchors"
       },
       {
         "check": "publication scan of the committed tree: python -m tools.pitch_pack.scan <checkout> --allowlist tools/pitch_pack/scan_allowlist.json (the tree's scanner and allow-list, unchanged)",
         "result": "see scan_result"
+      },
+      {
+        "check": "diff review against the previous public commit before commit and push",
+        "result": "38 product files, README.md, SUBMISSION_MANIFEST.json and this file"
       }
     ],
-    "raw_byte_result": "1448 of 1449 listed files equal the manifest sha256 byte for byte under both settings; README.md differs (public_changes); extra files: PUBLIC_PREVIEW_PROVENANCE.json and SUBMISSION_MANIFEST.json",
+    "raw_byte_result": "1457 of 1458 listed files equal the manifest sha256 byte for byte under both settings; README.md differs (public_changes); extra files: PUBLIC_PREVIEW_PROVENANCE.json and SUBMISSION_MANIFEST.json",
     "scan_result": "exit 0 on the tree including SUBMISSION_MANIFEST.json, README.md and this file; allow-list unchanged",
-    "reused_evidence": "Database-backed and browser results quoted in the README are from the development record of the source commit and its predecessors; they were not rerun on this tree.",
-    "not_run": [
-      "database-backed suites (final_loop, security, pitch_brief, ui_next)",
-      "Chromium browser suites",
-      "frontend design check, type check, unit tests and rebuild of the bundle"
-    ],
-    "note": "Self-check on one machine, not independent validation. Skipped tests are not passes. Results of the source repository are not results for this tree."
+    "not_run": "pytest, frontend build and tests, database, rehearsal server and browser (not part of the preview process; the built bundle was not rebuilt)",
+    "note": "Self-check on one machine, not independent validation."
   }
 }

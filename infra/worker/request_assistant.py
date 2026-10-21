@@ -93,7 +93,7 @@ class RequestAssistantExecutor:
 
     def execute(self, ctx: ExecutionContext, request: ExecutionRequest, calls: ProviderCallBudget) -> ExecutionOutcome:
         rc = ctx.request_context
-        obj, model_id, actual, in_t, out_t, th_t = call_pinned_json(ctx, request, calls, ROLE, set(ra.MODEL_KEYS), frozenset({"authority_assertions"}))
+        obj, model_id, actual, in_t, out_t, th_t = call_pinned_json(ctx, request, calls, ROLE, set(ra.REQUIRED_MODEL_KEYS))   # answer/5: no authority field from the model
         try:
             model = ra.validate_model_object(obj, rc["rqa_frozen"]["limits"])
         except ValueError as exc:

@@ -18,6 +18,8 @@ import type { Rec } from "@/features/changes/types";
 import { BusinessGaps } from "./BusinessGaps";
 import { BusinessAsk } from "./BusinessAsk";
 import { BusinessChange } from "./BusinessChange";
+import { ReadBusinessRules } from "./BusinessRead";
+import { AwaitingRuns } from "./RunHold";
 import { BusinessRules } from "./BusinessRules";
 import { BusinessUnlinked } from "./BusinessUnlinked";
 import { SectionNav } from "@/components/SectionNav";
@@ -295,6 +297,7 @@ export function QuestionsPage() {
   const available = SECTIONS.map((x) => x.id).filter((id) => id !== "source-ask" || canAsk) as SectionId[];
   const sel = selectedSection(uiSection, available, { chg, q: bq, finding, qa });
   const choose = (id: string) => setUiSection(id || ALL_SECTIONS);          // "All sections" is explicit: no value means the default section
+  const [bizKey, setBizKey] = React.useState(0);                            // F-ACC-1: reload the business sections after the rules were read
   const sessionRefresh = s.refresh;
   const refresh = React.useCallback(async () => {
     try { setData(await load(ws)); setErr(null); void sessionRefresh(); } catch (e) { if (e instanceof ApiError) setErr(e); else throw e; }
@@ -315,6 +318,7 @@ export function QuestionsPage() {
       <SectionNav ariaLabel="Questions sections" testid="questions-sections" prefix="qsec" groupLabels={GROUP_LABEL} selected={sel} onSelect={choose}
         sections={SECTIONS.filter((x) => available.includes(x.id)).map((x) => ({ id: x.id, group: x.group, label: x.label, badge: x.id === "open" ? `(${data.items.length})` : x.id === "findings" ? `(${openFindings})` : undefined }))} />
       <div className="grid gap-8">
+        <AwaitingRuns ws={ws} />
         {canAsk && <div hidden={!visible(sel, "source-ask")} data-testid="qsection-source-ask"><AskCard ws={ws} /></div>}
         <section aria-labelledby="q-ask-biz" hidden={!visible(sel, "ask")} data-testid="qsection-ask" className="grid gap-4">
           <h2 id="q-ask-biz" className="text-lg font-semibold">Ask about the business knowledge</h2>
@@ -326,12 +330,14 @@ export function QuestionsPage() {
         </section>
         <section aria-labelledby="q-rules" hidden={!visible(sel, "rules")} data-testid="qsection-rules" className="grid gap-4">
           <h2 id="q-rules" className="text-lg font-semibold">Business rules</h2>
-          <BusinessRules ws={ws} />
+          <ReadBusinessRules ws={ws} refreshKey={bizKey} onRead={() => setBizKey((n) => n + 1)} onNext={() => choose("gaps")} />
+          <BusinessRules key={`rules${bizKey}`} ws={ws} />
           <BusinessUnlinked ws={ws} />
         </section>
         <section aria-labelledby="q-biz" hidden={!visible(sel, "gaps")} data-testid="qsection-gaps" className="grid gap-4">
           <h2 id="q-biz" className="text-lg font-semibold">Business questions</h2>
-          <BusinessGaps ws={ws} />
+          <ReadBusinessRules ws={ws} refreshKey={bizKey} onRead={() => setBizKey((n) => n + 1)} />
+          <BusinessGaps key={`gaps${bizKey}`} ws={ws} />
         </section>
         <section aria-labelledby="q-open" hidden={!visible(sel, "open")} data-testid="qsection-open" className="grid gap-4">
           <h2 id="q-open" className="text-lg font-semibold">Open questions ({data.items.length})</h2>

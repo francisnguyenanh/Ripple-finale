@@ -9,10 +9,11 @@ import { useParam } from "@/lib/param";
 import { useSession } from "@/session";
 import type { Rec } from "@/features/changes/types";
 import { BusinessChangeReview } from "./BusinessChangeReview";
+import { RunHold } from "./RunHold";
 
 const q = encodeURIComponent;
 const STATUS_WORDS: Record<string, string> = { READY: "Ready to confirm", CLARIFY: "More detail needed", UNSUPPORTED: "Not supported" };
-const JOB_WORDS: Record<string, string> = { waiting_for_approval: "Waiting to start", running: "Working on it", failed: "Could not understand", cancelled: "Cancelled" };
+const JOB_WORDS: Record<string, string> = { waiting_for_approval: "Waiting to start", waiting_for_slot: "Allowed, waiting for a worker slot", running: "Working on it", failed: "Could not understand", cancelled: "Cancelled" };
 const REASON_WORDS: Record<string, string> = {
   authority_revoked: "The person who asked no longer has permission to ask.",
   snapshot_moved: "The business knowledge changed before the request was understood. Ask again to use the latest version.",
@@ -33,6 +34,7 @@ export function BusinessChange({ ws }: { ws: string }) {
   const [err, setErr] = React.useState<string | null>(null);
   const [done, setDone] = React.useState<Rec | null>(null);
   const submitWhy = React.useId();
+  const [reload, setReload] = React.useState(0);
   const mode = s.mode;
   React.useEffect(() => {
     if (!cid) { setData(null); return; }
@@ -43,7 +45,7 @@ export function BusinessChange({ ws }: { ws: string }) {
         const r = await api<Rec>("GET", `/v2/business/changes/${q(cid)}?workspace_id=${q(ws)}&mode=${mode}`);
         if (!live) return;
         setData(r); setErr(null);
-        if (r.status === "running" || r.status === "waiting_for_approval") timer = setTimeout(() => void tick(), 1500);
+        if (r.status === "running" || r.status === "waiting_for_approval" || r.status === "waiting_for_slot") timer = setTimeout(() => void tick(), 1500);
       } catch (e) {
         if (!live) return;
         if (e instanceof ApiError) setErr(e.status === 404 || e.status === 403 ? "This request is not available to your account." : "The request could not be loaded.");
@@ -52,7 +54,7 @@ export function BusinessChange({ ws }: { ws: string }) {
     };
     void tick();
     return () => { live = false; if (timer) clearTimeout(timer); };
-  }, [cid, ws, mode, done]);
+  }, [cid, ws, mode, done, reload]);
   const canAsk = s.can("intent.create") && s.can("ai.use");
   const u = (data?.understanding ?? null) as Rec | null;
   const submit = async () => {
@@ -81,7 +83,8 @@ export function BusinessChange({ ws }: { ws: string }) {
         </div>
       ) : <Muted testid="chg-no-ask">You can read change requests, but your role cannot make new ones.</Muted>}
       {err && <Callout tone="danger" testid="chg-error">{err}</Callout>}
-      {data && data.status !== "done" && data.status !== "failed" && data.status !== "cancelled" && <Callout tone="wait" testid="chg-pending">{JOB_WORDS[data.status as string] ?? "Working on it"}...</Callout>}
+      {data && data.status !== "done" && data.status !== "failed" && data.status !== "cancelled" && <div data-testid="chg-pending" data-status={String(data.status)}>
+        <RunHold ws={ws} status={String(data.status)} hold={data.hold as Rec | undefined} onChanged={() => setReload((n) => n + 1)} /></div>}
       {data && (data.status === "failed" || data.status === "cancelled") && <Callout tone="danger" testid="chg-failed">{JOB_WORDS[data.status as string]}: {reasonText(data.reason as string | null)}</Callout>}
       {u && (
         <article data-testid="chg-understanding" data-status={u.status as string} className="rounded-lg border border-border bg-surface p-4 grid gap-3">

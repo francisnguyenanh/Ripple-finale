@@ -90,7 +90,7 @@ export function renderMarkdown(src: string): React.ReactNode[] {
         if (!cells.every((c) => /^:?-{2,}:?$/.test(c))) rows.push(cells);
         i += 1;
       }
-      out.push(<table key={key()} className="text-sm border-collapse"><tbody>{rows.map((r, ri) => <tr key={ri}>{r.map((c, ci) => ri === 0 ? <th key={ci} className="border border-border px-2 py-1 text-left">{renderInline(c, `t${ri}${ci}`)}</th> : <td key={ci} className="border border-border px-2 py-1">{renderInline(c, `t${ri}${ci}`)}</td>)}</tr>)}</tbody></table>);
+      out.push(<div key={key()} role="region" aria-label="Table (scrolls sideways when wider than the page)" tabIndex={0} data-testid="md-table-scroll" className="max-w-full overflow-x-auto rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"><table className="text-sm border-collapse"><tbody>{rows.map((r, ri) => <tr key={ri}>{r.map((c, ci) => ri === 0 ? <th key={ci} className="border border-border px-2 py-1 text-left">{renderInline(c, `t${ri}${ci}`)}</th> : <td key={ci} className="border border-border px-2 py-1">{renderInline(c, `t${ri}${ci}`)}</td>)}</tr>)}</tbody></table></div>);
       continue;
     }
     const buf: string[] = [];

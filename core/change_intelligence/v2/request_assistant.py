@@ -12,8 +12,8 @@ from typing import Iterable, Mapping
 
 from core.change_intelligence.v2.serialize import canonical_hash
 
-CONTEXT_VERSION = "request-assistant-context/2"                 # AIG-02: tiered, stable selection with honest overflow (contract section 6)
-ANSWER_SCHEMA = "request-assistant-answer/3"                    # AIG-03 v5: + `cause` blocks and server-computed blocker coverage (answer/2: typed authority, AIG-01)
+CONTEXT_VERSION = "request-assistant-context/3"                 # context/3: step phases from the record and the stage-reason / reason-gap facts (D1 / D4); AIG-02: tiered, stable selection with honest overflow (contract section 6)
+ANSWER_SCHEMA = "request-assistant-answer/5"                    # the server states authority from the task record; the model explains (answer/2-4: model-chosen assertions)
 LOCALE = "en"                                                   # the only supported answer locale
 TIERS = ("mandatory", "support", "history")
 _KIND_RANK = {k: i for i, k in enumerate(("state", "request", "obligation", "waiting", "blocker", "action", "step", "axis", "rule_change", "open_question", "impact",
@@ -26,7 +26,8 @@ class ContextOverflow(ValueError):
     def __init__(self, reason: str, detail: Mapping):
         super().__init__(reason)
         self.reason, self.detail = reason, dict(detail)
-KINDS = ("state", "obligation", "waiting", "blocker", "action", "step", "axis", "request", "review_note", "rule_change", "open_question", "decision", "impact", "interpretation")
+KINDS = ("state", "obligation", "waiting", "blocker", "action", "step", "axis", "request", "review_note", "rule_change", "open_question", "decision", "impact", "interpretation",
+         "stage_reason", "reason_gap")                                                       # context/3: the recorded stage reason / an undetermined cause (D1)
 MAX_FACTS = 80
 MAX_FACT_CHARS = 400
 _CTRL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
@@ -86,6 +87,32 @@ _STEP_WORD = {"done": "done", "current": "now", "waiting": "waiting", "blocked":
 _STATE_WORD = {"current": "now", "waiting": "waiting", "blocked": "blocked", "future": "later", "done": "done", "failed": "failed"}
 
 
+REASON_PHASES = ("not_started", "running", "awaiting_decision", "awaiting_action", "awaiting_other_step")
+
+
+def stage_reason_facts(tv: Mapping) -> list:
+    """D1 (context/3): why the request is where it is, ONLY as far as the workflow record shows it. A recorded blocker is itself the reason (no stage reason is added
+    beside it). Without a blocker, each current step's recorded phase is the reason ("not started yet", "in progress", "waiting for a decision / an action"); it
+    never says that nothing blocks the request. A current step whose phase the record does not show, or an unfinished request without a current step, gives a
+    `reason_gap` fact instead: the cause is not fully known."""
+    M = {"tier": "mandatory"}
+    if tv.get("blockers"):
+        return []
+    current = [s for s in tv.get("stages") or [] if s.get("state") in ("current", "waiting")]
+    known = [s for s in current if s.get("phase") in REASON_PHASES]
+    unknown = [s for s in current if s.get("phase") not in REASON_PHASES]
+    out = []
+    if known:
+        out.append(fact("stage_reason", "What the workflow record shows for the current step: " + "; ".join(f"{s['label']}: {s['phase_label']}" for s in known) + ".",
+                        "task_view", {"phases": {s["code"]: s["phase"] for s in known}}, key="stage_reason", **M))
+    finished = (tv.get("stage") or {}).get("code") in ("APPLIED", "COMPLETED", "COMMITTED", "REJECTED")
+    if unknown or (not current and not finished):
+        names = ", ".join(s["label"] for s in unknown) or "the current stage"
+        out.append(fact("reason_gap", f"The workflow record does not fully show why the request is at this stage ({names}): the cause is not determined.", "task_view",
+                        key="reason_gap", **M))
+    return out
+
+
 def task_facts(tv: Mapping) -> list:
     """Facts from the reader's own task view (already computed under the reader's rights)."""
     M = {"tier": "mandatory"}
@@ -101,7 +128,8 @@ def task_facts(tv: Mapping) -> list:
         if o.get("obligation_me"):
             plain = "you are asked to do this now" if o.get("state") == "current" else f"yours, {_STATE_WORD.get(o.get('state'), o.get('state'))}"
         else:
-            plain = f"held by {o.get('holder_label') or 'the role pool'}, {_STATE_WORD.get(o.get('state'), o.get('state'))}" + ("; you may also do it, but you are not asked to" if o.get("eligible_me") else "")
+            held = f"open to {o.get('holder_label') or 'the role pool'} (not assigned to anyone yet)" if o.get("holder") == "role_pool" else f"held by {o.get('holder_label') or o.get('holder')}"
+            plain = f"{held}, {_STATE_WORD.get(o.get('state'), o.get('state'))}" + ("; you may also do it, but you are not asked to" if o.get("eligible_me") else "")
         out.append(fact("obligation", f"{o['label']} - {req}, held by {who}, state {o.get('state')}{extra}.", "task_view", display=f"{o['label']}{'' if o.get('required') else ' (optional)'}: {plain}.", key=f"obligation:{o.get('code')}", data=
                         {"holder": o.get("holder"), "holder_label": o.get("holder_label") or "", "you": bool(o.get("obligation_me")), "may": bool(o.get("eligible_me")),
                          "assigned": bool(o.get("assigned_me")), "required": bool(o.get("required")), "state": o.get("state"), "label": o["label"]}, **M))
@@ -115,10 +143,12 @@ def task_facts(tv: Mapping) -> list:
         out.append(fact("action", f"Action '{a.get('label')}': {state}{' - ' + a['reason'] if a.get('reason') else ''}.", "task_view",
                         {"action": a.get("action"), "allowed": bool(a.get("allowed")), "current": bool(a.get("current")), "label": a.get("label")}, key=f"action:{a.get('action')}", **M,
                         display=f"{a.get('label')}: {'your step now' if a.get('current') else 'you may do this' if a.get('allowed') else 'not available to you'}{' (' + a['reason'] + ')' if a.get('reason') and not a.get('allowed') else ''}."))
-    steps = [f"{s['label']}: {s['state']}" for s in tv.get("stages") or [] if s.get("state") not in ("future",)]
-    if steps:
-        plain = [f"{x['label']}: {_STEP_WORD.get(x['state'], x['state'])}" for x in tv.get("stages") or [] if x.get("state") not in ("future",)]
-        out.append(fact("step", "Steps so far: " + "; ".join(steps) + ".", "task_view", display="Steps so far: " + "; ".join(plain) + ".", key="steps", **M))
+    shown_steps = [s for s in tv.get("stages") or [] if s.get("state") not in ("future",)]
+    if shown_steps:                                                                        # context/3: the phase the record shows, never the bare word "current"
+        words = [f"{s['label']}: {s.get('phase_label') or _STEP_WORD.get(s['state'], s['state'])}" for s in shown_steps]
+        out.append(fact("step", "Steps so far: " + "; ".join(words) + ".", "task_view", {"phases": {s["code"]: s.get("phase") or s["state"] for s in shown_steps}},
+                        display="Steps so far: " + "; ".join(words) + ".", key="steps", **M))
+    out += stage_reason_facts(tv)
     for k, v in (tv.get("completion_axes") or {}).items():
         if isinstance(v, (str, bool)) and k != "statement":
             out.append(fact("axis", f"Completion axis {k}: {v}.", "task_view", key=f"axis:{k}", **M))
@@ -129,11 +159,14 @@ def task_facts(tv: Mapping) -> list:
 MODEL_KEYS = frozenset({"outcome", "answer_blocks", "limitations", "authority_assertions"})
 REQUIRED_MODEL_KEYS = frozenset({"outcome", "answer_blocks", "limitations"})
 ASSERTION_KEYS = frozenset({"subject", "fact_ref", "relation", "polarity", "scope"})
+
 RELATIONS = ("holds", "must", "may", "waiting_on", "blocked")
 OUTCOMES = ("answered", "partial", "insufficient_context", "out_of_scope")
 BLOCK_KINDS = ("fact", "interpretation", "suggestion", "cause")
-# a `cause` block says WHY the request is where it is, about the request (never who may / must act): it must cite a fact with business substance
-CAUSE_FACTS = frozenset({"blocker", "decision", "rule_change", "impact", "request", "waiting", "review_note"})
+# a `cause` block says WHY the request is where it is, about the request (never who may / must act): it must cite a fact that records a reason. checks/10: the request
+# itself and a wait say WHAT is asked and WHERE it stands, not why (a "cause" citing only them restated the stage: E1 E-15 / E-16 / E-21 / E-33, RQA-DECLINE B2); the
+# prompt lists exactly these facts per pack (`cause_basis`) so the model and the validator use one rule.
+CAUSE_FACTS = frozenset({"blocker", "decision", "rule_change", "impact", "review_note", "open_question", "stage_reason"})   # context/3: + the recorded stage reason (D1)
 MAX_UNEXPLAINED_SHOWN = 5
 _NOT_PLAIN = re.compile(r"[<>`|]|https?://|www\.|\]\(|[\x00-\x08\x0b-\x1f\x7f]", re.I)
 _NUM = re.compile(r"(?<![A-Za-z0-9_])\d+(?:[.,]\d+)*")
@@ -151,11 +184,19 @@ _NOT_HOLDS = re.compile(r"(?i)\b(you (do not|don't|no longer) hold|not (held by|
 _ABLE = re.compile(r"(?i)\byou (can|may|are (allowed|able|permitted) to|could)\s+(now\s+)?(proceed (by|to)\s+)?(approv|decid|confirm|commit|apply|clarif|answer|review|reject|accept)")
 _UNABLE = re.compile(r"(?i)\byou (cannot|can't|can not|may not|are not (allowed|able|permitted) to|could not)\s+(approv|decid|confirm|commit|apply|clarif|answer|review|reject|accept)|\byour role cannot\b")
 _REQUIRED = re.compile(r"(?i)\byou (are|were) (required|obliged)\b|\byou (must|have to)\b")
-CHECKS_VERSION = "request-assistant-checks/6"                   # checks/6: a contradicted assertion is answered by the server's corrected sentence
-COMPATIBLE_CHECKS = frozenset({"request-assistant-checks/4", "request-assistant-checks/5", CHECKS_VERSION})   # authority already typed and server-rendered: shown as stored, no legacy filtering
+CHECKS_VERSION = "request-assistant-checks/13"                  # checks/13: "the person who holds / acts is not named" is authority prose too; checks/12: a stated status must agree with the recorded step phases; checks/11: "who acts is not stated / unknown" is authority prose; checks/10: cause only from facts that record a reason (listed in the prompt), a withheld why is said, limitations guarded, authority claims about this request by anyone; checks/9: third-person authority bound to its clause + third-person permission; checks/8: server authority section + truncation notice; checks/6-7: corrected / typed model assertions
+COMPATIBLE_CHECKS = frozenset({"request-assistant-checks/4", "request-assistant-checks/5", "request-assistant-checks/6", "request-assistant-checks/7", "request-assistant-checks/8", "request-assistant-checks/9", "request-assistant-checks/10", "request-assistant-checks/11", "request-assistant-checks/12", CHECKS_VERSION})   # authority already typed and server-rendered: shown as stored, no legacy filtering
 _ROLE_WORDS = {"requester": ("requester", "person who asked"), "approver": ("approver",), "reviewer": ("reviewer",), "knowledge owner": ("knowledge owner",),
                "administrator": ("administrator", "admin"), "system": ("system", "the ai")}
-_THIRD = re.compile(r"(?i)\b(?:the |an |a )?(requester|approver|reviewer|knowledge owner|administrator|admin|system)s?\b[^.;]{0,40}?\b(holds?|must|needs? to|has to|is (?:asked|responsible|expected|required) to|is the one|is to)\b")
+# A third-person authority claim: a role word as the SUBJECT of a holding / obligation / permission predicate. The gap may not cross into a new clause with its own
+# subject (", and the reason given is to ..." describes the reason, not the role; class of RQA-DECLINE H2, 2026-10-21); an elliptical continuation (", and must now
+# decide") keeps the role as subject. Third-person permission ("the approver can / cannot decide") is a claim too. Mentioning a role is not a claim by itself.
+_CLAUSE_BREAK = (r"[,;]?\s*\b(?:and|but|or|so|yet|while|whereas|because|since|although|though)\s+"
+                 r"(?:the|a|an|this|that|these|those|it|its|they|their|there|his|her|our|your|my)\b")
+_THIRD = re.compile(r"(?i)\b(?:the |an |a )?(requester|approver|reviewer|knowledge owner|administrator|admin|system)s?\b(?:(?!" + _CLAUSE_BREAK + r")[^.;]){0,40}?"
+                    r"\b(holds?|must|needs? to|has to|is (?:asked|responsible|expected|required) to|is the one|is to"
+                    r"|(?:can(?:not)?|can't|may(?: not)?|could|is (?:not )?(?:allowed|able|permitted) to)\s+(?:now\s+)?"
+                    r"(?:approv|decid|confirm|commit|apply|clarif|answer|review|reject|accept)\w*)\b")
 _WAITING = re.compile(r"(?i)\bwaiting (?:on|for) (?:the |an |a )?(requester|approver|reviewer|knowledge owner|administrator|admin|system)\b")
 
 
@@ -210,17 +251,23 @@ def authority_problem(text: str, cited: list, kind: str) -> str | None:
 _ACTS = re.compile(r"(?i)\b(i|we)\s+(have\s+|has\s+|just\s+)?(approved|confirmed|applied|accepted|rejected|committed|recorded|submitted)\b")
 
 
-def validate_model_object(obj, limits: Mapping) -> dict:
-    if not isinstance(obj, dict) or not REQUIRED_MODEL_KEYS <= set(obj) <= MODEL_KEYS or obj["outcome"] not in OUTCOMES:
+def validate_model_object(obj, limits: Mapping, *, legacy: bool = False) -> dict:
+    """answer/5 (live): exactly {outcome, answer_blocks, limitations}; an authority field is a schema violation, never read. `legacy=True` accepts the answer/2-3
+    shape with model assertions (stored answers, recorded model objects in replays)."""
+    keys = MODEL_KEYS if legacy else REQUIRED_MODEL_KEYS
+    if not isinstance(obj, dict) or not REQUIRED_MODEL_KEYS <= set(obj) <= keys or obj["outcome"] not in OUTCOMES:
         raise ValueError("keys_or_outcome")
     obj = {**obj, "authority_assertions": obj.get("authority_assertions", [])}
     asr = obj["authority_assertions"]
     if not isinstance(asr, list) or len(asr) > int(limits.get("max_assertions", 4)):
         raise ValueError("authority_assertions")
+    typed = []
     for a in asr:
         if not isinstance(a, dict) or set(a) != ASSERTION_KEYS or a["subject"] not in ("self", "holder") or a["relation"] not in RELATIONS \
                 or not isinstance(a["polarity"], bool) or a["scope"] not in ("current", "later") or not isinstance(a["fact_ref"], str):
-            raise ValueError("assertion")
+            raise ValueError("assertion")                                                 # answer/2-3 objects (stored answers, replays) keep their shape
+        typed.append(dict(a))
+    obj["authority_assertions"] = typed
     if not isinstance(obj["answer_blocks"], list) or len(obj["answer_blocks"]) > int(limits["max_blocks"]):
         raise ValueError("answer_blocks")
     for b in obj["answer_blocks"]:
@@ -238,10 +285,66 @@ _FREE_AUTHORITY = re.compile(r"(?i)\b(you|your role)\s+(can|cannot|can't|may|cou
 _BARE_YES_NO = re.compile(r"(?i)^\s*(yes|no)\b")
 
 
+# checks/10: an authority claim about THIS request by anyone, not only a known role word: an obligation / permission / future-act predicate whose object is the request
+# or one of its steps ("the Finance Controller has to approve it", "someone in finance has to sign this off", "it must be decided by Hanako", "the decision lies with
+# the CFO"). A business rule about a class of cases ("purchases from high-risk suppliers go to the Finance Controller") has no such object and stays an explanation.
+# The assistant as subject is a decline ("the assistant cannot approve this request"), not a claim about who acts. Lexical defence in depth: the reader's authority
+# comes from the server section; claims outside these structures are measured by the evaluation, not guaranteed here.
+_THIS = r"(?:it|this|that|the (?:request|change|knowledge change|decision|draft|next step|step|approval)|this (?:request|change|step|decision|approval))\b"
+_ACT_VERB = r"(?:approv|decid|reject|confirm|commit|review|sign|accept|answer|respond)\w*"   # decision / approval acts only ("apply to", "complete", "clarify" read as effects too)
+_DEICTIC = re.compile(r"(?i)\b(?:has to|have to|must|needs? to|is (?:required|asked|expected|responsible) to|should|can(?:not)?|can't|may(?: not)?|could|is (?:not )?(?:allowed|able|permitted) to|will|is going to)"
+                      r"\s+(?:now\s+|still\s+|first\s+|only\s+)?" + _ACT_VERB + r"(?:\s+(?:on|off|to))?\s+" + _THIS +
+                      r"|\b" + _THIS + r"\s+(?:has to|must|needs to|is to|should|can|may|will)\s+(?:only\s+|now\s+|first\s+)?be\s+" + _ACT_VERB + r"(?:\s+off)?\s+by\b"
+                      r"|\b(?:the )?(?:decision|next step|step|approval|responsibility|sign-off)\s+(?:now\s+)?(?:lies|rests|sits|is)\s+(?:with|in the hands of|up to)\b"
+                      r"|\bis (?:the|its) (?:\w+ ){0,2}?(?:approver|reviewer|decider|holder|owner|signatory|one)\s+(?:for|of|on|to (?:approve|decide|review|sign))\s+" + _THIS +
+                      r"|\b(?:it|this)\s+is\s+(?:\w+ ){0,3}?\w+'s\s+(?:call|decision|step|turn|task|job|responsibility)\b"
+                      r"|\bwaiting on\b"
+                      # checks/11: a statement that who acts is unknown / not stated is a claim about authority too (RQA-V8 P3: "The facts do not state who holds the
+                      # responsibility for the next response" under a record that states it); who acts is told by the server section only
+                      r"|\b(?:do(?:es)? not|don't|doesn't|never|not)\s+(?:clearly\s+)?(?:state|record|say|specify|show|mention|indicate|name|identify)\s+who\b"
+                      r"|\b(?:it is|it's)\s+(?:unknown|unclear|not known|not clear)\s+who\b"
+                      # checks/13: the same claim about a person / holder who ACTS ("do not explicitly name the individual person who holds the next action": RQA-V9 P3);
+                      # bound to an acting verb, so "the facts do not name the people who asked for this change" stays an honest limitation
+                      r"|\b(?:do(?:es)? not|don't|doesn't|never|not)\s+(?:explicitly\s+|clearly\s+|specifically\s+)?(?:state|record|say|specify|show|mention|indicate|name|identify|give)"
+                      r"\s+(?:the\s+|a\s+|any\s+)?(?:\w+\s+){0,2}?(?:person|people|individual|one|holder|owner|actor|party)\s+(?:who|that)\s+(?:\w+\s+)?"
+                      r"(?:holds?|acts?|decides?|is responsible|must|has to|should|approves?|is next|takes?|owns?)\b"
+                      r"|\b(?:the\s+)?(?:holder|person|individual|owner|actor|party)\s+(?:who|that)\s+(?:holds?|acts?|decides?|is responsible|must|takes?|owns?)\b[^.;]{0,40}\b(?:is|are)\s+not\s+"
+                      r"(?:named|stated|specified|identified|recorded|given|known)\b")
+_ASSISTANT_SUBJECT = re.compile(r"(?i)\b(?:the assistant|this assistant|i|we)\b[^.;,]*$")
+
+
+def _deictic_claim(text: str) -> bool:
+    return any(not _ASSISTANT_SUBJECT.search(text[max(0, m.start() - 60):m.start()]) for m in _DEICTIC.finditer(text))
+
+
+# checks/12 (D4): a status the model states must agree with the phases the record shows. "Underway / in progress / being written" needs a step the record shows
+# as running; "stopped / halted / stalled" needs a recorded blocker or a blocked / failed step. A negated phrase ("has not started") is not a claim.
+_RUNNING_WORDS = re.compile(r"(?i)\b(?:under ?way|in progress|being (?:written|prepared|drafted|processed|reviewed|applied|analysed|analyzed)|is (?:currently |now )?running"
+                            r"|has (?:already )?started|already started|currently working)\b")
+_STOPPED_WORDS = re.compile(r"(?i)\b(?:stopped|halted|stalled|stuck)\b")
+_NEG_BEFORE = re.compile(r"(?i)\b(?:not|no|never|isn't|hasn't|wasn't|nothing)\b[^.;,]{0,25}$")
+
+
+def status_problem(text: str, facts: list) -> bool:
+    phases = set()
+    for f in facts:
+        if f.get("kind") == "step":
+            phases |= set(((f.get("data") or {}).get("phases") or {}).values())
+    if not phases:                                                                         # no recorded phases (an older context): nothing to check against
+        return False
+    blocked = any(f.get("kind") == "blocker" for f in facts) or bool(phases & {"blocked", "failed"})
+    for rx, ok in ((_RUNNING_WORDS, "running" in phases), (_STOPPED_WORDS, blocked)):
+        for m in rx.finditer(text):
+            if not ok and not _NEG_BEFORE.search(text[:m.start()]):
+                return True
+    return False
+
+
 def free_text_authority(text: str) -> str | None:
     if _BARE_YES_NO.search(text):
         return "unbound_affirmation"
-    if _FREE_AUTHORITY.search(text) or _HOLDS.search(text) or _NOT_HOLDS.search(text) or _ABLE.search(text) or _UNABLE.search(text) or _THIRD.search(text) or _WAITING.search(text):
+    if _FREE_AUTHORITY.search(text) or _HOLDS.search(text) or _NOT_HOLDS.search(text) or _ABLE.search(text) or _UNABLE.search(text) or _THIRD.search(text) or _WAITING.search(text) \
+            or _deictic_claim(text):
         return "authority_in_free_text"
     return None
 
@@ -282,6 +385,8 @@ def render_assertion(a: Mapping, f: Mapping) -> str:
     """The decisive authority sentence, in controlled English, from a KEPT assertion and the canonical fact (the model cannot author it)."""
     d, rel, pos, later = f.get("data") or {}, a["relation"], a["polarity"], a["scope"] == "later"
     label, holder = d.get("label") or "this step", d.get("holder_label") or "its holder"
+    if d.get("holder") == "requester":                                                     # a role word read by someone who may hold that role too: name the relation instead
+        holder = "the person who asked"
     if f["kind"] == "action":
         if rel == "may":
             return f"You may do this: {label}." if pos else f"You may not do this: {label}."
@@ -293,7 +398,12 @@ def render_assertion(a: Mapping, f: Mapping) -> str:
     if rel == "holds" and a["subject"] == "holder":
         return f"{holder[:1].upper() + holder[1:]} holds this step{' (later)' if later else ''}: {label}."
     if rel == "holds":
-        return (f"This later step will be yours: {label}." if later else f"You hold the current step: {label}.") if pos else f"This step is not yours: {label} (held by {holder})."
+        if pos:
+            return f"This later step will be yours: {label}." if later else f"You hold the current step: {label}."
+        if d.get("holder") == "role_pool":                                                # nobody holds a pool step yet: say who it is open to and what THIS reader may do
+            return (f"This step is not assigned to you: {label}. It is open to {holder}; you may act on it, but you are not asked to." if d.get("may")
+                    else f"This step is not assigned to you: {label}. It is open to {holder}; you cannot act on it now.")
+        return f"This step is not yours: {label} (held by {holder})."
     if rel == "must":
         return (f"You will be asked to do this later: {label}." if later else f"You are asked to do this now: {label}.") if pos else f"You are not asked to do this: {label}."
     if rel == "may":
@@ -329,6 +439,43 @@ def corrected_assertion(a: Mapping, f: Mapping) -> dict | None:
     return None
 
 
+MAX_AUTHORITY_BLOCKS = 6
+AUTHORITY_TEXT_REASONS = frozenset({"authority_in_free_text", "unbound_affirmation", "contradicts_cited_permission", "contradicts_cited_obligation", "claims_holder_without_fact",
+                                    "claims_requirement_on_optional", "holder_not_grounded"})   # checks/9: a third-person holder claim is prose authority too
+
+
+def authority_summary(facts: list) -> list:
+    """answer/5: who holds each current or blocked step, what this reader may do and who the request waits on, rendered by the server from the reader's own task
+    facts (never chosen by the model). Assignment comes only from the record (`you` = obligation_me / assigned), never from a role or from eligibility."""
+    out = []
+
+    def add(text, f):
+        out.append({"text": text, "fact_refs": [f["id"]], "kind": "authority", "origin": "task_record"})
+    for f in facts:
+        if f["kind"] != "obligation":
+            continue
+        d = f.get("data") or {}
+        if d.get("state") == "blocked":
+            add(render_assertion({"subject": "self", "relation": "blocked", "polarity": True, "scope": "current"}, f), f)
+        elif d.get("state") == "current":
+            if d.get("you"):
+                add(render_assertion({"subject": "self", "relation": "holds", "polarity": True, "scope": "current"}, f).rstrip(".") + ("." if d.get("required") else " (optional)."), f)
+            else:
+                add(render_assertion({"subject": "self", "relation": "holds", "polarity": False, "scope": "current"}, f), f)
+    for f in facts:
+        if f["kind"] == "waiting":
+            add(render_assertion({"subject": "holder", "relation": "waiting_on", "polarity": True, "scope": "current"}, f), f)
+    for f in facts:
+        d = f.get("data") or {}
+        if f["kind"] == "action" and d.get("allowed") and not d.get("current"):            # the reader's own current step is already stated above
+            add(render_assertion({"subject": "self", "relation": "may", "polarity": True, "scope": "current"}, f), f)
+    if not out:
+        state = next((f for f in facts if f["kind"] == "state"), None)
+        if state is not None:
+            add("No step on this request is open right now.", state)
+    return out[:MAX_AUTHORITY_BLOCKS]
+
+
 def check_assertions(assertions, facts: Mapping) -> tuple[list, list]:
     """Kept assertions are rendered by the server. A contradicted one stays refused (its reason is recorded); when the right answer to the same question is decided by
     the cited fact, the server's corrected sentence is shown instead, marked `corrected` (authority stays deterministic; the model chose only what was asked about)."""
@@ -362,7 +509,7 @@ def authority_accounting(model_assertions, rejected: list, kept: list) -> dict:
     shown = [b for b in kept if b.get("kind") == "authority"]
     return {"model_assertions": len(model_assertions or []), "model_kept": len(model_assertions or []) - len(refused),
             "model_contradicted": reasons.count("assertion_contradicts_fact"), "model_unsupported": reasons.count("assertion_not_supported"),
-            "model_unknown_fact": reasons.count("assertion_unknown_fact"), "server_corrections": sum(1 for b in shown if b.get("corrected")),
+            "model_unknown_fact": reasons.count("assertion_unknown_fact"), "authority_missing": not shown, "server_corrections": sum(1 for b in shown if b.get("corrected")),
             "shown_authority": len(shown), "shown_from_model": sum(1 for b in shown if not b.get("corrected"))}
 
 
@@ -374,7 +521,7 @@ def _nums(text: str) -> set:
     return {n.replace(",", "") for n in _NUM.findall(text or "")}
 
 
-def check_answer(model: Mapping, pack_: Mapping, limits: Mapping) -> dict:
+def check_answer(model: Mapping, pack_: Mapping, limits: Mapping, *, legacy: bool = False) -> dict:
     """-> {status, outcome, blocks, rejected, limitations}. A block is kept whole or refused with its reason, never edited. `status` is the server's verdict: `answered`,
     `partial` (some blocks refused or the model said partial), `insufficient_context`, `out_of_scope`, or `refused` (the model claimed an answer but nothing survived)."""
     facts = {f["id"]: f for f in pack_["facts"]}
@@ -398,19 +545,41 @@ def check_answer(model: Mapping, pack_: Mapping, limits: Mapping) -> dict:
             reason = "suggestion_without_action_fact"
         elif b["kind"] == "cause" and not any(f["kind"] in CAUSE_FACTS for f in cited):
             reason = "cause_without_cause_fact"
+        elif not legacy and status_problem(text, pack_["facts"]):
+            reason = "status_contradicts_record"                                              # checks/12: "underway" / "stopped" against the recorded phases
         else:                                                                               # a wrong claim keeps its specific reason; a right one is still refused in free text:
             reason = authority_problem(text, cited, b["kind"]) or free_text_authority(text)   # authority is stated only through typed assertions (AIG-01)
         if reason:
             rejected.append({"index": i, "kind": b["kind"], "reason": reason})
             continue
         kept.append({"text": text, "fact_refs": refs, "kind": b["kind"]})
-    authority, a_rejected = check_assertions(model.get("authority_assertions") or [], facts)
-    rejected += a_rejected
-    accounting = authority_accounting(model.get("authority_assertions") or [], a_rejected, authority)
+    if legacy:                                                                              # answer/2-4 objects (replays): model-chosen assertions, checked
+        authority, a_rejected = check_assertions(model.get("authority_assertions") or [], facts)
+        rejected += a_rejected
+        accounting = authority_accounting(model.get("authority_assertions") or [], a_rejected, authority)
+    else:                                                                                   # answer/5: the record states the authority; the model only explains
+        authority = authority_summary(pack_["facts"])
+        accounting = {"source": "task_record", "shown_authority": len(authority),
+                      "model_prose_authority_refused": sum(1 for r in rejected if r["reason"] in AUTHORITY_TEXT_REASONS)}
+    model_kept = kept if not legacy else authority + kept                                  # answer/5: the record's section never stands in for the model's answer
     kept = authority + kept                                                                 # the server-rendered authority sentences first, then the model's explanation
-    lims = [" ".join(x.split())[:300] for x in model["limitations"][: int(limits["max_limitations"])] if x.strip() and not _NOT_PLAIN.search(x)]
+    lims = []
+    for j, x in enumerate(model["limitations"][: int(limits["max_limitations"])]):        # checks/10: the model's limitations are prose the reader sees: same authority guard
+        x = " ".join(x.split())[:300]
+        if not x or _NOT_PLAIN.search(x):
+            continue
+        why = (free_text_authority(x) or ("status_contradicts_record" if status_problem(x, pack_["facts"]) else None)) if not legacy else None
+        if why:
+            rejected.append({"limitation": j, "kind": "limitation", "reason": why})
+            continue
+        lims.append(x)
+    if not legacy:
+        accounting["model_prose_authority_refused"] = sum(1 for r in rejected if r["reason"] in AUTHORITY_TEXT_REASONS)
+    if not legacy and any(r["reason"] == "cause_without_cause_fact" for r in rejected):     # checks/10: a withheld "why" is said, never silent; nothing is made up for it
+        lims.append("An explanation of why was not shown: " + ("it did not cite the fact that records the reason." if cause_basis(pack_["facts"])
+                                                              else "the facts given to the assistant record no reason (no blocker, decision, open question, rule change or impact)."))
     outcome = model["outcome"]
-    if outcome in ("answered", "partial") and not kept:
+    if outcome in ("answered", "partial") and not model_kept:
         status = "refused"
     elif outcome == "answered" and rejected:
         status = "partial"
@@ -419,6 +588,10 @@ def check_answer(model: Mapping, pack_: Mapping, limits: Mapping) -> dict:
     explained = sorted({facts[r]["kind"] for blk in kept if blk["kind"] != "authority" for r in blk["fact_refs"] if facts[r]["kind"] in EXPLANATION_FACTS})
     coverage = blocker_coverage(kept, pack_["facts"])
     shown_unexplained = [] if outcome == "out_of_scope" else coverage["unexplained"][:MAX_UNEXPLAINED_SHOWN]   # a question not about this request gets no blocker notes
+    cov = pack_.get("coverage") or {}
+    omitted = sum(int(t.get("omitted") or 0) for t in (cov.get("tiers") or {}).values()) + sum(int(v) for k, v in (cov.get("upstream") or {}).items() if k.endswith("_omitted") and isinstance(v, int))
+    if not legacy and outcome != "out_of_scope" and omitted:                               # the reader is told the assistant did not see everything (counts only)
+        lims.append(f"Some facts about this request were not available to the assistant: {omitted} omitted.")
     for fid in shown_unexplained:                                                         # AIG-03 v5: an offered blocker is never dropped silently; nothing is made up for it
         f = facts[fid]
         lims.append("Not explained in this answer: " + " ".join(str(f.get("display") or f["text"]).split()).removeprefix("Blocker: ")[:240])
@@ -433,7 +606,7 @@ def blocker_coverage(kept: list, facts: list) -> dict:
     return {"offered": len(offered), "explained": [i for i in offered if i in cited], "unexplained": [i for i in offered if i not in cited]}
 
 
-EXPLANATION_FACTS = frozenset({"blocker", "decision", "rule_change", "impact", "review_note", "request", "open_question", "waiting"})
+EXPLANATION_FACTS = frozenset({"blocker", "decision", "rule_change", "impact", "review_note", "request", "open_question", "waiting", "stage_reason"})
 
 
 def semantic_success(result: Mapping) -> bool:
@@ -445,11 +618,18 @@ def semantic_success(result: Mapping) -> bool:
     return any(b.get("kind") != "authority" for b in result.get("blocks") or []) and bool(result.get("explained_fact_kinds"))
 
 
+def cause_basis(facts: Iterable[Mapping]) -> list:
+    """The facts of this pack a `cause` block may cite (checks/10): the ones that record a reason. Empty when the pack records none."""
+    return [f for f in facts if f["kind"] in CAUSE_FACTS]
+
+
 def build_prompt(frozen: Mapping, pack_: Mapping, history: Iterable[Mapping], question: str, *, perspective: str) -> str:
     facts = "\n".join(f"{f['id']} [{f['kind']}] {f['text']}" for f in pack_["facts"]) or "(none)"
     hist = "\n".join(f"Q: {h['question']}\nA: {' '.join(b['text'] for b in h.get('blocks') or []) or '(no answer kept)'}" for h in history) or "(none)"
-    prompt = (frozen["prompt_template"].replace("{perspective}", perspective).replace("{as_of}", str(pack_.get("as_of"))).replace("{facts}", facts)
-              .replace("{history}", hist).replace("{question}", question))
+    authority = "\n".join(b["text"] for b in authority_summary(pack_["facts"])) or "(none)"      # answer/5: the server's own statement, shown to the model as data
+    causes = ", ".join(f"{f['id']} [{f['kind']}]" for f in cause_basis(pack_["facts"])) or "(none)"   # checks/10: the same rule the validator applies
+    prompt = (frozen["prompt_template"].replace("{perspective}", perspective).replace("{as_of}", str(pack_.get("as_of"))).replace("{authority}", authority)
+              .replace("{cause_facts}", causes).replace("{facts}", facts).replace("{history}", hist).replace("{question}", question))
     if len(prompt) > int(frozen["limits"]["max_prompt_chars"]):
         raise ValueError("context_too_large")
     return prompt

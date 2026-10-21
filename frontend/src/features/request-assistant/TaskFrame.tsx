@@ -15,8 +15,15 @@ import { useTaskView } from "./taskView";
 
 type Rec = Record<string, unknown>;
 const STEP: Record<string, { status: Status; label: string }> = {
-  done: { status: "success", label: "Done" }, current: { status: "running", label: "Now" }, waiting: { status: "waiting", label: "Waiting" }, blocked: { status: "partial", label: "Blocked" },
+  done: { status: "success", label: "Done" }, current: { status: "info", label: "Now" }, waiting: { status: "waiting", label: "Waiting" }, blocked: { status: "partial", label: "Blocked" },
   failed: { status: "failed", label: "Failed" }, future: { status: "empty", label: "Later" }, not_applicable: { status: "empty", label: "Not needed" },
+};
+// The server's step phase (contract: stages[].phase, derived from the record): the spinning "in progress" badge only when something is actually running; a current step
+// nobody has started is "Not started"; an unknown phase stays neutral (design rules section 5: workflow position and job execution are different dimensions).
+const PHASE: Record<string, { status: Status; label: string }> = {
+  running: { status: "running", label: "In progress" }, not_started: { status: "empty", label: "Not started" },
+  awaiting_decision: { status: "waiting", label: "Waiting for a decision" }, awaiting_action: { status: "waiting", label: "Waiting for an action" },
+  awaiting_other_step: { status: "waiting", label: "Waiting for another step" }, unknown: { status: "info", label: "Status not recorded" },
 };
 
 /** `shared` = the page already read the projection (Changes shares it with its journey and next-step text); otherwise the frame reads it itself. `detail` = the
@@ -101,14 +108,14 @@ export function TaskFrame({ ws, family, id, refreshKey, shared, detail }: { ws: 
         <ol className="grid gap-1 text-sm" data-testid="task-map" aria-label="All steps of this request">
           {((tv.stages ?? []) as Rec[]).map((s0) => {
             const code = String(s0.code);
-            const st = STEP[String(s0.state)] ?? { status: "info" as Status, label: String(s0.state) };
+            const st = PHASE[String(s0.phase)] ?? STEP[String(s0.state)] ?? { status: "info" as Status, label: String(s0.state) };
             const here = obligations.filter((o) => o.step === code);
             const waits = waiting.filter((w) => w.step === code);
             const yours = here.some((o) => o.obligation_me && o.state !== "done");
             const group = s0.parallel_group ? ((tv.stages ?? []) as Rec[]).filter((x) => x.parallel_group === s0.parallel_group && x.code !== code).map((x) => String(x.label)) : [];
             const open = step === code;
             return (
-              <li key={code} data-testid="task-map-step" data-step={code} data-state={String(s0.state)} data-parallel={s0.parallel_group ? String(s0.parallel_group) : undefined}>
+              <li key={code} data-testid="task-map-step" data-step={code} data-state={String(s0.state)} data-phase={s0.phase ? String(s0.phase) : undefined} data-parallel={s0.parallel_group ? String(s0.parallel_group) : undefined}>
                 <button type="button" id={`task-step-${code}`} aria-expanded={open} aria-controls={`task-step-detail-${code}`}
                   className="flex w-full items-center gap-2 rounded text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
                   onClick={() => setStep(open ? "" : code)}>

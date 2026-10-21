@@ -90,6 +90,10 @@ def test_business_change_keeps_its_read_rule_and_shows_the_decision_obligation(q
         other = login(q, f"{role}-tv-{q.env.nonce}", (role,))
         r = tv(other, q.env, "business_change", cid)
         assert r.status_code == 404 and r.json()["error"] == "request not found" and cid not in r.text, role
+    ph = {s["code"]: s["phase"] for s in rv["stages"]}                                                      # D4: the phase from the record, the same for every reader
+    assert ph["knowledge_decision"] == "awaiting_decision" and ph["understand"] == "done" and ph["commit"] == "future" and ph == {s["code"]: s["phase"] for s in a["stages"]}
+    reason = _context_kinds(q, cid, q.env.req, ("requester",))
+    assert reason["stage_reason"] == ["What the workflow record shows for the current step: Knowledge decision: current step, waiting for a decision."] and not reason["reason_gap"]
     before = counts(q.env)
     tv(approver, q.env, "business_change", cid)
     assert counts(q.env) == before                                                                                # a read writes nothing
@@ -113,6 +117,9 @@ def test_business_change_after_the_knowledge_moved_is_blocked_with_the_reason(qa
     assert rs["obligation_me"] is True and rs["assigned_me"] is True and rs["state"] == "current" and not r["waiting_on"]
     acts = {x["action"]: x for x in r["permitted_actions"]}
     assert acts["restate_request"]["allowed"] is True and acts["clarify"]["allowed"] is False and "moved" in acts["clarify"]["reason"]
+    assert {s["code"]: s["phase"] for s in r["stages"]}["knowledge_decision"] == "blocked"
+    k = _context_kinds(q, cid, q.env.req, ("requester",))
+    assert k["stage_reason"] == [] and k["reason_gap"] == [] and k["blocker"]                              # D1: the recorded blocker is the reason, nothing is added beside it
 
 
 def _grant_roles(env, roles):
@@ -152,6 +159,15 @@ def test_before_the_draft_the_step_is_named_with_its_action_and_eligibility_is_n
     assert ob(sus, "ask_draft")["eligible_me"] is False and "switched off" in ob(sus, "ask_draft")["reason"]
     adm = ob(tv(ch.admin, env, "intent_flow", iid).json(), "ask_draft")
     assert adm["eligible_me"] is True and adm["obligation_me"] is False                                  # may, is not asked
+    draft = next(s for s in mine["stages"] if s["code"] == "draft")                                       # D4: current but not started (no draft job), never "running"
+    assert (draft["state"], draft["phase"], draft["phase_label"]) == ("current", "not_started", "current step, not started yet")
+    from core.change_intelligence.v2 import request_assistant as ra
+    from infra.adapters import v2_request_tasks as V
+    facts = ra.task_facts(V.task_view(env.store, env.tenant, env.ws, "intent_flow", iid, {"tenant_id": env.tenant, "workspace_id": env.ws, "account_id": env.req,
+                                                                                         "roles": ("requester",)}))
+    step = next(f for f in facts if f["kind"] == "step")
+    assert "AI draft: current step, not started yet" in step["text"] and ": current." not in step["text"]
+    assert [f["text"] for f in facts if f["kind"] == "stage_reason"] == ["What the workflow record shows for the current step: AI draft: current step, not started yet."]
 
 
 def test_after_request_changes_the_requester_answers_first_and_the_approver_is_not_asked(qa_env):
@@ -174,6 +190,21 @@ def test_after_request_changes_the_requester_answers_first_and_the_approver_is_n
     assert {x["action"]: x["allowed"] for x in a["permitted_actions"]}["approve_knowledge"] is True     # the route still allows a decision: shown, not hidden
     s = {x["code"]: x["state"] for x in a["stages"]}
     assert s["knowledge_decision"] == "waiting"
+    assert {x["code"]: x["phase"] for x in a["stages"]}["knowledge_decision"] == "awaiting_action"         # D4: the requester's response comes first
+    k = _context_kinds(q, cid, q.env.req, ("requester",))
+    assert k["stage_reason"] == ["What the workflow record shows for the current step: Knowledge decision: current step, waiting for an action."]
+
+
+def _context_kinds(q, cid, account, roles) -> dict:
+    """The request assistant's context facts for this reader, by kind (the real context builder over the same projection)."""
+    from infra.adapters import v2_request_assistant as vra
+    pk = vra.build_context(q.env.store, q.env.tenant, q.env.ws, "business_change", cid, {"tenant_id": q.env.tenant, "workspace_id": q.env.ws, "account_id": account,
+                                                                                          "roles": roles})
+    out = {"stage_reason": [], "reason_gap": [], "blocker": []}
+    for f in pk["facts"]:
+        if f["kind"] in out:
+            out[f["kind"]].append(f["text"])
+    return out
 
 
 def test_a_committed_change_is_not_reported_as_moved_by_its_own_commit(qa_env):

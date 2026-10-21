@@ -43,6 +43,26 @@ def _read(request, workspace_id, build):
         return _error(str(exc), 404)
 
 
+@router.get("/v2/ai-runs/awaiting-approval")
+def ai_runs_awaiting_approval(request: Request, workspace_id: str):
+    """F-ACC-2: the AI runs of this workspace waiting for approval that THIS reader may allow now (readable, the kind's approve permission, not their own when a distinct
+    approver is required, on the sandbox lease). Read-only; the action is POST /v2/jobs/{job_id}/approve, which re-checks every rule."""
+    identity, store = _identity_store(), _v2_store()
+    if identity is None or store is None:
+        return _error("v2 unavailable", 503)
+    try:
+        authority = _authority(identity, request, workspace_id)
+        require(authority, "project.read")
+        from infra.adapters import v2_job_hold
+        return JSONResponse({"runs": v2_job_hold.awaiting(store, authority["tenant_id"], workspace_id, authority), "where": v2_job_hold.WHERE}, headers=_NO_STORE)
+    except IdentityDenied as exc:
+        return _denied(exc)
+    except PermissionDenied as exc:
+        return _error(f"permission denied: {exc}", 403)
+    except TenantScopeError as exc:
+        return _error(str(exc), 404)
+
+
 @router.get("/v2/business/graph")
 def business_graph(request: Request, workspace_id: str, focus: str | None = None):
     return _read(request, workspace_id, lambda store, tenant: v2_business.graph_view(store, tenant, workspace_id, focus=focus))
@@ -424,9 +444,17 @@ def _qa_job_id(workspace_id, snapshot_id, view, question, evidence, follow_up) -
 def _qa_state(rec) -> dict:
     st = rec.get("execution_status")
     status = {"COMPLETED": "done", "FAILED": "failed", "CANCELLED": "cancelled"}.get(st)
-    if status is None:
-        status = "waiting_for_approval" if rec.get("status") == "PENDING_APPROVAL" else "running"
+    if status is None:                                                                      # F-ACC-2: allowed-but-queued is not "running"
+        status = "waiting_for_approval" if rec.get("status") == "PENDING_APPROVAL" else ("running" if st == "RUNNING" else "waiting_for_slot")
     return {"status": status, "reason": rec.get("execution_reason") if st == "FAILED" else None}
+
+
+def _with_hold(out: dict, store, tenant: str, workspace_id: str, rec: dict, authority: dict) -> dict:
+    """F-ACC-2: for a run that is not finished, why it waits and whether this reader may allow it (the rules of POST /v2/jobs/{id}/approve, which re-checks them)."""
+    if out.get("status") not in ("done", "failed", "cancelled"):
+        from infra.adapters import v2_job_hold
+        out["hold"] = v2_job_hold.describe(store, tenant, workspace_id, rec, authority)
+    return out
 
 
 def _quota_for_qa():
@@ -519,7 +547,7 @@ def read_business_answer(request: Request, question_id: str, workspace_id: str, 
         rec = store.job_record(tenant, workspace_id, question_id)
         if rec.get("kind") != "knowledge.qa":
             raise TenantScopeError("question not found")
-        out = {"question_id": question_id, "question": (rec.get("payload") or {}).get("question"), **_qa_state(rec)}
+        out = _with_hold({"question_id": question_id, "question": (rec.get("payload") or {}).get("question"), **_qa_state(rec)}, store, tenant, workspace_id, rec, authority)
         result = rec.get("execution_result") if rec.get("execution_status") == "COMPLETED" else None
         if result:
             from core.change_intelligence.v2 import business_qa
@@ -631,7 +659,7 @@ def read_business_change(request: Request, change_id: str, workspace_id: str, mo
         perms = permissions_for(authority.get("roles"))
         if rec.get("requested_by") != authority["account_id"] and not {"knowledge.confirm", "change.approve"} & perms:      # the asker, a confirmer or a person who may decide the change
             raise PermissionDenied("this request belongs to someone else")
-        out = {"change_id": change_id, "request": (rec.get("payload") or {}).get("request"), **_qa_state(rec)}
+        out = _with_hold({"change_id": change_id, "request": (rec.get("payload") or {}).get("request"), **_qa_state(rec)}, store, tenant, workspace_id, rec, authority)
         result = rec.get("execution_result") if rec.get("execution_status") == "COMPLETED" else None
         if result:
             from infra.adapters import v2_business_change

@@ -4,6 +4,10 @@ approval -> apply -> new graph -> query BEFORE anything is deployed. It is not l
 
   python -m tools.judge_local.run_local            # starts on http://127.0.0.1:8765 (REHEARSAL_PORT to change)
 
+Options (2026-10-21, human acceptance): REHEARSAL_KNOWLEDGE=curated (default; the curated Harbor observed rules stand in for the extraction result) or
+`extracted`; REHEARSAL_WORKER=1 (default; an in-process job worker with the simulated stubs) or 0. Nothing is accepted or allowed for a person: every AI run
+needs a second person in this shared trial. No Google credentials are visible to the process, so no real model can be called.
+
 Needs a disposable PostgreSQL (default: the draft container on 127.0.0.1:55831; the database `rehearsal` is DROPPED and
 re-created on every start - never point REHEARSAL_ADMIN_DSN at a database you care about). Source files and blobs live in
 memory: a restart is a full reset to the seed (public Harbor files, originals untouched). Passwords are random per
@@ -27,6 +31,18 @@ DB = os.environ.get("REHEARSAL_DB", "rehearsal")        # a second build uses it
 DSN = ADMIN_DSN.replace("dbname=postgres", f"dbname={DB}")
 PORT = int(os.environ.get("REHEARSAL_PORT", "8765"))
 _KEY = "routing_rules.standard_manager_threshold_jpy:"
+
+
+def _curated_knowledge(env):
+    """REHEARSAL_KNOWLEDGE=curated (the default since 2026-10-21; `extracted` keeps only the simulated extractor's thin candidates): stands in for the extraction
+    RESULT with the CURATED Harbor observed rules the automated tests use (bound to this rehearsal's real source revision, never confirmed, PENDING_HUMAN, not
+    analysed). The person then reads the business rules from the sources in the UI (Questions & Decisions -> Rules, "Read the business rules from the sources"),
+    answers the business questions and accepts the knowledge themselves. Fixture knowledge, not model extraction; the console says so."""
+    from tests.final_loop.test_kno01_business_store import bind
+    from tests.final_loop.test_kno03_graph_gaps import seed
+    from tests.final_loop.test_qry02_retrieval import DISTRACTORS, KNOWLEDGE
+    head = env.store.head(env.tenant, env.ws)
+    seed(env, head, rules=bind(KNOWLEDGE["observed_rules"] + DISTRACTORS, head.source_revision_id), key="rehearsal-curated", snapshot_id="snap-rehearsal-curated")
 
 
 def _fresh_database():
@@ -60,10 +76,13 @@ def main() -> int:
         return 2
     os.environ["RIPPLE_V2_DSN"] = DSN
     os.environ["RIPPLE_V2_BLOB_BUCKET"] = "local-rehearsal"
+    # no real model can be reached from the rehearsal (2026-10-21): no Google credentials and an empty SDK configuration, so an unpatched path fails closed
+    for name in ("GOOGLE_APPLICATION_CREDENTIALS", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GCP_PROJECT"):
+        os.environ.pop(name, None)
+    os.environ["CLOUDSDK_CONFIG"] = tempfile.mkdtemp(prefix="ripple_rehearsal_no_gcloud_")
     os.environ.pop("RIPPLE_JUDGE_ORIGIN", None)
     from tests.pitch_brief import conftest as C
     # the real candidate budget config, plus the Final knowledge-loop roles pinned to the lite model so their (SIMULATED) jobs are admitted; written to a temp copy, never edited in place
-    import tempfile
     _final_roles = "".join(f"  {r}: gemini-3.5-flash-lite\n" for r in ("knowledge.qa", "change.understand", "change.impact_deps", "change.draft_guidance", "knowledge.gap_proposals", "gap.answer_interpret",
                                                                         # extension screens (2026-10-19): their SIMULATED jobs decline with a labelled note (sim_final.EXTRA)
                                                                         "knowledge.mining", "document.wording", "document.variant", "gap.interview", "gap.interview_question",
@@ -114,6 +133,9 @@ def main() -> int:
                           req_client=lambda: client("rehearsal-requester"))
     ch = build(env, pytest.MonkeyPatch(), finguide_scope={"category": "all"})   # real import + extraction via the worker (SIMULATED model)
     static = ch.stub
+    curated = os.environ.get("REHEARSAL_KNOWLEDGE", "curated") == "curated"
+    if curated:
+        _curated_knowledge(env)
 
     class Extractor:
         """SIMULATED extraction: reads the CURRENT approval.yaml value from the prompt, so a new revision re-extracts the new
@@ -224,11 +246,22 @@ def main() -> int:
     deadline = time.time() + 15
     while not server.started and time.time() < deadline:
         time.sleep(0.05)
+    worker = None
+    if os.environ.get("REHEARSAL_WORKER", "1") == "1":                                      # on by default (2026-10-21): jobs queued after start-up need a worker;
+        from tests.pitch_brief.conftest import LiveWorker                                    # it runs IN this process, so it uses the SIMULATED stubs above (no real model)
+        worker = LiveWorker(env).start()
     print("=" * 78)
     print("RIPPLE LOCAL REHEARSAL - GenAI SIMULATED (stub providers, no spend); Harbor simulation REAL-RUN-OFFLINE (pinned public copy)")
     print(f"Server code HEAD: {head}{' (+ uncommitted changes)' if dirty else ''}")
     print(f"Open http://127.0.0.1:{PORT}/app-next/  (the new interface; the old one is still at /app)  (use a different BROWSER or browser PROFILE per person: windows of one browser share the login cookie)")
     print(f"Workspace: {ws}   seed source revision: {ch.rev}")
+    if worker is not None:
+        print("Job worker: running inside this process (SIMULATED stubs; no real model call). Every AI run still needs a SECOND PERSON to allow it in this shared trial:")
+        print("  the other account sees it under Questions & Decisions -> 'AI runs waiting for a second person'. Nothing is allowed or accepted automatically.")
+    if curated:
+        print("Business knowledge: CURATED Harbor observed rules stand in for the extraction result (the automated tests' fixture, not a model; nothing confirmed).")
+        print("  Next, as admin: take the lease (Sandbox), then Questions & Decisions -> Rules -> 'Read the business rules from the sources'.")
+    print("Simulated AI: business Q&A declines (labelled); change requests are read by RULES (one number on one rule) - success, a purposeful question, or a refusal.")
     for name in creds:
         print(f"  account {name:22s} password {creds[name]}")
     print("Roles: admin confirms knowledge and approves model jobs; requester drafts; approver decides changes (distinct people).")
