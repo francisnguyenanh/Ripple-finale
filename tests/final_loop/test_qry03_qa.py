@@ -116,6 +116,18 @@ def test_answered_with_validated_claims_and_labelled_authority(qa_env):
     assert unstated["status"] == "PARTIAL" and "Assumed: a standard purchase." in unstated["uncertainty"] and unstated["clarifying_questions"][0] == "Is this a standard purchase or an emergency purchase?"
 
 
+def test_the_same_question_asked_again_as_a_later_attempt_is_a_new_job_and_a_new_call(qa_env):
+    q = qa_env
+    model = use(q, lambda p: obj("ANSWERED", "A manager approves standard purchases of 1,000,000 JPY or more.",
+                                 [claim("Standard purchases of 1,000,000 JPY or more need manager approval.", ["rule-standard-manager-review"], "observed")]))
+    first = run(q, q.admin, "Who has to approve a 1.3 million yen standard purchase?")
+    second = run(q, q.admin, "Who has to approve a 1.3 million yen standard purchase?", attempt=2)
+    assert first["question_id"] != second["question_id"] and model.calls == 2 and second["answer"]["status"] == "ANSWERED"
+    assert ask(q, q.admin, "Who has to approve a 1.3 million yen standard purchase?", attempt=2).json()["question_id"] == second["question_id"] and model.calls == 2   # the attempt is one job
+    assert ask(q, q.admin, "Who has to approve a 1.3 million yen standard purchase?", attempt=1).json()["question_id"] == first["question_id"]
+    assert {ask(q, q.admin, "x" * 20, attempt=a).status_code for a in (0, 4, True, "2")} == {400}
+
+
 def test_a_decided_disagreement_is_disclosed_and_a_target_view_answer_that_states_the_decision_is_answered(qa_env):
     """Owner decision H-QA-06, option B (2026-10-18): this test asserted PARTIAL until then (history in EVT-0130). The CAPEX disagreement was settled by a person
     (qa_env); the answer states the decided rule in the target view, so it is ANSWERED and the old source is still disclosed, with the decision named."""

@@ -1,0 +1,1407 @@
+{
+ "note": "Recorded model output of live run JOURNEY-V2-J1 (2026-10-22, gemini-3.5-flash-lite, extraction pin db3d71b5, same seven sources; worker output as stored). Every code candidate came back with outcome and actor null. Not a quality sample.",
+ "run_id": "JOURNEY-V2-J1-20261022",
+ "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+ "artifact_paths": {
+  "art-43bc38fe3fb6198b4bae72faf0f85995": "fixtures/harbor_public/config/approval.yaml",
+  "art-3619c86a8592f508cf5715ca1f59eef4": "fixtures/harbor_public/app/routing.py",
+  "art-a03d029b420428ff61efaa19654e1aa6": "fixtures/harbor_public/app/emergency.py",
+  "art-201c9fd4c652964cd37cb57f50a50169": "fixtures/harbor_public/app/approval.py",
+  "art-b84ad7bc7db3c8b4178becc07275b797": "reference_system/docs/procurement-policy.md",
+  "art-ad449ad9ade223cbca07151dd151d187": "reference_system/docs/manager-guide.md",
+  "art-d7eaf78bc75db1c4002fd883b4b4d6e5": "reference_system/docs/exception-handling.md"
+ },
+ "candidates": [
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "JPY",
+   "outcome": null,
+   "subject": "currency",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "currency: JPY",
+     "locator": "{\"key_path\": \"currency\", \"type\": \"key_path\"}",
+     "parser_version": "1.0.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "==",
+   "condition": null,
+   "predicate": "equals",
+   "rationale": "The source explicitly states the currency is JPY.",
+   "exceptions": [],
+   "candidate_id": "cand-run-b7a6183a71a6411d8302cf0aaa172efe-0000",
+   "model_run_id": "run-b7a6183a71a6411d8302cf0aaa172efe",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-43bc38fe3fb6198b4bae72faf0f85995",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": 30,
+   "outcome": null,
+   "subject": "matching_rules.payment_term_days",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "matching_rules.payment_term_days: 30",
+     "locator": "{\"key_path\": \"matching_rules.payment_term_days\", \"type\": \"key_path\"}",
+     "parser_version": "1.0.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "==",
+   "condition": null,
+   "predicate": "equals",
+   "rationale": "The source defines the payment term days matching rule as 30.",
+   "exceptions": [],
+   "candidate_id": "cand-run-b7a6183a71a6411d8302cf0aaa172efe-0001",
+   "model_run_id": "run-b7a6183a71a6411d8302cf0aaa172efe",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-43bc38fe3fb6198b4bae72faf0f85995",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": 10000,
+   "outcome": null,
+   "subject": "matching_rules.price_tolerance_fixed_jpy",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "matching_rules.price_tolerance_fixed_jpy: 10000",
+     "locator": "{\"key_path\": \"matching_rules.price_tolerance_fixed_jpy\", \"type\": \"key_path\"}",
+     "parser_version": "1.0.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "==",
+   "condition": null,
+   "predicate": "equals",
+   "rationale": "The source defines the fixed price tolerance in JPY as 10000.",
+   "exceptions": [],
+   "candidate_id": "cand-run-b7a6183a71a6411d8302cf0aaa172efe-0002",
+   "model_run_id": "run-b7a6183a71a6411d8302cf0aaa172efe",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-43bc38fe3fb6198b4bae72faf0f85995",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": 2,
+   "outcome": null,
+   "subject": "matching_rules.price_tolerance_percent",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "matching_rules.price_tolerance_percent: 2",
+     "locator": "{\"key_path\": \"matching_rules.price_tolerance_percent\", \"type\": \"key_path\"}",
+     "parser_version": "1.0.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "==",
+   "condition": null,
+   "predicate": "equals",
+   "rationale": "The source defines the price tolerance percentage as 2.",
+   "exceptions": [],
+   "candidate_id": "cand-run-b7a6183a71a6411d8302cf0aaa172efe-0003",
+   "model_run_id": "run-b7a6183a71a6411d8302cf0aaa172efe",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-43bc38fe3fb6198b4bae72faf0f85995",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": 2000000,
+   "outcome": null,
+   "subject": "routing_rules.capex_finance_threshold_jpy",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "routing_rules.capex_finance_threshold_jpy: 2000000",
+     "locator": "{\"key_path\": \"routing_rules.capex_finance_threshold_jpy\", \"type\": \"key_path\"}",
+     "parser_version": "1.0.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "==",
+   "condition": null,
+   "predicate": "equals",
+   "rationale": "The source defines the capex finance threshold in JPY as 2000000.",
+   "exceptions": [],
+   "candidate_id": "cand-run-b7a6183a71a6411d8302cf0aaa172efe-0004",
+   "model_run_id": "run-b7a6183a71a6411d8302cf0aaa172efe",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-43bc38fe3fb6198b4bae72faf0f85995",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "NEEDS_DIRECTOR",
+   "outcome": null,
+   "subject": "routing_rules.high_risk_route",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "routing_rules.high_risk_route: NEEDS_DIRECTOR",
+     "locator": "{\"key_path\": \"routing_rules.high_risk_route\", \"type\": \"key_path\"}",
+     "parser_version": "1.0.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "==",
+   "condition": null,
+   "predicate": "equals",
+   "rationale": "The source sets the high risk route to NEEDS_DIRECTOR.",
+   "exceptions": [],
+   "candidate_id": "cand-run-b7a6183a71a6411d8302cf0aaa172efe-0005",
+   "model_run_id": "run-b7a6183a71a6411d8302cf0aaa172efe",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-43bc38fe3fb6198b4bae72faf0f85995",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": 1000000,
+   "outcome": null,
+   "subject": "routing_rules.standard_manager_threshold_jpy",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "routing_rules.standard_manager_threshold_jpy: 1000000",
+     "locator": "{\"key_path\": \"routing_rules.standard_manager_threshold_jpy\", \"type\": \"key_path\"}",
+     "parser_version": "1.0.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "==",
+   "condition": null,
+   "predicate": "equals",
+   "rationale": "The source defines the standard manager threshold in JPY as 1000000.",
+   "exceptions": [],
+   "candidate_id": "cand-run-b7a6183a71a6411d8302cf0aaa172efe-0006",
+   "model_run_id": "run-b7a6183a71a6411d8302cf0aaa172efe",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-43bc38fe3fb6198b4bae72faf0f85995",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": null,
+   "outcome": null,
+   "subject": "request.net_amount_jpy",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if isinstance(request.net_amount_jpy, bool) or not isinstance(request.net_amount_jpy, int):",
+     "locator": "{\"line_end\": 44, \"line_start\": 8, \"qualname\": \"route_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    },
+    {
+     "quote": "return RouteDecision(request.request_id, RouteType.REJECTED, \"INVALID_AMOUNT\", 0, config.version)",
+     "locator": "{\"line_end\": 44, \"line_start\": 8, \"qualname\": \"route_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "must",
+   "operator": null,
+   "condition": null,
+   "predicate": "must be integer and not bool",
+   "rationale": "The code rejects requests where net_amount_jpy is a boolean or not an integer.",
+   "exceptions": [],
+   "candidate_id": "cand-run-fdd9ae6d4e7e47e1b52cc00c14435717-0000",
+   "model_run_id": "run-fdd9ae6d4e7e47e1b52cc00c14435717",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-3619c86a8592f508cf5715ca1f59eef4",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": 0,
+   "outcome": null,
+   "subject": "request.net_amount_jpy",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if request.net_amount_jpy <= 0:",
+     "locator": "{\"line_end\": 44, \"line_start\": 8, \"qualname\": \"route_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    },
+    {
+     "quote": "return RouteDecision(request.request_id, RouteType.REJECTED, \"NONPOSITIVE_AMOUNT\", 0, config.version)",
+     "locator": "{\"line_end\": 44, \"line_start\": 8, \"qualname\": \"route_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "must",
+   "operator": "<=",
+   "condition": null,
+   "predicate": "must be greater than zero",
+   "rationale": "The code rejects requests where net_amount_jpy is less than or equal to zero.",
+   "exceptions": [],
+   "candidate_id": "cand-run-fdd9ae6d4e7e47e1b52cc00c14435717-0001",
+   "model_run_id": "run-fdd9ae6d4e7e47e1b52cc00c14435717",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-3619c86a8592f508cf5715ca1f59eef4",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": 0,
+   "outcome": null,
+   "subject": "request.quantity",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if isinstance(request.quantity, bool) or not isinstance(request.quantity, int) or request.quantity <= 0:",
+     "locator": "{\"line_end\": 44, \"line_start\": 8, \"qualname\": \"route_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    },
+    {
+     "quote": "return RouteDecision(request.request_id, RouteType.REJECTED, \"INVALID_QUANTITY\", 0, config.version)",
+     "locator": "{\"line_end\": 44, \"line_start\": 8, \"qualname\": \"route_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "must",
+   "operator": "<=",
+   "condition": null,
+   "predicate": "must be valid positive integer",
+   "rationale": "The code rejects requests with invalid or non-positive quantities.",
+   "exceptions": [],
+   "candidate_id": "cand-run-fdd9ae6d4e7e47e1b52cc00c14435717-0002",
+   "model_run_id": "run-fdd9ae6d4e7e47e1b52cc00c14435717",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-3619c86a8592f508cf5715ca1f59eef4",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "JPY",
+   "outcome": null,
+   "subject": "request.currency",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if request.currency != \"JPY\":",
+     "locator": "{\"line_end\": 44, \"line_start\": 8, \"qualname\": \"route_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    },
+    {
+     "quote": "return RouteDecision(request.request_id, RouteType.REJECTED, \"UNSUPPORTED_CURRENCY\", 0, config.version)",
+     "locator": "{\"line_end\": 44, \"line_start\": 8, \"qualname\": \"route_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "must",
+   "operator": "!=",
+   "condition": null,
+   "predicate": "must be JPY",
+   "rationale": "The code rejects requests if the currency is not JPY.",
+   "exceptions": [],
+   "candidate_id": "cand-run-fdd9ae6d4e7e47e1b52cc00c14435717-0003",
+   "model_run_id": "run-fdd9ae6d4e7e47e1b52cc00c14435717",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-3619c86a8592f508cf5715ca1f59eef4",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "SupplierStatus.BLOCKED",
+   "outcome": null,
+   "subject": "sup.status",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if sup.status == SupplierStatus.BLOCKED:",
+     "locator": "{\"line_end\": 44, \"line_start\": 8, \"qualname\": \"route_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    },
+    {
+     "quote": "return RouteDecision(request.request_id, RouteType.REJECTED, \"SUPPLIER_BLOCKED\", request.net_amount_jpy, config.version)",
+     "locator": "{\"line_end\": 44, \"line_start\": 8, \"qualname\": \"route_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "must",
+   "operator": "==",
+   "condition": null,
+   "predicate": "must not be blocked",
+   "rationale": "The code rejects requests when the supplier status is blocked.",
+   "exceptions": [],
+   "candidate_id": "cand-run-fdd9ae6d4e7e47e1b52cc00c14435717-0004",
+   "model_run_id": "run-fdd9ae6d4e7e47e1b52cc00c14435717",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-3619c86a8592f508cf5715ca1f59eef4",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "SupplierRisk.HIGH",
+   "outcome": null,
+   "subject": "sup.risk",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if sup.risk == SupplierRisk.HIGH:",
+     "locator": "{\"line_end\": 44, \"line_start\": 8, \"qualname\": \"route_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    },
+    {
+     "quote": "return RouteDecision(request.request_id, config.high_risk_route, \"SUPPLIER_HIGH_RISK\", request.net_amount_jpy, config.version)",
+     "locator": "{\"line_end\": 44, \"line_start\": 8, \"qualname\": \"route_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "==",
+   "condition": null,
+   "predicate": "determines high risk route",
+   "rationale": "The code routes high-risk suppliers using the high_risk_route config.",
+   "exceptions": [],
+   "candidate_id": "cand-run-fdd9ae6d4e7e47e1b52cc00c14435717-0005",
+   "model_run_id": "run-fdd9ae6d4e7e47e1b52cc00c14435717",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-3619c86a8592f508cf5715ca1f59eef4",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "config.capex_finance_threshold_jpy",
+   "outcome": null,
+   "subject": "request.category",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if request.category == CategoryType.CAPEX and request.net_amount_jpy >= config.capex_finance_threshold_jpy:",
+     "locator": "{\"line_end\": 44, \"line_start\": 8, \"qualname\": \"route_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    },
+    {
+     "quote": "return RouteDecision(request.request_id, RouteType.NEEDS_FINANCE, \"CAPEX_HIGH_VALUE\", request.net_amount_jpy, config.version)",
+     "locator": "{\"line_end\": 44, \"line_start\": 8, \"qualname\": \"route_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": ">=",
+   "condition": null,
+   "predicate": "determines finance route for high value capex",
+   "rationale": "CAPEX requests meeting or exceeding the capex_finance_threshold_jpy require finance routing.",
+   "exceptions": [],
+   "candidate_id": "cand-run-fdd9ae6d4e7e47e1b52cc00c14435717-0006",
+   "model_run_id": "run-fdd9ae6d4e7e47e1b52cc00c14435717",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-3619c86a8592f508cf5715ca1f59eef4",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "config.standard_manager_threshold_jpy",
+   "outcome": null,
+   "subject": "request.net_amount_jpy",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if request.net_amount_jpy >= config.standard_manager_threshold_jpy:",
+     "locator": "{\"line_end\": 44, \"line_start\": 8, \"qualname\": \"route_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    },
+    {
+     "quote": "return RouteDecision(request.request_id, RouteType.NEEDS_MANAGER, \"STANDARD_MANAGER_REQUIRED\", request.net_amount_jpy, config.version)",
+     "locator": "{\"line_end\": 44, \"line_start\": 8, \"qualname\": \"route_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": ">=",
+   "condition": null,
+   "predicate": "determines manager routing threshold",
+   "rationale": "Requests meeting or exceeding standard_manager_threshold_jpy require manager approval.",
+   "exceptions": [],
+   "candidate_id": "cand-run-fdd9ae6d4e7e47e1b52cc00c14435717-0007",
+   "model_run_id": "run-fdd9ae6d4e7e47e1b52cc00c14435717",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-3619c86a8592f508cf5715ca1f59eef4",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": null,
+   "outcome": null,
+   "subject": "request.net_amount_jpy",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "return RouteDecision(request.request_id, RouteType.AUTO, \"AUTO_APPROVED\", request.net_amount_jpy, config.version)",
+     "locator": "{\"line_end\": 44, \"line_start\": 8, \"qualname\": \"route_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": null,
+   "condition": null,
+   "predicate": "defaults to auto approval",
+   "rationale": "Requests that pass all validations and fall below thresholds are auto-approved.",
+   "exceptions": [],
+   "candidate_id": "cand-run-fdd9ae6d4e7e47e1b52cc00c14435717-0008",
+   "model_run_id": "run-fdd9ae6d4e7e47e1b52cc00c14435717",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-3619c86a8592f508cf5715ca1f59eef4",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": 0,
+   "outcome": null,
+   "subject": "request.net_amount_jpy",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if request.net_amount_jpy <= 0:\n        return RouteDecision(request.request_id, RouteType.REJECTED, \"NONPOSITIVE_AMOUNT\", 0, config.version)",
+     "locator": "{\"line_end\": 48, \"line_start\": 8, \"qualname\": \"route_emergency\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": null,
+   "condition": null,
+   "predicate": "rejected",
+   "rationale": "The code rejects requests where net_amount_jpy is less than or equal to zero.",
+   "exceptions": [],
+   "candidate_id": "cand-run-28aadaee150d402aa7d17bdf6f7fa45f-0000",
+   "model_run_id": "run-28aadaee150d402aa7d17bdf6f7fa45f",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-a03d029b420428ff61efaa19654e1aa6",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "JPY",
+   "outcome": null,
+   "subject": "request.currency",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if request.currency != \"JPY\":\n        return RouteDecision(request.request_id, RouteType.REJECTED, \"UNSUPPORTED_CURRENCY\", 0, config.version)",
+     "locator": "{\"line_end\": 48, \"line_start\": 8, \"qualname\": \"route_emergency\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "!=",
+   "condition": null,
+   "predicate": "rejected",
+   "rationale": "The code rejects requests where the currency is not JPY.",
+   "exceptions": [],
+   "candidate_id": "cand-run-28aadaee150d402aa7d17bdf6f7fa45f-0001",
+   "model_run_id": "run-28aadaee150d402aa7d17bdf6f7fa45f",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-a03d029b420428ff61efaa19654e1aa6",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "SupplierStatus.BLOCKED",
+   "outcome": null,
+   "subject": "sup.status",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if sup.status == SupplierStatus.BLOCKED:\n            return RouteDecision(request.request_id, RouteType.REJECTED, \"SUPPLIER_BLOCKED\", request.net_amount_jpy, config.version)",
+     "locator": "{\"line_end\": 48, \"line_start\": 8, \"qualname\": \"route_emergency\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "==",
+   "condition": null,
+   "predicate": "rejected",
+   "rationale": "The code rejects requests if the supplier status is blocked.",
+   "exceptions": [],
+   "candidate_id": "cand-run-28aadaee150d402aa7d17bdf6f7fa45f-0002",
+   "model_run_id": "run-28aadaee150d402aa7d17bdf6f7fa45f",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-a03d029b420428ff61efaa19654e1aa6",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "config.high_risk_route",
+   "outcome": null,
+   "subject": "sup.risk",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if sup.risk == SupplierRisk.HIGH:\n            return RouteDecision(request.request_id, config.high_risk_route, \"SUPPLIER_HIGH_RISK\", request.net_amount_jpy, config.version)",
+     "locator": "{\"line_end\": 48, \"line_start\": 8, \"qualname\": \"route_emergency\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "==",
+   "condition": null,
+   "predicate": "route",
+   "rationale": "The code assigns high_risk_route if the supplier risk is high.",
+   "exceptions": [],
+   "candidate_id": "cand-run-28aadaee150d402aa7d17bdf6f7fa45f-0003",
+   "model_run_id": "run-28aadaee150d402aa7d17bdf6f7fa45f",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-a03d029b420428ff61efaa19654e1aa6",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "RouteType.NEEDS_FINANCE",
+   "outcome": null,
+   "subject": "request.net_amount_jpy",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if request.category == CategoryType.CAPEX and request.net_amount_jpy >= config.capex_finance_threshold_jpy:\n        return RouteDecision(request.request_id, RouteType.NEEDS_FINANCE, \"CAPEX_HIGH_VALUE\", request.net_amount_jpy, config.version)",
+     "locator": "{\"line_end\": 48, \"line_start\": 8, \"qualname\": \"route_emergency\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": ">=",
+   "condition": null,
+   "predicate": "route",
+   "rationale": "The code routes CAPEX categories meeting or exceeding the capex finance threshold to NEEDS_FINANCE.",
+   "exceptions": [],
+   "candidate_id": "cand-run-28aadaee150d402aa7d17bdf6f7fa45f-0004",
+   "model_run_id": "run-28aadaee150d402aa7d17bdf6f7fa45f",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-a03d029b420428ff61efaa19654e1aa6",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "RouteType.NEEDS_MANAGER",
+   "outcome": null,
+   "subject": "request.net_amount_jpy",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if request.net_amount_jpy >= 1_000_000:\n        return RouteDecision(request.request_id, RouteType.NEEDS_MANAGER, \"EMERGENCY_MANAGER_REQUIRED\", request.net_amount_jpy, config.version)",
+     "locator": "{\"line_end\": 48, \"line_start\": 8, \"qualname\": \"route_emergency\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": ">=",
+   "condition": null,
+   "predicate": "route",
+   "rationale": "The code routes requests with net amount of 1,000,000 JPY or more to NEEDS_MANAGER.",
+   "exceptions": [],
+   "candidate_id": "cand-run-28aadaee150d402aa7d17bdf6f7fa45f-0005",
+   "model_run_id": "run-28aadaee150d402aa7d17bdf6f7fa45f",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-a03d029b420428ff61efaa19654e1aa6",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "REJECTED",
+   "outcome": null,
+   "subject": "route",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if route.route == RouteType.REJECTED:",
+     "locator": "{\"line_end\": 64, \"line_start\": 8, \"qualname\": \"approve_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    },
+    {
+     "quote": "raise ValueError(f\"Cannot approve requisition {request.request_id} with REJECTED route\")",
+     "locator": "{\"line_end\": 64, \"line_start\": 8, \"qualname\": \"approve_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "==",
+   "condition": null,
+   "predicate": "route",
+   "rationale": "The code raises a ValueError if the route type is REJECTED.",
+   "exceptions": [],
+   "candidate_id": "cand-run-35d1e7f539f3439bb63c86859bfb9796-0000",
+   "model_run_id": "run-35d1e7f539f3439bb63c86859bfb9796",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-201c9fd4c652964cd37cb57f50a50169",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "AUTO",
+   "outcome": null,
+   "subject": "route",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if route.route == RouteType.AUTO:",
+     "locator": "{\"line_end\": 64, \"line_start\": 8, \"qualname\": \"approve_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    },
+    {
+     "quote": "return AuditEvent(",
+     "locator": "{\"line_end\": 64, \"line_start\": 8, \"qualname\": \"approve_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "==",
+   "condition": null,
+   "predicate": "route",
+   "rationale": "The code returns an AuditEvent when the route type is AUTO.",
+   "exceptions": [],
+   "candidate_id": "cand-run-35d1e7f539f3439bb63c86859bfb9796-0001",
+   "model_run_id": "run-35d1e7f539f3439bb63c86859bfb9796",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-201c9fd4c652964cd37cb57f50a50169",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "request.requester_id",
+   "outcome": null,
+   "subject": "actor",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if actor.employee_id == request.requester_id:",
+     "locator": "{\"line_end\": 64, \"line_start\": 8, \"qualname\": \"approve_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    },
+    {
+     "quote": "raise ValueError(",
+     "locator": "{\"line_end\": 64, \"line_start\": 8, \"qualname\": \"approve_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "==",
+   "condition": null,
+   "predicate": "employee_id",
+   "rationale": "The code raises a ValueError if the actor is the same as the requester.",
+   "exceptions": [],
+   "candidate_id": "cand-run-35d1e7f539f3439bb63c86859bfb9796-0002",
+   "model_run_id": "run-35d1e7f539f3439bb63c86859bfb9796",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-201c9fd4c652964cd37cb57f50a50169",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "NEEDS_MANAGER",
+   "outcome": null,
+   "subject": "route",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if route.route == RouteType.NEEDS_MANAGER:",
+     "locator": "{\"line_end\": 64, \"line_start\": 8, \"qualname\": \"approve_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    },
+    {
+     "quote": "required_role = Role.MANAGER",
+     "locator": "{\"line_end\": 64, \"line_start\": 8, \"qualname\": \"approve_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "==",
+   "condition": null,
+   "predicate": "route",
+   "rationale": "The required role is set to MANAGER when the route is NEEDS_MANAGER.",
+   "exceptions": [],
+   "candidate_id": "cand-run-35d1e7f539f3439bb63c86859bfb9796-0003",
+   "model_run_id": "run-35d1e7f539f3439bb63c86859bfb9796",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-201c9fd4c652964cd37cb57f50a50169",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "NEEDS_FINANCE",
+   "outcome": null,
+   "subject": "route",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "elif route.route == RouteType.NEEDS_FINANCE:",
+     "locator": "{\"line_end\": 64, \"line_start\": 8, \"qualname\": \"approve_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    },
+    {
+     "quote": "required_role = Role.FINANCE",
+     "locator": "{\"line_end\": 64, \"line_start\": 8, \"qualname\": \"approve_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "==",
+   "condition": null,
+   "predicate": "route",
+   "rationale": "The required role is set to FINANCE when the route is NEEDS_FINANCE.",
+   "exceptions": [],
+   "candidate_id": "cand-run-35d1e7f539f3439bb63c86859bfb9796-0004",
+   "model_run_id": "run-35d1e7f539f3439bb63c86859bfb9796",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-201c9fd4c652964cd37cb57f50a50169",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "NEEDS_DIRECTOR",
+   "outcome": null,
+   "subject": "route",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "elif route.route == RouteType.NEEDS_DIRECTOR:",
+     "locator": "{\"line_end\": 64, \"line_start\": 8, \"qualname\": \"approve_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    },
+    {
+     "quote": "required_role = Role.DIRECTOR",
+     "locator": "{\"line_end\": 64, \"line_start\": 8, \"qualname\": \"approve_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "==",
+   "condition": null,
+   "predicate": "route",
+   "rationale": "The required role is set to DIRECTOR when the route is NEEDS_DIRECTOR.",
+   "exceptions": [],
+   "candidate_id": "cand-run-35d1e7f539f3439bb63c86859bfb9796-0005",
+   "model_run_id": "run-35d1e7f539f3439bb63c86859bfb9796",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-201c9fd4c652964cd37cb57f50a50169",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": "required_role",
+   "outcome": null,
+   "subject": "actor",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "if required_role is not None and required_role not in actor.roles:",
+     "locator": "{\"line_end\": 64, \"line_start\": 8, \"qualname\": \"approve_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    },
+    {
+     "quote": "raise PermissionError(",
+     "locator": "{\"line_end\": 64, \"line_start\": 8, \"qualname\": \"approve_request\", \"type\": \"code_span\"}",
+     "parser_version": "1.1.0"
+    }
+   ],
+   "modality": "observed",
+   "operator": "!=",
+   "condition": null,
+   "predicate": "roles",
+   "rationale": "The code raises a PermissionError if a required role is not present in the actor's roles.",
+   "exceptions": [],
+   "candidate_id": "cand-run-35d1e7f539f3439bb63c86859bfb9796-0006",
+   "model_run_id": "run-35d1e7f539f3439bb63c86859bfb9796",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-201c9fd4c652964cd37cb57f50a50169",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": "JPY",
+   "actor": "role-requesting-department-s-manager",
+   "scope": {
+    "type": "Standard purchases"
+   },
+   "value": 1000000,
+   "outcome": "Approval from the requesting department's manager before a purchase order may be raised",
+   "subject": "Purchase requests",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "Purchase requests of **JPY 1,000,000 or more** require approval from the\nrequesting department's manager before a purchase order may be raised.",
+     "locator": "{\"line_end\": 21, \"line_start\": 20, \"type\": \"line_span\"}",
+     "parser_version": "1.0.0"
+    }
+   ],
+   "modality": "must",
+   "operator": ">=",
+   "condition": {
+    "op": "gte",
+    "unit": "JPY",
+    "field": "purchase_request.amount",
+    "value": 1000000
+   },
+   "predicate": "require approval",
+   "rationale": "The text explicitly states that purchase requests of JPY 1,000,000 or more require approval from the requesting department's manager.",
+   "exceptions": [],
+   "candidate_id": "cand-run-0fdd19ed763344728be52ebfbf5a3bdf-0000",
+   "model_run_id": "run-0fdd19ed763344728be52ebfbf5a3bdf",
+   "applicability": "RECOGNIZED",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": null,
+   "artifact_revision_id": "art-b84ad7bc7db3c8b4178becc07275b797",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": "JPY",
+   "actor": "role-procurement-system",
+   "scope": {
+    "type": "Standard purchases"
+   },
+   "value": 1000000,
+   "outcome": "Approved automatically by the procurement system and require no human sign-off",
+   "subject": "Requests",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "Requests below this amount are approved automatically by the procurement\nsystem and require no human sign-off.",
+     "locator": "{\"line_end\": 24, \"line_start\": 23, \"type\": \"line_span\"}",
+     "parser_version": "1.0.0"
+    }
+   ],
+   "modality": "must",
+   "operator": "<",
+   "condition": {
+    "op": "lt",
+    "unit": "JPY",
+    "field": "purchase_request.amount",
+    "value": 1000000
+   },
+   "predicate": "are approved",
+   "rationale": "The text states that requests below the 1,000,000 JPY threshold are approved automatically by the procurement system.",
+   "exceptions": [],
+   "candidate_id": "cand-run-0fdd19ed763344728be52ebfbf5a3bdf-0001",
+   "model_run_id": "run-0fdd19ed763344728be52ebfbf5a3bdf",
+   "applicability": "RECOGNIZED",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": null,
+   "artifact_revision_id": "art-b84ad7bc7db3c8b4178becc07275b797",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": "JPY",
+   "actor": "role-finance-controller",
+   "scope": {
+    "type": "Capital expenditure"
+   },
+   "value": 5000000,
+   "outcome": "Referred to the Finance Controller regardless of the requesting department",
+   "subject": "Capital expenditure",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "Capital expenditure of **JPY 5,000,000 or more** is referred to the Finance\nController regardless of the requesting department.",
+     "locator": "{\"line_end\": 29, \"line_start\": 28, \"type\": \"line_span\"}",
+     "parser_version": "1.0.0"
+    }
+   ],
+   "modality": "must",
+   "operator": ">=",
+   "condition": {
+    "op": "gte",
+    "unit": "JPY",
+    "field": "capital_expenditure.amount",
+    "value": 5000000
+   },
+   "predicate": "is referred",
+   "rationale": "The text specifies that capital expenditures of JPY 5,000,000 or more must be referred to the Finance Controller.",
+   "exceptions": [],
+   "candidate_id": "cand-run-0fdd19ed763344728be52ebfbf5a3bdf-0002",
+   "model_run_id": "run-0fdd19ed763344728be52ebfbf5a3bdf",
+   "applicability": "RECOGNIZED",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": null,
+   "artifact_revision_id": "art-b84ad7bc7db3c8b4178becc07275b797",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": "role-operations-director",
+   "scope": {
+    "supplier_status": "high-risk register"
+   },
+   "value": null,
+   "outcome": "Referred to the Operations Director, regardless of amount",
+   "subject": "Purchase",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "Any purchase from a supplier on the high-risk register is referred to the\nOperations Director, regardless of amount.",
+     "locator": "{\"line_end\": 35, \"line_start\": 33, \"type\": \"line_span\"}",
+     "parser_version": "1.0.0"
+    }
+   ],
+   "modality": "must",
+   "operator": null,
+   "condition": {
+    "op": "eq",
+    "field": "supplier.high_risk",
+    "value": true
+   },
+   "predicate": "is referred",
+   "rationale": "The text requires any purchase from a supplier on the high-risk register to be referred to the Operations Director.",
+   "exceptions": [],
+   "candidate_id": "cand-run-0fdd19ed763344728be52ebfbf5a3bdf-0003",
+   "model_run_id": "run-0fdd19ed763344728be52ebfbf5a3bdf",
+   "applicability": "RECOGNIZED",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": null,
+   "artifact_revision_id": "art-b84ad7bc7db3c8b4178becc07275b797",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "policy": "procurement policy"
+   },
+   "value": null,
+   "outcome": "Recorded in the exception register with a named approver and an end date",
+   "subject": "Exceptions",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "Exceptions to this policy must be recorded in the exception register with a\nnamed approver and an end date.",
+     "locator": "{\"line_end\": 45, \"line_start\": 44, \"type\": \"line_span\"}",
+     "parser_version": "1.0.0"
+    }
+   ],
+   "modality": "must",
+   "operator": null,
+   "condition": null,
+   "predicate": "must be recorded",
+   "rationale": "The text dictates that exceptions to the policy must be logged in the exception register with specific details.",
+   "exceptions": [],
+   "candidate_id": "cand-run-0fdd19ed763344728be52ebfbf5a3bdf-0004",
+   "model_run_id": "run-0fdd19ed763344728be52ebfbf5a3bdf",
+   "applicability": "RECOGNIZED",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": null,
+   "artifact_revision_id": "art-b84ad7bc7db3c8b4178becc07275b797",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": "yen",
+   "actor": "role-manager",
+   "scope": {
+    "type": "purchase request"
+   },
+   "value": 1000000,
+   "outcome": "routed to manager's queue for approval",
+   "subject": "purchase request",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "You will be asked to approve a purchase request when it is for\n**one million yen or more**.",
+     "locator": "{\"line_end\": 13, \"line_start\": 12, \"type\": \"line_span\"}",
+     "parser_version": "1.0.0"
+    }
+   ],
+   "modality": "must",
+   "operator": ">=",
+   "condition": {
+    "op": "gte",
+    "unit": "yen",
+    "field": "purchase_request.amount",
+    "value": 1000000
+   },
+   "predicate": "requires manager approval",
+   "rationale": "The text states that purchase requests for one million yen or more are sent to the manager for approval.",
+   "exceptions": [],
+   "candidate_id": "cand-run-6d98cf7eb28748a891edf54d4d674f6a-0000",
+   "model_run_id": "run-6d98cf7eb28748a891edf54d4d674f6a",
+   "applicability": "RECOGNIZED",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": null,
+   "artifact_revision_id": "art-ad449ad9ade223cbca07151dd151d187",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": "yen",
+   "actor": "role-system",
+   "scope": {
+    "type": "purchase request"
+   },
+   "value": 1000000,
+   "outcome": "handled by the system",
+   "subject": "purchase request",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "Anything smaller is handled by the system and you will never see it.",
+     "locator": "{\"line_end\": 15, \"line_start\": 15, \"type\": \"line_span\"}",
+     "parser_version": "1.0.0"
+    }
+   ],
+   "modality": "must",
+   "operator": "<",
+   "condition": {
+    "op": "lt",
+    "unit": "yen",
+    "field": "purchase_request.amount",
+    "value": 1000000
+   },
+   "predicate": "handled by system",
+   "rationale": "The text specifies that purchase requests smaller than the one million yen threshold are handled automatically by the system.",
+   "exceptions": [],
+   "candidate_id": "cand-run-6d98cf7eb28748a891edf54d4d674f6a-0001",
+   "model_run_id": "run-6d98cf7eb28748a891edf54d4d674f6a",
+   "applicability": "RECOGNIZED",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": null,
+   "artifact_revision_id": "art-ad449ad9ade223cbca07151dd151d187",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "unresolved": true
+   },
+   "value": 2,
+   "outcome": null,
+   "subject": "request",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "Please action requests within two working days.",
+     "locator": "{\"line_end\": 34, \"line_start\": 33, \"type\": \"line_span\"}",
+     "parser_version": "1.0.0"
+    }
+   ],
+   "modality": "must",
+   "operator": "<=",
+   "condition": null,
+   "predicate": "action within timeframe",
+   "rationale": "The text requires requests to be actioned within two working days.",
+   "exceptions": [],
+   "candidate_id": "cand-run-6d98cf7eb28748a891edf54d4d674f6a-0002",
+   "model_run_id": "run-6d98cf7eb28748a891edf54d4d674f6a",
+   "applicability": "UNKNOWN",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": "missing_scope",
+   "artifact_revision_id": "art-ad449ad9ade223cbca07151dd151d187",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "item": "published policy exception"
+   },
+   "value": null,
+   "outcome": "Recorded, owned, and dated",
+   "subject": "exception",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "Every exception to a published policy must be **recorded, owned and dated**.",
+     "locator": "{\"line_end\": 13, \"line_start\": 12, \"type\": \"line_span\"}",
+     "parser_version": "1.0.0"
+    }
+   ],
+   "modality": "must",
+   "operator": null,
+   "condition": null,
+   "predicate": "must be recorded, owned and dated",
+   "rationale": "The text explicitly mandates that every exception to a published policy must be recorded, owned, and dated.",
+   "exceptions": [],
+   "candidate_id": "cand-run-aea9a6bf8d2b4f5ba6fd6d89cc9d9752-0000",
+   "model_run_id": "run-aea9a6bf8d2b4f5ba6fd6d89cc9d9752",
+   "applicability": "RECOGNIZED",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": null,
+   "artifact_revision_id": "art-d7eaf78bc75db1c4002fd883b4b4d6e5",
+   "business_fields_rejected": null
+  },
+  {
+   "unit": null,
+   "actor": null,
+   "scope": {
+    "item": "exception request"
+   },
+   "value": null,
+   "outcome": "Not approved",
+   "subject": "exception",
+   "ancestry": {
+    "merged_count": 1
+   },
+   "evidence": [
+    {
+     "quote": "An exception without an end date will not be approved.",
+     "locator": "{\"line_end\": 29, \"line_start\": 28, \"type\": \"line_span\"}",
+     "parser_version": "1.0.0"
+    }
+   ],
+   "modality": "must",
+   "operator": null,
+   "condition": null,
+   "predicate": "will not be approved",
+   "rationale": "The text states that an exception without an end date will not be approved.",
+   "exceptions": [],
+   "candidate_id": "cand-run-aea9a6bf8d2b4f5ba6fd6d89cc9d9752-0001",
+   "model_run_id": "run-aea9a6bf8d2b4f5ba6fd6d89cc9d9752",
+   "applicability": "RECOGNIZED",
+   "source_revision_id": "src-imp-1f2742aa1e3a477980d7cf3bb7a44fb9",
+   "applicability_reason": null,
+   "artifact_revision_id": "art-d7eaf78bc75db1c4002fd883b4b4d6e5",
+   "business_fields_rejected": null
+  }
+ ]
+}

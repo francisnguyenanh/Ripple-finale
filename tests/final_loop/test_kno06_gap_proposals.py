@@ -17,7 +17,7 @@ from infra.worker import knowledge_gap_proposals as kgp
 from tests.final_loop.test_chg02_impact import RULES
 from tests.final_loop.test_kno01_business_store import counts, ws  # noqa: F401  (ws is a fixture)
 from tests.final_loop.test_kno05_accept import answer
-from tests.final_loop.test_qry03_qa import qa_env, use  # noqa: F401  (qa_env is a fixture)
+from tests.final_loop.test_qry03_qa import accept, qa_env, use  # noqa: F401  (qa_env is a fixture)
 from tests.pitch_brief.conftest import drain
 
 LIMITS = json.loads(open("config/knowledge_gap_proposals.json", encoding="utf-8").read())["limits"]
@@ -66,7 +66,6 @@ def test_a_valid_suggestion_becomes_a_normal_open_gap_with_a_stable_id_and_a_pro
     (gap(rids=(MANAGER, "rule-capex-finance-policy")), "rule_count_for_kind"),
     (gap(question="See <b>this</b>"), "question_not_plain_text"),
     (gap(question=""), "question_not_plain_text"),
-    (gap(question="x" * 301), "question_not_plain_text"),
     (gap(kind="conflicting_facts", rids=("rule-capex-finance-config", "rule-capex-finance-policy"), question="Do these two disagree?"), "already_asked"),
     (gap(question="The sources disagree. Which one is the business rule?", rids=(MANAGER,)), "already_asked"),
     (gap(refs=()), "evidence_refs_missing_or_too_many"),
@@ -76,6 +75,42 @@ def test_a_valid_suggestion_becomes_a_normal_open_gap_with_a_stable_id_and_a_pro
 def test_invented_unbound_repeated_or_unsafe_gap_suggestions_are_rejected_with_a_reason(bad, reason):
     out = resolve([bad])
     assert out["gaps"] == [] and [r["reason"] for r in out["rejected"]] == [reason]
+
+
+def test_a_long_suggested_disagreement_reaches_the_person_with_both_options_and_the_cut_disclosed(qa_env):
+    """Closure C-06 / C-07 through the real routes (2026-10-22): a suggestion whose question overruns the limit becomes a labelled open gap whose text keeps the deciding
+    sentence; the queue names both rules with their readings (`options` + `compare`); `answer-preview` works for either option; the cut is disclosed in the coverage, the
+    full wording only to a reader with evidence rights; the model's raw object is kept on the job record."""
+    q = qa_env
+    pair = (MANAGER, "rule-high-risk-director")                                       # a pair with no stored question yet (the CAPEX pair is already asked by the analysis)
+    decision = "Which approval is the business rule for a 1,500,000 JPY purchase from a high-risk supplier?"
+    long_q = ("Do these two rules disagree about purchases from a high-risk supplier? Rule " + pair[0] + " requires the requesting manager's approval from 1,000,000 JPY, whereas rule "
+              + pair[1] + " sends any purchase from a supplier on the risk register to the Operations Director, so a 1,500,000 JPY purchase from such a supplier is treated differently by each source. " + decision)
+    assert len(long_q) > LIMITS["max_question_chars"]
+    use(q, lambda p: pobj([gap(kind="conflicting_facts", rids=pair, question=long_q, refs=[pair[0]])], []))
+    assert propose(q, q.admin, attempt=3).status_code == 200
+    got = settle(q, q.admin)
+    p = got["proposals"]
+    assert p["status"] == "completed" and p["gaps"] == 1 and p["coverage"]["rejected"] == 0 and p["coverage"]["raw_output_kept"] is True
+    [tr] = p["coverage"]["questions_trimmed"]
+    assert tr["reason"] == "question_over_length" and tr["cut_chars"] > 0 and tr["full_question"] == long_q                 # admin reads evidence: the full wording
+    g = next(x for x in got["gaps"] if x.get("origin") == "model_proposal" and x["kind"] == "conflicting_facts" and set(x["affected_rule_ids"]) == set(pair))
+    assert g["question"].endswith(decision) and len(g["question"]) <= LIMITS["max_question_chars"]
+    assert [o["rule_id"] for o in g["options"]] == list(g["affected_rule_ids"]) and all(o["compare"] and o["compare"]["actor"] for o in g["options"])
+    for rid in pair:
+        pv = q.admin.post("/v2/business/gaps/answer-preview", json={"workspace_id": q.env.ws, "gap_id": g["gap_id"], "answer": {"choose_rule_id": rid}})
+        assert pv.status_code == 200 and pv.json()["resulting_rule"]["rule_id"].startswith(rid), pv.text
+    plain = q.req.get("/v2/business/gaps", params={"workspace_id": q.env.ws}).json()
+    if plain.get("proposals"):
+        assert all("full_question" not in x for x in plain["proposals"]["coverage"]["questions_trimmed"])                   # a reader without evidence rights: the cut, not the wording
+
+
+def test_an_over_long_plain_question_is_kept_cut_and_recorded_not_refused():
+    """Correction 2026-10-22 (closure C-06, live run JOURNEY-V7-J2): a plain-text question over the limit used to be refused as "not plain text"; it is kept, cut at the
+    limit and listed under `questions_trimmed` — the rule ids are structured on the gap, and the model's correct suggestion is not lost to a length it was provoked into."""
+    out = resolve([gap(question="x" * 301)])
+    assert len(out["gaps"]) == 1 and out["rejected"] == [] and len(out["gaps"][0]["question"]) <= 300 and out["gaps"][0]["question"].endswith("…")
+    assert out["questions_trimmed"][0]["reason"] == "question_over_length" and out["questions_trimmed"][0]["rule_ids"] == sorted(out["gaps"][0]["affected_rule_ids"])
 
 
 @pytest.mark.parametrize("bad, reason", [
@@ -278,3 +313,41 @@ def test_permissions_disarmed_provider_and_input_checks(qa_env, monkeypatch):
     assert propose(q, anonymous).status_code in (401, 403)
     other = q.admin.get("/v2/business/gaps", params={"workspace_id": "ws-not-mine"})
     assert other.status_code in (403, 404)
+
+
+def test_a_suggested_disagreement_in_the_shape_of_the_live_raw_object_is_decided_and_accepted_through_the_real_routes(qa_env):
+    """J2 integration close-out (2026-10-22): a model object shaped exactly like the kept JOURNEY-V7P raw object (status OK, one `conflicting_facts` gap naming two shown
+    rules with their offered references, no relations, no notes) goes through the worker, is saved, shows both options with their readings in the queue, previews either
+    choice, is decided by `choose_rule_id` through the existing answer path and the new knowledge version is accepted; the decided rule carries the decision; the
+    suggested question is RESOLVED. Nothing here calls a model; the operator stands in for the person through the real routes."""
+    q = qa_env
+    pair = (MANAGER, "rule-high-risk-director")
+    raw = {"status": "OK", "gaps": [{"kind": "conflicting_facts", "rule_ids": list(pair),
+                                    "question": "Do purchases from a high-risk supplier need the requesting manager from 1,000,000 JPY, or the Operations Director regardless of amount?",
+                                    "evidence_refs": ["approval.yaml#routing_rules.standard_manager_threshold_jpy", "procurement-policy.md#2.3"]}], "relations": [], "notes": []}
+    use(q, lambda p: raw)
+    for a in (1, 2, 3):                                                                           # the first attempt free on this knowledge version (earlier tests used some)
+        r = propose(q, q.admin, attempt=a)
+        if not r.json().get("reused"):
+            break
+    assert r.status_code == 200 and not r.json().get("reused")
+    got = settle(q, q.admin)
+    assert got["proposals"]["status"] == "completed" and got["proposals"]["coverage"]["rejected"] == 0 and got["proposals"]["coverage"]["raw_output_kept"] is True
+    g = next(x for x in got["gaps"] if x.get("origin") == "model_proposal" and x["kind"] == "conflicting_facts" and set(x["affected_rule_ids"]) == set(pair))
+    assert set(g["evidence_refs"]) == set(raw["gaps"][0]["evidence_refs"]) and [o["rule_id"] for o in g["options"]] == list(g["affected_rule_ids"])
+    assert all(o["compare"] and o["compare"]["actor"] for o in g["options"])
+    for rid in pair:
+        pv = q.admin.post("/v2/business/gaps/answer-preview", json={"workspace_id": q.env.ws, "gap_id": g["gap_id"], "answer": {"choose_rule_id": rid}})
+        assert pv.status_code == 200 and pv.json()["resulting_rule"]["rule_id"] == rid + "-target", pv.text
+    before = counts(q.env)
+    out = answer(q.admin, q.env, g, {"choose_rule_id": "rule-high-risk-director"}, "Policy 2.3 wins: a high-risk supplier always goes to the Operations Director.")
+    assert out["noop"] is False and out["decision_id"].startswith("decision-")
+    assert accept(q.admin, q.env, acknowledged_open_gaps=True).status_code == 200
+    drain(q.env)
+    from infra.adapters.v2_business import business_view
+    kn = business_view(q.env.store, q.env.tenant, q.env.ws)["accepted"]                           # the read model of the accepted version
+    target = next(r for r in kn["rules"] if r["rule_id"] == "rule-high-risk-director-target")
+    assert target["authority"] == "TARGET" and target["status"] == "CONFIRMED" and out["decision_id"] in [p.get("decision_id") for p in target["provenance"]]
+    gap_after = next(x for x in kn["gaps"] if x["gap_id"] == g["gap_id"])
+    assert gap_after["status"] == "RESOLVED" and counts(q.env)["v2_business_decisions"] == before["v2_business_decisions"] + 1
+

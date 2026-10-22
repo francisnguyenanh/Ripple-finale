@@ -87,6 +87,23 @@ def test_missing_conflict_status_and_exceptions_are_never_hidden():
     assert "important" in b                                                                 # a critical open question is flagged
 
 
+def test_a_disagreement_a_person_settled_says_so_and_names_the_decided_rule_and_a_committed_change_is_a_listed_decision():
+    target = dict(copy.deepcopy(EXAMPLES["target_rule"]), rule_id="rule-capex-finance-config-target", title="Finance reviews CAPEX from 2,000,000 JPY")
+    change = dict(copy.deepcopy(EXAMPLES["target_rule"]), rule_id="rule-standard-manager-review-target", title="Manager approval from 1,500,000 JPY",
+                  provenance=[{"kind": "human_decision", "decision_id": "change-1"}])
+    decisions = DECISIONS + [{"decision_id": "change-1", "kind": "business_change", "quote": "1,500,000 JPY is the new manager threshold.", "body": {"intent_id": "chg-1"}}]
+    snap = snapshot(KNOWLEDGE["observed_rules"] + [target, change])
+    b = da.render_markdown(da.build_document(snap, decisions, mode="business"), TPL["business"])
+    assert "disagree. A person decided the business rule: “Finance reviews CAPEX from 2,000,000 JPY”. The sources themselves are unchanged and still disagree." in b
+    assert "A person has to decide" not in b   # the sources still disagree
+    assert "“Finance reviews CAPEX from 2,000,000 JPY.”" in b and "“1,500,000 JPY is the new manager threshold.”" in b                        # both kinds of decision
+    t = da.render_markdown(da.build_document(snap, decisions, mode="technical", can_read_evidence=True), TPL["technical"])
+    assert "; decided by `rule-capex-finance-config-target`" in t and "(`change-1`, business change)" in t and "(`decision-s1-capex`, gap `gap-x`)" in t
+    withdrawn = dict(target, status="SUPERSEDED")                                             # a withdrawn decided rule settles nothing any more
+    again = da.render_markdown(da.build_document(snapshot(KNOWLEDGE["observed_rules"] + [withdrawn]), DECISIONS, mode="business"), TPL["business"])
+    assert "A person has to decide which one is the business rule." in again
+
+
 def test_withdrawn_and_proposal_states_are_stated():
     rules = copy.deepcopy(KNOWLEDGE["observed_rules"])
     rules[0]["status"] = "SUPERSEDED"
@@ -183,3 +200,18 @@ def test_nothing_in_the_templates_or_generator_is_specific_to_one_company():
     for path in list((ROOT / "config" / "document_templates").glob("*.json")) + [ROOT / "core" / "change_intelligence" / "v2" / "document_ast.py"]:
         text = path.read_text(encoding="utf-8").lower()
         assert "harbor" not in text and "capex" not in text and "jpy" not in text, path.name
+
+
+def test_a_disagreement_a_model_suggested_and_a_person_settled_is_shown_with_the_decided_rule_and_an_open_one_stays_a_question():
+    rules = copy.deepcopy(KNOWLEDGE["observed_rules"]) + [dict(copy.deepcopy(EXAMPLES["target_rule"]), rule_id="rule-capex-finance-config-target",
+                                                              title="Finance reviews CAPEX from 2,000,000 JPY")]
+    gap = {"gap_id": "gap-model-capex", "kind": "conflicting_facts", "status": "RESOLVED", "affected_rule_ids": ["rule-capex-finance-config", "rule-capex-finance-policy"],
+           "question": "Which CAPEX threshold is the rule?", "evidence_refs": [], "requires_permission": "knowledge.confirm", "priority": "critical"}
+    snap = snapshot(rules, gaps=[gap])
+    snap["relations"] = [e for e in snap["relations"] if e["type"] != "conflicts_with"]   # no stored relation: only the answered suggestion
+    b = da.render_markdown(da.build_document(snap, DECISIONS, mode="business"), TPL["business"])
+    assert "disagree. A person decided the business rule: “Finance reviews CAPEX from 2,000,000 JPY”. The sources themselves are unchanged and still disagree." in b
+    open_snap = snapshot(rules, gaps=[dict(gap, status="OPEN")])
+    open_snap["relations"] = snap["relations"]
+    o = da.render_markdown(da.build_document(open_snap, DECISIONS, mode="business"), TPL["business"])
+    assert "No disagreement between sources is recorded." in o and "Which CAPEX threshold is the rule?" in o   # open: listed as a question, not as settled

@@ -12,6 +12,8 @@ import json
 import re
 from typing import Iterable, Mapping, Optional
 
+from core.change_intelligence.v2.business_index import rule_is_gate
+
 STATUSES = ("ANSWERED", "PARTIAL", "NEEDS_CLARIFICATION", "ABSTAINED")
 
 # ---- applicability of a claim to the case the question describes (live finding 2026-10-17: a model applied thresholds of other purchase types) ------------------------
@@ -93,7 +95,34 @@ def _scope_with_universe(rule: Mapping, facts: Mapping, universe: Mapping):
 
 
 AMOUNT_FACT = "request.net_amount_jpy"
-_NOT_AN_AMOUNT_OF_THE_CASE = re.compile(r"difference|tolerance|delta|variance|fee|charge", re.I)
+_NOT_AN_AMOUNT_OF_THE_CASE = re.compile(r"difference|tolerance|delta|variance|fee|charge|gross|tax|freight|shipping", re.I)
+_AMOUNT_NAME = re.compile(r"(^|[._])(amount|value|price|total|cost|sum|spend)(_jpy)?$", re.I)
+
+
+def _amount_leaves(cond) -> list:
+    """(field, unit) of every order comparison in a condition tree."""
+    if not isinstance(cond, Mapping):
+        return []
+    if "field" in cond:
+        return [(str(cond["field"]), cond.get("unit"))] if cond.get("op") in ("gt", "gte", "lt", "lte") else []
+    out: list = []
+    for key in ("all", "any"):
+        for c in cond.get(key, []):
+            out += _amount_leaves(c)
+    if "not" in cond:
+        out += _amount_leaves(cond["not"])
+    return out
+
+
+def amount_field_stands_for_the_case(field: str, unit) -> bool:
+    """Whether a rule's compared field is the amount of the case: a `..._jpy` field, or an amount-named field (`purchase_request.amount`) the rule compares in JPY
+    (the unit is on the leaf, from the source). Never a difference, tolerance, charge, gross, tax or freight field, never a field in another currency, never a field
+    without a known currency (prose field names are not read as the case amount on the name alone: that stays a question)."""
+    if _NOT_AN_AMOUNT_OF_THE_CASE.search(field):
+        return False
+    if field.endswith("_jpy"):
+        return True
+    return bool(_AMOUNT_NAME.search(field)) and isinstance(unit, str) and unit.strip().upper() == "JPY"
 
 
 def _fields_in(cond) -> set:
@@ -115,8 +144,9 @@ def case_facts_for_rule(rule: Mapping, facts: Mapping) -> dict:
     never a field that measures a difference, tolerance or charge. Live eval finding 2026-10-17: freight rules compare `order.net_goods_jpy`, not `request.net_amount_jpy`."""
     out = dict(facts)
     if AMOUNT_FACT in facts:
-        for f in _fields_in(rule.get("condition")) | {f for e in rule.get("exceptions") or [] if isinstance(e, Mapping) for f in _fields_in(e.get("condition"))}:
-            if f not in out and f.endswith("_jpy") and not _NOT_AN_AMOUNT_OF_THE_CASE.search(f):
+        leaves = _amount_leaves(rule.get("condition")) + [l for e in rule.get("exceptions") or [] if isinstance(e, Mapping) for l in _amount_leaves(e.get("condition"))]
+        for f, unit in leaves:
+            if f not in out and amount_field_stands_for_the_case(f, unit):
                 out[f] = facts[AMOUNT_FACT]
     return out
 
@@ -186,25 +216,58 @@ def _implementation_pending(pack: Mapping, item_id: str) -> bool:
 SETTLED_RULE_STATES = frozenset({"VALIDATED", "CONFIRMED"})      # DRAFT / PENDING_HUMAN are not confirmed data: never a server claim
 
 
-def uncited_applicable_gates(pack: Mapping, cited: set, qf: Mapping) -> list:
-    """Approval gates of the pack that reach the stated case although no kept claim cites them (omission the server can see). Strict: every fact the rule needs is stated
-    in the question (no pinned default, no amount standing in for another field), the question names no amount in another currency, the rule is settled (VALIDATED or
-    CONFIRMED, no unknown field such as an unknown unit, no open question about it) and is on neither side of a disagreement (left to the conflict disclosure)."""
-    if qf.get("foreign_amount"):
-        return []
-    in_conflict = {r for c in pack["counterevidence"] if c["kind"] == "conflicting_rule" for r in (c["rule_id"], c["with"])}
+def _settled_uncited_gates(pack: Mapping, cited: set) -> list:
+    """Approval gates of the pack no kept claim cites that are settled data: VALIDATED or CONFIRMED, no unknown field (such as an unknown unit), no open question about
+    them, and on neither side of a disagreement — except the decided TARGET rule of a disagreement a person settled (`question_status` RESOLVED on the counter-evidence,
+    2026-10-22): the decision made it the business rule, so it is as settled as any other; the losing side stays left to the conflict disclosure."""
+    conflicting = [c for c in pack["counterevidence"] if c["kind"] == "conflicting_rule"]
+    settled = {r for c in conflicting if c.get("question_status") == "RESOLVED" for r in (c["rule_id"], c["with"])}
+    open_conflict = {r for c in conflicting if c.get("question_status") != "RESOLVED" for r in (c["rule_id"], c["with"])}
     questioned = {r for c in pack["counterevidence"] if c["kind"] == "open_question" for r in c.get("affected_rule_ids", [])}
-    stated = {k: v for k, v in qf["facts"].items() if k not in qf.get("assumed", {})}
-    universe = scope_universe(pack["items"])
     out = []
     for it in pack["items"]:
         ids = {it["item_id"]} | {m["item_id"] for m in it.get("versions", [])}
-        if it.get("kind") != "rule" or (it.get("outcome") or {}).get("kind") not in _GATE_KINDS or ids & cited or ids & in_conflict or ids & questioned:
+        if it.get("kind") != "rule" or not _is_gate(it) or ids & cited or ids & open_conflict or ids & questioned:
             continue
         if it.get("status") not in SETTLED_RULE_STATES or it.get("unknown_fields"):
             continue
-        if rule_applicability(it, stated, universe, alias_amount=False)["status"] == "applies":
-            out.append(it)
+        decided = it.get("authority") == "TARGET" and it.get("status") == "CONFIRMED" and bool(it.get("decision_ids"))
+        if ids & settled and not decided:
+            continue
+        out.append(it)
+    return out
+
+
+def uncited_applicable_gates(pack: Mapping, cited: set, qf: Mapping) -> list:
+    """Approval gates of the pack that reach the stated case although no kept claim cites them (omission the server can see). Strict: every fact the rule needs is stated
+    in the question (no pinned default, no amount standing in for another field), the question names no amount in another currency, the rule is settled (VALIDATED or
+    CONFIRMED, no unknown field such as an unknown unit, no open question about it) and is on neither side of an undecided disagreement (left to the conflict disclosure)."""
+    if qf.get("foreign_amount"):
+        return []
+    stated = {k: v for k, v in qf["facts"].items() if k not in qf.get("assumed", {})}
+    universe = scope_universe(pack["items"])
+    out = [it for it in _settled_uncited_gates(pack, cited) if rule_applicability(it, stated, universe, alias_amount=False)["status"] == "applies"]
+    return out[:MAX_SERVER_CLAIMS]
+
+
+def uncited_conditional_gates(pack: Mapping, cited: set, qf: Mapping) -> list:
+    """Approval gates nobody cited that a fact the question does not state would decide (2026-10-22, JOURNEY-V4-J3 A4: a 4,000,000 JPY purchase whose category is not
+    stated may also need Finance under the CAPEX rule). Only facts the question reader knows how to read (`FACT_QUESTIONS`) are asked for: the case amount stands
+    for the rule's JPY amount field here (a question about an amount the asker stated would be wrong) and a pinned default counts as read, so a rule that only
+    needs the assumed process is not asked about. Only gates keyed to an amount are considered: the amount is what the asker stated, so a rule in that band that
+    lacks one readable fact is about this case; a gate with no amount comparison (supplier risk alone) is not asked about on every question. Never a claim: the
+    server asks, it does not answer. -> [{"rule_id", "title", "missing"}]"""
+    if qf.get("foreign_amount"):
+        return []
+    universe = scope_universe(pack["items"])
+    out = []
+    for it in _settled_uncited_gates(pack, cited):
+        if not _amount_leaves(it.get("condition")):
+            continue                                                                       # a gate not keyed to an amount (supplier risk, process) is not about the stated case
+        got = rule_applicability(it, qf["facts"], universe)
+        missing = [k for k in got["missing"] if k in FACT_QUESTIONS]
+        if got["status"] == "conditional" and missing and len(missing) == len(got["missing"]):
+            out.append({"rule_id": it["item_id"], "title": _safe_text(it.get("title") or it.get("text"), 300) or it["item_id"], "missing": missing})
     return out[:MAX_SERVER_CLAIMS]
 
 
@@ -224,6 +287,48 @@ _NUM = re.compile(r"(?<![\w.])\d[\d,]*(?:\.\d+)?")
 _ID = re.compile(r"\b(?:rule|decision|gap|edge|concept|role|snap|obs)-[0-9a-z_-]{3,}\b|\b[0-9a-f]{32,}\b")
 _APPROVAL = re.compile(r"\b(?:approv\w*|authori[sz]\w*|sign(?:s|ed)?[- ]?off)\b", re.I)
 _GATE_KINDS = {"review_required"}                    # outcome kinds that are an approval gate (the manager / Finance / Director rules); a periodic review is not
+
+
+def _is_gate(it: Mapping) -> bool:
+    """An approval gate: the modelled kind, or what the rule's own outcome and actor say (`business_index.rule_is_gate`; extracted rules carry no modelled kind)."""
+    return (it.get("outcome") or {}).get("kind") in _GATE_KINDS or bool(it.get("gate")) or rule_is_gate(it)
+
+
+def _span(ref) -> Optional[tuple]:
+    """(line_start, line_end) of a line-span locator given as a dict or as its JSON text; None for any other locator."""
+    loc = ref
+    if isinstance(ref, str):
+        try:
+            loc = json.loads(ref)
+        except ValueError:
+            return None
+    if not isinstance(loc, Mapping) or loc.get("type") != "line_span":
+        return None
+    try:
+        return int(loc["line_start"]), int(loc["line_end"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def rule_bound_to_passages(refs: Iterable[str], obs_loc: Mapping, items: Iterable[Mapping]) -> Optional[str]:
+    """The ONE structured rule bound (artifact + overlapping line span, from the stored source bindings) to the passages a claim cites, when the claim cites no rule
+    itself; None when no rule or several rules are bound there (nothing is guessed). Live finding JOURNEY-V4 / V5 J3 A4a: the model cited the policy passage instead
+    of the rule read from it, so the claim could not be checked against the case; the binding is stored provenance, not a match on words."""
+    spans = [obs_loc[r] for r in refs if r in obs_loc]
+    if not spans:
+        return None
+    found = set()
+    for it in items:
+        if it.get("kind") != "rule":
+            continue
+        for b in it.get("bindings") or []:
+            bs = _span(b.get("evidence_ref"))
+            if bs is None:
+                continue
+            for art, (lo, hi) in spans:
+                if b.get("artifact_id") == art and bs[0] <= hi and lo <= bs[1]:
+                    found.add(it["item_id"])
+    return next(iter(found)) if len(found) == 1 else None
 _UNSAFE = re.compile(r"<[^>]*>|\]\(|https?://|www\.|`|javascript:|\x00", re.I)
 
 
@@ -334,6 +439,7 @@ def judge_claims(claims: Iterable[Mapping], pack: Mapping, question: str, frozen
         if c["kind"] == "conflicting_rule":
             by_id.setdefault(c["rule_id"], {"item_id": c["rule_id"], "kind": "rule", "text": c["text"], "authority": c["authority"], "versions": []})
     obs_text = {o["observation_id"]: json.dumps(o["raw_value"], ensure_ascii=False) for o in pack["observations"].get("results", [])} if can_read_evidence else {}
+    obs_loc = {o["observation_id"]: (o.get("artifact_id"), _span(o.get("locator"))) for o in pack["observations"].get("results", []) if _span(o.get("locator"))} if can_read_evidence else {}
     # a person's decision is cited through the rule it decided: the stored provenance (TARGET rule -> decision_ids) links them, nothing is inferred
     decided_rule = {}
     for it in pack["items"]:
@@ -346,6 +452,11 @@ def judge_claims(claims: Iterable[Mapping], pack: Mapping, question: str, frozen
         refs = list(dict.fromkeys(c["refs"]))
         from_decision = [r for d in refs for r in decided_rule.get(d, []) if r not in refs and r in readable]
         refs = refs + list(dict.fromkeys(from_decision))
+        from_passage = None
+        if refs and not any(r in by_id and by_id[r].get("kind") == "rule" for r in refs):
+            from_passage = rule_bound_to_passages(refs, obs_loc, pack["items"])              # the rule read from the cited passage: stored binding, same lines
+            if from_passage and from_passage in readable:
+                refs = refs + [from_passage]
         if text is None:
             dropped.append({"reason": "unsafe_or_empty_text", "text": str(c["text"])[:80]})
         elif not refs:
@@ -366,13 +477,15 @@ def judge_claims(claims: Iterable[Mapping], pack: Mapping, question: str, frozen
                 dropped.append({"reason": "number_not_in_cited_items", "text": text[:80]})
             elif not (auths & need):
                 dropped.append({"reason": "basis_does_not_match_cited_authority", "text": text[:80]})
-            elif _APPROVAL.search(text) and not (_APPROVAL.search(cited_text) or any(((by_id.get(r) or {}).get("outcome") or {}).get("kind") in _GATE_KINDS for r in refs)):
+            elif _APPROVAL.search(text) and not (_APPROVAL.search(cited_text) or any(_is_gate(by_id.get(r) or {}) for r in refs)):
                 dropped.append({"reason": "claim_overstates_outcome", "text": text[:80]})     # "reviewed by" is not "approved by": an approval the cited items never state
             else:
                 claim = {"text": text, "refs": refs, "basis": c["basis"], "authority_labels": ["what the sources say" if c["basis"] == "observed" else "decided by a person"],
                          "uses_evidence": any(r in obs_text for r in refs), "applicability": "not_checked", "conditional_on": [], "assumptions": []}
                 if from_decision:
                     claim["refs_from_decision"] = list(dict.fromkeys(from_decision))      # added by the server from the decision the claim cites
+                if from_passage and from_passage in refs:
+                    claim["refs_from_passage"] = [from_passage]                           # added by the server from the binding of the cited passage
                 if concrete:
                     app = claim_applicability(refs, by_id, qf["facts"], universe)
                     if app["status"] == "not_applicable":
@@ -419,6 +532,7 @@ def finalize(model: Mapping, kept: list, dropped: list, pack: Mapping, frozen: M
         # omission the server can see: an approval gate that reaches the stated case is added as a server claim and the answer is never complete without it
         added = [_server_claim(it) for it in uncited_applicable_gates(pack, cited, qf)][: max(0, lim["max_claims"] - len(kept))]
         kept, applying = kept + added, applying + added
+    undecided_gates = uncited_conditional_gates(pack, cited | {r for c in added for r in c["refs"]}, qf) if concrete and kept and (pack["items"] or pack["observations"].get("results")) else []
     if not kept:
         if status == "NEEDS_CLARIFICATION" and questions:
             reasons.append("needs_clarification")
@@ -451,6 +565,13 @@ def finalize(model: Mapping, kept: list, dropped: list, pack: Mapping, frozen: M
                 if pending_decided and _IMPLEMENTED_STATE.search(pack.get("query") or ""):
                     status = "PARTIAL" if status == "ANSWERED" else status         # the question asks what is in force in the files/code, which still show the old rule
                     reasons.append("implementation_pending")
+        if undecided_gates:
+            # a gate the model left out that a fact the asker can add would decide: the answer is not complete and asks for that fact (never a claim, never a guess)
+            status = "PARTIAL" if status == "ANSWERED" else status
+            reasons.append("conditional_rule_not_cited")
+            for key in sorted({m for g in undecided_gates for m in g["missing"]}):
+                if FACT_QUESTIONS[key] not in applicability_questions:
+                    applicability_questions.append(FACT_QUESTIONS[key])
         if pack.get("sufficiency") == "insufficient":
             status = "PARTIAL" if status == "ANSWERED" else status
             reasons.append("evidence_judged_insufficient")
@@ -510,11 +631,14 @@ def finalize(model: Mapping, kept: list, dropped: list, pack: Mapping, frozen: M
         answer = proposed if ok and status != "NEEDS_CLARIFICATION" else (" ".join(_claim_sentence(c) for c in kept) if kept else "More detail is needed to answer.")
         if answer == proposed and added:
             answer = (answer + " " + " ".join(c["text"] for c in added)).strip()        # the model's text did not name these rules: the server's sentences follow it
+        if status != "NEEDS_CLARIFICATION" and undecided_gates:
+            answer = (answer + " " + " ".join(f"Whether this rule also applies depends on a fact the question does not state: {g['title'].rstrip('.')}." for g in undecided_gates)).strip()
         if not ok and kept:
             reasons.append("answer_text_replaced_by_claims")
     pending = sorted({it["item_id"] for it in pack["items"] if it["item_id"] in cited and it.get("authority") == "TARGET" and it.get("implementation_status") in ("pending", "partial")})
     return {"status": status, "answer": answer, "claims": kept, "dropped": dropped, "conflicts": conflicts, "uncertainty": uncertainty, "clarifying_questions": questions,
             "reasons": reasons, "retrieval_note": RETRIEVAL_NOTE, "case_facts": {"facts": qf["facts"], "assumed": qf["assumed"], "concrete": concrete},
+            "undecided_gates": undecided_gates,
             "implementation_note": "The files and code still show the old rule for: " + ", ".join(pending) + "." if pending else None}
 
 

@@ -28,7 +28,7 @@ def latest_job(store, tenant_id, workspace_id, snapshot_id):
     return None
 
 
-def proposals_for(store, tenant_id, workspace_id, snap) -> dict:
+def proposals_for(store, tenant_id, workspace_id, snap, *, can_read_evidence: bool = False) -> dict:
     """`{status, gaps, relations, coverage, reason, job_id}` for the snapshot view `snap` (None -> not_requested). Gaps already in the snapshot are left out."""
     none = {"status": "not_requested", "gaps": [], "relations": [], "coverage": None, "reason": None, "job_id": None,
             "statement": "No model suggestions were requested for this knowledge version."}
@@ -46,7 +46,12 @@ def proposals_for(store, tenant_id, workspace_id, snap) -> dict:
         out["gaps"] = [dict(g, origin="model_proposal") for g in res["gaps"] if g["gap_id"] not in in_snapshot]
         out["relations"] = [dict(e, origin="model_proposal") for e in res["relations"] if e["edge_id"] not in known]
         out["coverage"] = {"model_status": res["model_status"], "rules_shown": res["rules_shown"], "rules_not_shown": res["rules_not_shown"], "rejected": len(res["rejected"]),
-                           "notes": res["notes"], "complete": res["rules_not_shown"] == 0 and res["model_status"] != "UNSURE"}
+                           "notes": res["notes"], "complete": res["rules_not_shown"] == 0 and res["model_status"] != "UNSURE",
+                           # C-06 / C-07 (2026-10-22): what was cut is told; the model's full wording needs evidence rights (it may quote sources); the raw object stays on the job record
+                           "rejected_reasons": [r.get("reason") for r in res["rejected"]], "prompt": res.get("prompt_coverage"),
+                           "questions_trimmed": [({k: v for k, v in q.items() if k != "full_question"} | ({"full_question": q.get("full_question")} if can_read_evidence else {}))
+                                                 for q in res.get("questions_trimmed") or []],
+                           "raw_output_kept": "model_output" in res}
         out["statement"] = ("A model looked at " + str(res["rules_shown"]) + " rule(s) and suggested " + str(len(res["gaps"])) + " question(s) and " + str(len(res["relations"])) +
                             " relation(s); " + (str(res["rules_not_shown"]) + " rule(s) were not shown, so their gaps are unknown. " if res["rules_not_shown"] else "") +
                             "Suggestions are not facts: a person answers or dismisses each one. Finding nothing is not proof that nothing is missing.")

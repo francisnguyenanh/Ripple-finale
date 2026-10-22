@@ -28,6 +28,9 @@ def load_config() -> tuple[dict, str]:
     return json.loads(raw.decode("utf-8")), hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest()
 
 
+MODEL_OUTPUT_LIMIT = 60000                       # characters of the model's own proposal object kept with the result (JOURNEY-V7-J2: a refused suggestion left no text to read)
+
+
 def job_id_for(snapshot_id: str, attempt: int) -> str:
     from infra.worker import job_binding
     return "gpr-" + hashlib.sha256(json.dumps([snapshot_id, attempt, job_binding.fingerprint(KIND)]).encode("utf-8")).hexdigest()[:24]
@@ -73,13 +76,17 @@ class GapProposalExecutor:
         rules = {r["rule_id"]: r for r in shown}
         asked = [f"- {g['kind']} about {', '.join(g['affected_rule_ids'])}: {g['question']}" for g in snap["gaps"]]
         edges = [f"- {e['from']} {e['type']} {e['to']}" for e in snap["relations"] if e["status"] != "REJECTED"]
-        prompt = bp.build_prompt(frozen, shown, asked, edges, can_read_evidence=can_evidence, max_chars=frozen["limits"]["max_prompt_chars"])
+        prompt, coverage = bp.build_prompt_with_coverage(frozen, shown, asked, edges, can_read_evidence=can_evidence, max_chars=frozen["limits"]["max_prompt_chars"])
         from infra.worker import extraction
-        if extraction._input_token_bound(prompt, frozen["output_schema"]) > config.max_input_tokens_per_call:
+        bound = extraction._input_token_bound(prompt, frozen["output_schema"])
+        # three numbers kept apart in the record: characters of the prompt, the byte-based admission bound (what the ceiling is checked against), and the
+        # per-call reservation, which is the configured caps priced at the ceiling, never the prompt's size (job_quota)
+        coverage = {**coverage, "token_bound": bound, "token_ceiling": config.max_input_tokens_per_call}
+        if bound > config.max_input_tokens_per_call:
             raise NonRetryableExecutionError("budget_exceeded", "the rules exceed the input ceiling")
         pin = {"snapshot_id": meta["snapshot_id"], "business_revision": meta["business_revision"], "source_revision_id": meta["source_revision_id"],
                "km_revision_id": meta["km_revision_id"], "decision_epoch": meta["decision_epoch"], "content_hash": meta["content_hash"]}
-        ctx.request_context.update(gp_frozen=frozen, gp_sha=sha, gp_rules=rules, gp_gaps=snap["gaps"], gp_relations=snap["relations"], gp_pin=pin,
+        ctx.request_context.update(gp_frozen=frozen, gp_sha=sha, gp_rules=rules, gp_gaps=snap["gaps"], gp_relations=snap["relations"], gp_pin=pin, gp_coverage=coverage,
                                    gp_evidence=can_evidence, gp_not_shown=max(0, len(live) - len(shown)))
         return ExecutionRequest(prompt=prompt, schema=frozen["output_schema"], provider_calls_planned=1, external=True)
 
@@ -88,10 +95,13 @@ class GapProposalExecutor:
         obj, model_id, actual, in_t, out_t, th_t = call_pinned_json(ctx, request, calls, ROLE, bp.PROPOSAL_KEYS)
         try:
             model = bp.validate_proposal_object(obj, rc["gp_frozen"]["limits"])
+            model_output = json.dumps(obj, ensure_ascii=False, default=str)                  # what the model said, before validation: kept (bounded) for diagnosis
         except ValueError as exc:
             raise NonRetryableExecutionError("schema_violation", str(exc)) from exc
         out = bp.resolve_proposals(model, rc["gp_rules"], rc["gp_gaps"], rc["gp_relations"], limits=rc["gp_frozen"]["limits"], can_read_evidence=rc["gp_evidence"])
         result = {"executor_id": EXECUTOR_ID, "config_sha256": rc["gp_sha"], "pin": rc["gp_pin"], "model_status": model["status"], "gaps": out["gaps"],
-                  "relations": out["relations"], "rejected": out["rejected"], "notes": out["notes"], "rules_shown": len(rc["gp_rules"]), "rules_not_shown": rc["gp_not_shown"],
-                  "evidence_access": rc["gp_evidence"], "provider_calls": 1, "applies_nothing": True, "origin": bp.ORIGIN, "model": {"pinned": model_id, "served": actual}}
+                  "relations": out["relations"], "rejected": out["rejected"], "notes": out["notes"], "questions_trimmed": out.get("questions_trimmed") or [], "rules_shown": len(rc["gp_rules"]), "rules_not_shown": rc["gp_not_shown"],
+                  "evidence_access": rc["gp_evidence"], "provider_calls": 1, "applies_nothing": True, "origin": bp.ORIGIN, "model": {"pinned": model_id, "served": actual},
+                  "prompt_coverage": rc["gp_coverage"],
+                  "model_output": model_output[:MODEL_OUTPUT_LIMIT], "model_output_truncated": len(model_output) > MODEL_OUTPUT_LIMIT}
         return ExecutionOutcome(result=json.loads(_canon_json(result)), model_id=actual, input_tokens=in_t, output_tokens=out_t, thought_tokens=th_t)

@@ -34,7 +34,8 @@ def _read(request, workspace_id, build):
     try:
         authority = _authority(identity, request, workspace_id)
         require(authority, "project.read")
-        return JSONResponse(build(store, authority["tenant_id"]), headers=_NO_STORE)
+        args = (store, authority["tenant_id"], authority)[: build.__code__.co_argcount]       # a builder may ask for the reader's authority (evidence rights)
+        return JSONResponse(build(*args), headers=_NO_STORE)
     except IdentityDenied as exc:
         return _denied(exc)
     except PermissionDenied as exc:
@@ -104,7 +105,7 @@ def business_unbound_values(request: Request, workspace_id: str):
 
 @router.get("/v2/business/gaps")
 def business_gaps(request: Request, workspace_id: str):
-    return _read(request, workspace_id, lambda store, tenant: v2_business.gap_queue(store, tenant, workspace_id))
+    return _read(request, workspace_id, lambda store, tenant, authority: v2_business.gap_queue(store, tenant, workspace_id, can_read_evidence="evidence.read" in permissions_for(authority.get("roles"))))
 
 
 @router.post("/v2/business/analyse")
@@ -435,10 +436,12 @@ def _config_fingerprint(kind: str) -> str:
     return job_binding.fingerprint(kind, extra)
 
 
-def _qa_job_id(workspace_id, snapshot_id, view, question, evidence, follow_up) -> str:
+def _qa_job_id(workspace_id, snapshot_id, view, question, evidence, follow_up, attempt: int = 1) -> str:
     import hashlib
-    key = json.dumps([workspace_id, snapshot_id, view, " ".join(question.lower().split()), bool(evidence), follow_up or "", _config_fingerprint("knowledge.qa")], sort_keys=True)
-    return "qa-" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
+    key = [workspace_id, snapshot_id, view, " ".join(question.lower().split()), bool(evidence), follow_up or "", _config_fingerprint("knowledge.qa")]
+    if attempt != 1:                                                                        # attempt 1 keeps every stored job id; a later attempt is a new job (a new call)
+        key.append(attempt)
+    return "qa-" + hashlib.sha256(json.dumps(key, sort_keys=True).encode("utf-8")).hexdigest()[:24]
 
 
 def _qa_state(rec) -> dict:
@@ -477,6 +480,7 @@ async def ask_business_question(request: Request):
         return _error("v2 unavailable", 503)
     body = await _json_body(request)
     workspace_id, question, view, follow_up = body.get("workspace_id"), body.get("question"), body.get("view", "target"), body.get("follow_up_of")
+    attempt = body.get("attempt", 1)
     try:
         authority = _authority(identity, request, workspace_id if isinstance(workspace_id, str) else "")
         require_human_actor(authority)
@@ -486,6 +490,8 @@ async def ask_business_question(request: Request):
         err = knowledge_qa.validate_payload({"question": question, "view": view, "snapshot_id": "x", "evidence_access": False})
         if not isinstance(workspace_id, str) or err:
             return _error(f"knowledge.qa: {err or 'workspace_id required'}", 400)
+        if isinstance(attempt, bool) or not isinstance(attempt, int) or not 1 <= attempt <= 3:
+            return _error("knowledge.qa: attempt (1-3) required", 400)
         if follow_up is not None and not (isinstance(follow_up, str) and follow_up.startswith("qa-")):
             return _error("knowledge.qa: follow_up_of must be an earlier question id", 400)
         tenant = authority["tenant_id"]
@@ -494,7 +500,7 @@ async def ask_business_question(request: Request):
             return JSONResponse({"error": "There is no accepted business knowledge to ask about yet.", "code": "no_knowledge"}, status_code=409, headers=_NO_STORE)
         snapshot_id = working["snapshot"]["snapshot_id"]
         evidence = "evidence.read" in permissions_for(authority.get("roles"))
-        jid = _qa_job_id(workspace_id, snapshot_id, view, question, evidence, follow_up)
+        jid = _qa_job_id(workspace_id, snapshot_id, view, question, evidence, follow_up, attempt)
         try:
             rec = store.job_record(tenant, workspace_id, jid)
         except TenantScopeError:
@@ -505,6 +511,8 @@ async def ask_business_question(request: Request):
             limit, reservation = _quota_for_qa()
             head = store.head(tenant, workspace_id)
             payload = {"question": question.strip(), "view": view, "snapshot_id": snapshot_id, "evidence_access": evidence}
+            if attempt != 1:
+                payload["attempt"] = attempt
             if follow_up:
                 payload["follow_up_of"] = follow_up
             store.create_job(tenant, workspace_id, jid, "knowledge.qa", payload, expected_version=head.version, idempotency_key=f"job-create-{jid}",
@@ -1041,7 +1049,7 @@ def _merge_guidance_state(draft, store, tenant, workspace_id, change_id, *, can_
             else:
                 state = {"status": "completed", "reason": None, "job_id": rec.get("job_id"), "attempt": attempt_no, "result_hash": res["result_hash"], "integrity": "ok"}
                 merged = business_draft.merge_guidance(draft, {"summary": res["summary"], "accepted": res["accepted"], "rejected": res["rejected"], "questions": res["questions"],
-                                                               "not_addressed": res["not_addressed"]}, state=state)
+                                                               "advice": res.get("advice") or [], "question_items": res.get("question_items") or [], "not_addressed": res["not_addressed"]}, state=state)
                 return merged, bool(res.get("evidence_access"))
         elif st["status"] in ("failed", "cancelled"):
             key = next((k for k in _GUIDE_REASON_WORDS if (st["reason"] or "").startswith(k)), None)
@@ -1139,7 +1147,7 @@ def _review_payload(view, *, mode, can_evidence, change_id, store=None, tenant=N
             row.update(decision_id=d["decision_id"], semantic_diff_hash=d["semantic_diff_hash"], draft_hash=d["draft_hash"], binding=d["binding"] if can_evidence else {k: v for k, v in d["binding"].items() if k != "edit_refs"})
         decisions.append(row)
     can = dict(view["can"])
-    can["blockers"] = [{"code": b["code"], "text": b["text"]} for b in can["blockers"]]
+    can["blockers"] = [{"code": b["code"], "text": b["text"], "about": b.get("about")} for b in can["blockers"]]
     for key in ("knowledge_decision", "file_writes_decision"):
         if can.get(key):
             can[key] = {"action": can[key]["action"], "by": can[key]["actor_id"], "at": can[key]["created_at"]}

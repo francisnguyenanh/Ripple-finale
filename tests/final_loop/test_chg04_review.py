@@ -155,11 +155,17 @@ def test_a_clarification_revises_the_draft_labels_the_item_and_makes_the_earlier
 def test_an_open_question_from_the_guidance_blocks_the_knowledge_decision_until_a_person_answers_it(qa_env):
     q = qa_env
     cid, approver = prepared(q)
-    use(q, lambda p: gobj(items=[gitem("F001", instruction="Change the key and run the tests.")], questions=["Does the new threshold include tax?"]))
+    use(q, lambda p: gobj(items=[gitem("F001", instruction="Change the key and run the tests.", hold=True)],                                  # the model holds F001 ...
+                          questions=[{"question": "Does the new threshold include tax?", "needed": True, "ref": "F001"},                       # ... and needs this answered: blocks
+                                     {"question": "Have you verified this with the latest financial control policy?", "needed": False, "ref": None},   # advice: shown, never a blocker
+                                     "Is the change effective from the next quarter?"]))                                                    # a bare string: advice
     assert ask_guidance(q, q.admin, cid).status_code == 200
     settle_guidance(q, q.admin, cid)
     r = review(q, approver, cid).json()
-    assert [b["code"] for b in r["can"]["blockers"]] == ["open_question"] and r["can"]["approve_knowledge"] is False and r["draft"]["questions"][0]["ref"] == "Q001"
+    assert [(b["code"], b["about"]) for b in r["can"]["blockers"]] == [("open_question", "F001")] and r["can"]["approve_knowledge"] is False and r["draft"]["questions"][0]["ref"] == "Q001"
+    assert len(r["draft"]["questions"]) == 1 and "include tax" in r["draft"]["questions"][0]["question"]                                       # one blocker only
+    advice = r["draft"]["guidance"]["advice_for_human"]
+    assert [x["text"][:24] for x in advice] == ["Have you verified this w", "Is the change effective "] and advice[0]["why_not_blocking"] == "not needed to define the change"
     refused = decide(q, approver, cid, r["binding"])
     assert refused.status_code == 409 and refused.json()["code"] == "open_blockers" and "include tax" in refused.json()["error"]
     assert clarify(q, q.req, cid, r["binding"], "Q001", "answered", answer="Yes, the threshold is the net amount including tax.").status_code == 200

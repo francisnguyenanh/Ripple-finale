@@ -6,7 +6,7 @@ import { FileCode2, FileSpreadsheet, FileText, Search } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/dialog";
-import { Denied, Callout, Card, Field, HowItWorks, Muted, Name, Path, StatePill, Tech, TechField, TextInput } from "@/components/bits";
+import { Denied, Callout, Card, Field, HowItWorks, Muted, Name, Path, Select, StatePill, Tech, TechField, TextInput } from "@/components/bits";
 import { StatusBadge } from "@/components/StatusBadge";
 import { downloadArtifact } from "@/lib/download";
 import { basename, humanize, newId } from "@/lib/fmt";
@@ -21,6 +21,7 @@ import { useParam } from "@/lib/param";
 import { filterFiles } from "./fileFilter";
 import { RepoSync } from "./RepoSync";
 import { RefreshCorrespondence, type HumanProof } from "./RefreshCorrespondence";
+import { SOURCE_ROLES, suggestRole } from "./sourceRole";
 
 const q = encodeURIComponent;
 
@@ -205,6 +206,8 @@ function ImportPanel({ ws, onDone }: { ws: string; onDone: () => Promise<void> }
   const files = React.useRef<HTMLInputElement>(null);
   const [prep, setPrep] = React.useState<Rec | null>(null);
   const [ack, setAck] = React.useState(false);
+  const [roles, setRoles] = React.useState<Record<string, string>>({});          // the kind of each admitted file, chosen by the person (pre-filled suggestion)
+  const [rolesChecked, setRolesChecked] = React.useState(false);                 // the person's explicit confirmation of the kinds shown
   const skips = (prep?.acknowledgement_required ?? []) as unknown[];
   return (
     <Card title="Import source files" testid="import-panel">
@@ -215,12 +218,18 @@ function ImportPanel({ ws, onDone }: { ws: string; onDone: () => Promise<void> }
           const list = Array.from(files.current?.files ?? []);
           if (!list.length) { notify.status("Choose one or more files first."); return; }
           const r = await run(async () => api<Rec>("POST", "/v2/sources/imports", { workspace_id: ws, idempotency_key: newId("imp"), files: await fileEntries(list) }));
-          if (r) { setPrep(r); setAck(false); notify.status("Manifest ready: review it, then commit the import."); }
+          if (r) {
+            setPrep(r); setAck(false); setRolesChecked(false);
+            setRoles(Object.fromEntries(((r.items ?? []) as Rec[]).filter((it) => it.disposition === "admitted")
+              .map((it) => [String(it.logical_path), it.source_role && it.source_role !== "unknown" ? String(it.source_role) : suggestRole(String(it.logical_path))])));
+            notify.status("Manifest ready: review it, then commit the import.");
+          }
         }}>Prepare import</Button>
       </div>
       {prep && (
         <div className="grid gap-2">
           <h3 className="font-semibold">Import manifest</h3>
+          <Muted>Check the kind of each file: it decides how the AI reads it when rules are extracted. The choice is pre-filled from the file type; change it where it is wrong.</Muted>
           {((prep.items ?? []) as Rec[]).map((it) => (
             <div key={it.logical_path} data-testid="import-item" data-logical-path={it.logical_path} data-disposition={it.disposition} className="rounded-md border border-border p-2 text-sm flex flex-wrap items-center gap-2">
               <FileText size={16} aria-hidden="true" />
@@ -228,6 +237,12 @@ function ImportPanel({ ws, onDone }: { ws: string; onDone: () => Promise<void> }
               <StatePill state={it.disposition} label={it.disposition === "admitted" ? "Will be added" : "Will be skipped"} />
               <span className="text-muted">{sizeText(it.byte_size)}</span>
               {it.reason && <span>- {it.reason}</span>}
+              {it.disposition === "admitted" && (
+                <Select aria-label={`Kind of source: ${basename(String(it.logical_path))}`} data-testid="import-role" value={roles[String(it.logical_path)] ?? "unknown"}
+                  onChange={(e) => { const v = e.target.value; setRoles((m) => ({ ...m, [String(it.logical_path)]: v })); }} className="ml-auto">
+                  {SOURCE_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </Select>
+              )}
             </div>
           ))}
           {skips.length > 0 && (
@@ -236,10 +251,17 @@ function ImportPanel({ ws, onDone }: { ws: string; onDone: () => Promise<void> }
               <label className="flex items-center gap-2 text-sm"><input type="checkbox" data-testid="import-ack" checked={ack} onChange={(e) => setAck(e.target.checked)} />I acknowledge the skipped files</label>
             </>
           )}
+          {Object.keys(roles).length > 0 && (
+            <>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" data-testid="import-roles-ack" checked={rolesChecked} onChange={(e) => setRolesChecked(e.target.checked)} />I checked the kind of each file</label>
+              <Muted testid="import-roles-note">{rolesChecked ? "The kinds shown are recorded as confirmed by you." : "Without this tick the kinds are not sent: every file is stored as \"Not sure\"."}</Muted>
+            </>
+          )}
           <div>
             <Button variant="primary" disabled={(skips.length > 0 && !ack) || pending} onClick={async () => {
-              const r = await run(() => api("POST", `/v2/sources/imports/${q(prep.import_id)}/commit`, { workspace_id: ws, expected_version: prep.base_version, acknowledged_skips: skips.length && ack ? skips : [] }), { stale: true });
-              if (r) { setPrep(null); setAck(false); if (files.current) files.current.value = ""; notify.status("Import committed."); await onDone(); }
+              const r = await run(() => api("POST", `/v2/sources/imports/${q(prep.import_id)}/commit`, { workspace_id: ws, expected_version: prep.base_version, acknowledged_skips: skips.length && ack ? skips : [],
+                ...(rolesChecked ? { source_roles: roles } : {}) }), { stale: true });           // sent only as the person's explicit confirmation (stored human_confirmed)
+              if (r) { setPrep(null); setAck(false); setRoles({}); setRolesChecked(false); if (files.current) files.current.value = ""; notify.status("Import committed."); await onDone(); }
             }}>Commit import</Button>
           </div>
         </div>

@@ -52,7 +52,8 @@ class ContractError(ValidationError):
 
 AUTHORITIES = frozenset({"OBSERVED", "TARGET"})
 IMPLEMENTATION_STATUSES = frozenset({"not_required", "pending", "partial", "verified", "divergent", "unverifiable"})
-PROVENANCE_KINDS = frozenset({"source_evidence", "human_decision", "ai_inference"})
+PROVENANCE_KINDS = frozenset({"source_evidence", "human_decision", "ai_inference", "source_link"})   # source_link: a deterministic link between two source locations (business_sources)
+SOURCE_LINK_METHODS = frozenset({"attribute_name", "enum_member", "outcome_actor", "branch_outcome", "branch_actor"})
 RELATION_TYPES = frozenset({"defines", "depends_on", "approves", "exception_to", "conflicts_with", "implements"})
 GAP_KINDS = frozenset({"missing_actor", "missing_condition", "missing_outcome", "missing_exception",
                        "conflicting_facts", "uncertain_link", "unsupported_expression"})
@@ -207,6 +208,10 @@ def validate_provenance(items: Any, *, status: str, authority: Optional[str] = N
             _need_text(item.get("decision_id"), "decision_id")
         elif kind == "source_evidence":
             for k in ("artifact_id", "revision_id", "evidence_ref"):
+                _need_text(item.get(k), k)
+        elif kind == "source_link":                                           # never a confirmation: it only says how two source locations were joined
+            _need_enum(item.get("method"), SOURCE_LINK_METHODS, "source_link method")
+            for k in ("from_ref", "to_ref"):
                 _need_text(item.get(k), k)
         else:
             _need_text(item.get("model_run_id"), "model_run_id")

@@ -66,6 +66,22 @@ def _input_token_bound(prompt: str, schema=None) -> int:
 
 
 _REQUEST_SCHEMA = {"type": "object", "required": ["candidates"]}
+#: The candidate shape, sent to the provider as its structured-output schema (2026-10-22). Before, only the top-level key was constrained and the parser dropped a
+#: non-string `actor` / `outcome` silently, so a shape slip was indistinguishable from an omission. The server-side checks below stay the validator.
+_CONDITION_SCHEMA = {"type": "object", "nullable": True,
+                     "properties": {"field": {"type": "string"}, "op": {"type": "string"}, "value": {"type": "string"}, "unit": {"type": "string", "nullable": True},
+                                    "all": {"type": "array", "items": {"type": "object"}}, "any": {"type": "array", "items": {"type": "object"}}, "not": {"type": "object"}}}
+_CANDIDATE_SCHEMA = {
+    "type": "object", "required": ["subject", "predicate", "value", "unit", "operator", "modality", "exceptions", "outcome", "actor", "condition", "quotes", "rationale"],
+    "properties": {
+        "subject": {"type": "string"}, "predicate": {"type": "string"}, "value": {"type": "string", "nullable": True}, "unit": {"type": "string", "nullable": True},
+        "operator": {"type": "string", "nullable": True, "enum": [">", ">=", "<", "<=", "==", "!="]}, "modality": {"type": "string", "enum": ["must", "may", "observed"]},
+        "scope": {"type": "object", "nullable": True}, "exceptions": {"type": "array", "items": {"type": "string"}},
+        "outcome": {"type": "string", "nullable": True, "description": "what happens when the rule applies: the value a code branch returns or assigns, or the stated consequence"},
+        "actor": {"type": "string", "nullable": True, "description": "who must act, approve or review; only when the text names them"},
+        "condition": _CONDITION_SCHEMA, "quotes": {"type": "array", "items": {"type": "string"}}, "rationale": {"type": "string"}}}
+_OUTPUT_SCHEMA = {"type": "object", "required": ["candidates"], "properties": {"candidates": {"type": "array", "items": _CANDIDATE_SCHEMA}}}
+_MODEL_OUTPUT_LIMIT = 60000                      # characters of the model's own candidates kept with the result for later diagnosis
 
 #: The schema_version every RuleCandidate this executor emits is pinned to.
 #: Matches `core.change_intelligence.v2.schema.SUPPORTED_SCHEMA_VERSIONS`.
@@ -86,7 +102,13 @@ _MAX_CONTEXT_CHUNKS = 200
 #: not been classified as normative.
 _ROLE_INSTRUCTIONS = {
     "normative": ("This text is a NORMATIVE document (policy/SOP/regulation). "
-                 "Extract rules it states as requirements."),
+                 "Extract rules it states as requirements. A table row is a statement: "
+                 "read it with its column headers. A sentence that refers back to an "
+                 "amount or a case stated just before it (\"below this amount\", "
+                 "\"anything smaller\") is its own rule for that side: give it the "
+                 "explicit operator and value and its own outcome. Put every case the "
+                 "sentence limits the rule to (a category or type, such as capital "
+                 "expenditure) into the condition, not only the amount."),
     "implementation": ("This text is CODE. Extract rules the code actually "
                        "implements/enforces, as observed behavior, not as a claim "
                        "about what any policy document says. Include the conditions that "
@@ -94,7 +116,11 @@ _ROLE_INSTRUCTIONS = {
                        "input against a literal number or against a value read from "
                        "configuration (give the comparison as the operator and, when the "
                        "compared value is a configuration attribute, that attribute's name "
-                       "as the value), together with the outcome it leads to."),
+                       "as the value), together with the outcome it leads to: the value "
+                       "the branch returns or assigns is the outcome. Where the code decides "
+                       "who may act on a decision value (for example a role it requires "
+                       "for a route), extract that as a rule whose condition is the "
+                       "decision value and whose actor is that role."),
     "observational": ("This text is OBSERVATIONAL/TRANSACTIONAL data (e.g. a "
                       "log or a completed transaction). Extract it as an "
                       "OBSERVATION (modality \"observed\"), never as a policy "
@@ -141,11 +167,38 @@ def _validated_operator(raw: dict):
 _SIGNATURE_MAX_TEXT = 2000
 
 
+_ENUM_MEMBER_ACTOR = re.compile(r"[A-Z][A-Za-z0-9]*\.[A-Z][A-Z0-9_]*")
+
+
+_INT_TEXT = re.compile(r"-?\d+")
+
+
+def _numbers_from_strings(raw: dict) -> None:
+    """In place: a `value` or condition literal that is a whole number written as a string becomes an int (the server's grammar and the comparisons use numbers)."""
+    v = raw.get("value")
+    if isinstance(v, str) and _INT_TEXT.fullmatch(v.strip()):
+        raw["value"] = int(v.strip())
+
+    def walk(node):
+        if isinstance(node, dict):
+            lv = node.get("value")
+            if isinstance(lv, str) and _INT_TEXT.fullmatch(lv.strip()) and node.get("op") in ("gt", "gte", "lt", "lte", "eq", "ne"):
+                node["value"] = int(lv.strip())
+            for key in ("all", "any"):
+                for child in node.get(key) or []:
+                    walk(child)
+            if isinstance(node.get("not"), dict):
+                walk(node["not"])
+    walk(raw.get("condition"))
+
+
 def _business_fields(raw: dict):
     """(actor_ref, condition, rejected_reason) from the model output, checked against the fkl/1 grammar. Never coerced: an actor that is not a plain
     name, or a condition outside the grammar, becomes None plus a visible reason, so a bad item is a gap later and is never auto-confirmed."""
     actor, condition, rejected = None, None, None
     raw_actor = raw.get("actor")
+    if isinstance(raw_actor, str) and _ENUM_MEMBER_ACTOR.fullmatch(raw_actor.strip()):
+        raw_actor = raw_actor.strip().split(".", 1)[1]                       # a code enum member (Role.FINANCE) names the role FINANCE, not "role finance"
     if isinstance(raw_actor, str) and raw_actor.strip():
         slug = bk._slug(raw_actor)
         if slug:
@@ -160,6 +213,19 @@ def _business_fields(raw: dict):
         except bk.ContractError as exc:
             rejected = (rejected + "; " if rejected else "") + f"condition_{exc.code}"
     return actor, condition, rejected
+
+
+def _rejected_condition(raw: dict, accepted):
+    """The model's condition when the grammar refused it (kept as data, never used as a condition: the analysis may resolve a reference it holds,
+    business_sources); None when it was accepted, absent, or too large to keep."""
+    cond = raw.get("condition")
+    if accepted is not None or cond is None or not isinstance(cond, dict):
+        return None
+    try:
+        text = json.dumps(cond, sort_keys=True)
+    except (TypeError, ValueError):
+        return None
+    return cond if len(text) <= 2000 else None
 
 
 def _canonical_json(obj, depth: int = 0):
@@ -489,11 +555,11 @@ class ExtractRulesExecutor:
             "Only extract what THIS text actually states; do not invent a rule "
             "that would need a different source to confirm.\n<source>\n"
             + _escape_source_delimiters(source_text) + "\n</source>")
-        if _input_token_bound(prompt, _REQUEST_SCHEMA) > config.max_input_tokens_per_call:
+        if _input_token_bound(prompt, _OUTPUT_SCHEMA) > config.max_input_tokens_per_call:
             raise NonRetryableExecutionError("budget_exceeded", "source prompt exceeds input ceiling")
         return ExecutionRequest(
             prompt=prompt,
-            schema={"type": "object", "required": ["candidates"]},
+            schema=_OUTPUT_SCHEMA,
             provider_calls_planned=1, external=True)
 
     def execute(self, ctx: ExecutionContext, request: ExecutionRequest,
@@ -503,8 +569,10 @@ class ExtractRulesExecutor:
         # A role pinned in `role_model_ids` must be served by exactly that model (no fallback, no
         # silent downgrade); an unpinned role keeps the previous "served model is any priced model" rule.
         pinned = "extraction" in (getattr(config, "role_model_ids", None) or {})
+        from infra.worker.explain import provider_schema                     # explain imports this module: a local import avoids the cycle
         call_config = {"max_output_tokens": ctx.max_output_tokens,
-                       "temperature": 0.1, "response_mime_type": "application/json"}
+                       "temperature": 0.1, "response_mime_type": "application/json",
+                       "response_schema": provider_schema(_OUTPUT_SCHEMA)}
         timeout_s = getattr(config, "request_timeout_seconds", None)
         if timeout_s:
             call_config["http_options"] = {"timeout": int(timeout_s * 1000)}  # provider SDK unit: ms
@@ -557,6 +625,14 @@ class ExtractRulesExecutor:
         artifact_id = ctx.job["payload"]["artifact_id"]
         source_revision_id = ctx.job["pinned_source_revision_id"]
         model_run_id = f"run-{uuid.uuid4().hex}"
+        model_output = json.dumps(parsed["candidates"], ensure_ascii=False, default=str)      # what the model said, before any parsing: kept (bounded) for diagnosis
+        fields_dropped: list[dict] = []
+        for index, raw in enumerate(parsed["candidates"]):
+            if isinstance(raw, dict):
+                _numbers_from_strings(raw)                                        # the structured-output schema types values as strings; "2000000" is the number 2000000
+                for key in ("actor", "outcome", "unit"):
+                    if raw.get(key) is not None and not isinstance(raw.get(key), str):
+                        fields_dropped.append({"index": index, "field": key, "type": type(raw.get(key)).__name__})
         rejected_report: list[dict] = []
         dropped_for_conflict: list[dict] = []        # what a conflict rejection removed (a rejection by itself says only 'index N'): kept so the loss is visible, never silent
         # Duplicate consolidation with ancestry. A
@@ -569,7 +645,7 @@ class ExtractRulesExecutor:
         # (missing/invalid scope) are never bucketed -- without a real scope,
         # identity cannot be safely asserted, so each stays its own row.
         buckets: dict[tuple, dict] = {}
-        unknown_candidates: list[RuleCandidate] = []
+        unknown_candidates: list[tuple[dict, RuleCandidate]] = []       # (the model's raw item, the UNKNOWN candidate)
         for index, raw in enumerate(parsed["candidates"]):
             candidate_id = f"cand-{model_run_id}-{index:04d}"
             if not isinstance(raw, dict):
@@ -590,19 +666,19 @@ class ExtractRulesExecutor:
             try:
                 operator = _validated_operator(raw)     # invalid/conflicting -> ValidationError -> schema_invalid
                 if not has_scope:
-                    unknown_candidates.append(_missing_field_candidate(
+                    unknown_candidates.append((raw, _missing_field_candidate(
                         candidate_id=candidate_id, source_revision_id=source_revision_id,
                         artifact_revision_id=artifact_id, raw=raw,
                         reason="missing_scope", model_run_id=model_run_id,
-                        evidence=tuple(resolved_evidence), operator=operator))
+                        evidence=tuple(resolved_evidence), operator=operator)))
                     continue
                 modality = raw.get("modality") if raw.get("modality") in ("must", "may", "observed") else None
                 if modality is None:
-                    unknown_candidates.append(_missing_field_candidate(
+                    unknown_candidates.append((raw, _missing_field_candidate(
                         candidate_id=candidate_id, source_revision_id=source_revision_id,
                         artifact_revision_id=artifact_id, raw=raw,
                         reason="missing_or_invalid_modality", model_run_id=model_run_id,
-                        evidence=tuple(resolved_evidence), operator=operator))
+                        evidence=tuple(resolved_evidence), operator=operator)))
                     continue
                 subject = str(raw.get("subject") or "UNKNOWN")
                 predicate = str(raw.get("predicate") or "UNKNOWN")
@@ -621,7 +697,8 @@ class ExtractRulesExecutor:
                     "value": raw.get("value"), "operator": operator,
                     "unit": unit_raw, "exceptions": exceptions_raw, "outcome": outcome_raw,
                     "evidence": [], "merged_count": 0, "rationales": [],
-                    "actor": actor_ref, "condition": condition, "business_rejected": rejected_business})
+                    "actor": actor_ref, "condition": condition, "business_rejected": rejected_business,
+                    "condition_raw": _rejected_condition(raw, condition)})
                 # Evidence is distinct by (artifact, locator, quote): the same sentence at two real locations keeps
                 # both citations; the same location cited twice by the model is kept once.
                 existing_refs = {(e.artifact_revision_id, e.locator, e.quote) for e in bucket["evidence"]}
@@ -669,11 +746,14 @@ class ExtractRulesExecutor:
                 "model_run_id": candidate.model_run_id,
                 "ancestry": {"merged_count": bucket["merged_count"]},
                 "actor": candidate.actor, "condition": bucket["condition"], "business_fields_rejected": bucket["business_rejected"],
+                **({"condition_raw": bucket["condition_raw"]} if bucket.get("condition_raw") is not None else {}),
                 "rationale": candidate.unknown_fields.get("rationale"),
                 "evidence": [{"locator": e.locator, "quote": e.quote,
                              "parser_version": e.parser_version} for e in candidate.evidence],
             })
-        for candidate in unknown_candidates:
+        for raw_unknown, candidate in unknown_candidates:
+            actor_u, condition_u, rejected_u = _business_fields(raw_unknown)                  # a missing scope never discards what the model did state (2026-10-22)
+            outcome_u = raw_unknown.get("outcome") if isinstance(raw_unknown.get("outcome"), str) else None
             built.append({
                 "candidate_id": candidate.candidate_id, "subject": candidate.subject,
                 "predicate": candidate.predicate, "value": candidate.value,
@@ -681,17 +761,20 @@ class ExtractRulesExecutor:
                 "applicability": candidate.applicability,
                 "applicability_reason": candidate.applicability_reason,
                 "modality": candidate.modality, "scope": candidate.scope,
-                "exceptions": list(candidate.exceptions), "outcome": candidate.outcome,
+                "exceptions": list(candidate.exceptions), "outcome": outcome_u,
                 "source_revision_id": candidate.source_revision_id,
                 "artifact_revision_id": candidate.artifact_revision_id,
                 "model_run_id": candidate.model_run_id,
                 "ancestry": {"merged_count": 1},
-                "actor": None, "condition": None, "business_fields_rejected": None,
+                "actor": actor_u, "condition": condition_u, "business_fields_rejected": rejected_u,
+                **({"condition_raw": _rejected_condition(raw_unknown, condition_u)} if _rejected_condition(raw_unknown, condition_u) is not None else {}),
                 "rationale": candidate.unknown_fields.get("rationale"),
                 "evidence": [{"locator": e.locator, "quote": e.quote,
                              "parser_version": e.parser_version} for e in candidate.evidence],
             })
         result = {"candidates": built, "rejected": rejected_report, "merge_signature": "full_statement.v1",
+                  "model_output": model_output if len(model_output) <= _MODEL_OUTPUT_LIMIT else model_output[:_MODEL_OUTPUT_LIMIT],
+                  "model_output_truncated": len(model_output) > _MODEL_OUTPUT_LIMIT, "fields_dropped": fields_dropped,
                   "model_run_id": model_run_id, "schema_version": _SCHEMA_VERSION,
                   "executor_id": self.executor_id,
                   "context_chunks_used": ctx.request_context.get("context_chunks_used"),

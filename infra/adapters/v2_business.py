@@ -13,6 +13,8 @@ Rules this module keeps:
 """
 from __future__ import annotations
 
+from typing import Optional
+
 from psycopg2.extras import Json
 
 from core.change_intelligence.v2 import business_answers, business_graph, business_knowledge as bk
@@ -230,6 +232,43 @@ def legacy_candidates(store, tenant_id, workspace_id) -> list[dict]:
     return [by_id[k] for k in sorted(by_id)]
 
 
+def current_candidates(store, tenant_id, workspace_id) -> tuple:
+    """The candidates the CURRENT revision's files stand for: per file, those of the newest completed extraction of this revision, or, when the file was not
+    extracted again, of the newest earlier revision whose bytes are identical (carried, restamped to this revision and reported). A file that changed and was
+    not extracted again contributes nothing (its rules are reported missing, never kept stale). -> (candidates, [{artifact_id, from_revision}])."""
+    head = store.head(tenant_id, workspace_id)
+    with read_snapshot(store) as cur:
+        cur.execute("""SELECT source_revision_id, artifact_id, blob_hash FROM v2_artifact_revisions WHERE tenant_id=%s AND workspace_id=%s""", (tenant_id, workspace_id))
+        blobs = {(r[0], r[1]): r[2] for r in cur.fetchall()}
+        cur.execute("""SELECT j.execution_result FROM v2_jobs j WHERE j.tenant_id=%s AND j.workspace_id=%s AND j.kind='extraction'
+              AND j.execution_status='COMPLETED' AND j.execution_result IS NOT NULL
+            ORDER BY (SELECT max(a.recorded_at) FROM v2_job_attempts a WHERE a.tenant_id=j.tenant_id AND a.workspace_id=j.workspace_id AND a.job_id=j.job_id)
+                     ASC NULLS FIRST, j.job_id ASC""", (tenant_id, workspace_id))             # newest completed attempt last (a person-approved job has no JOB_QUEUED outbox row)
+        results = [_as_object(r[0]) or {} for r in cur.fetchall()]
+    current = {aid: h for (rev, aid), h in blobs.items() if rev == head.source_revision_id}
+    per_file: dict = {}                                                       # artifact -> (is current revision, revision, {candidate_id: candidate}); newest job last
+    for result in results:
+        by_file: dict = {}
+        for cand in result.get("candidates") or []:
+            if isinstance(cand, dict) and cand.get("candidate_id") and cand.get("artifact_revision_id") in current:
+                by_file.setdefault((cand["artifact_revision_id"], cand.get("source_revision_id")), {})[cand["candidate_id"]] = cand
+        for (aid, rev), cands in by_file.items():
+            same = rev == head.source_revision_id or blobs.get((rev, aid)) == current[aid]
+            if not same:
+                continue
+            prev = per_file.get(aid)
+            if prev is None or not prev[0] or rev == head.source_revision_id:
+                per_file[aid] = (rev == head.source_revision_id, rev, cands)
+    out, carried = [], []
+    for aid in sorted(per_file):
+        is_current, rev, cands = per_file[aid]
+        for cid in sorted(cands):
+            out.append(cands[cid] if is_current else dict(cands[cid], source_revision_id=head.source_revision_id, carried_from_revision=rev))
+        if not is_current:
+            carried.append({"artifact_id": aid, "from_revision": rev})
+    return out, carried
+
+
 def backfill_observed_snapshot(store, tenant_id, workspace_id, *, snapshot_id, actor_id, idempotency_key, confirmations=None) -> dict:
     """Map the existing candidates to a PENDING_HUMAN snapshot of OBSERVED rules, keeping ids and evidence. Never accepts and never confirms a rule
     without the human decision id in `confirmations` (candidate id -> decision id). Candidates without evidence are reported, not invented."""
@@ -330,24 +369,39 @@ def derive_from_head(store, tenant_id, workspace_id, *, actor_id, idempotency_ke
     accepted = view["accepted"]
     pending = view["pending"] if _working(view) is view["pending"] else None
     base = accepted or pending
-    candidates = legacy_candidates(store, tenant_id, workspace_id)
+    candidates, carried = current_candidates(store, tenant_id, workspace_id)
+    if not any(not c.get("carried_from_revision") for c in candidates) and base is not None:
+        candidates, carried = [], []                                           # nothing extracted for this revision: the structured read-back follows the files (SYN-02)
+    report_fp = candidates_fingerprint(candidates)
     if base is None and not candidates:
         raise BusinessKnowledgeRefused("no_snapshot", "there is no business snapshot to analyse; import and extract first")
     previous_observed = [r for r in (base["rules"] if base else []) if r["authority"] == "OBSERVED"]
-    report: dict = {"origin": "rebase" if base else "backfill", "from_snapshot_id": base["snapshot"]["snapshot_id"] if base else None, "source_revision_id": head.source_revision_id}
+    report: dict = {"origin": "rebase" if base else "backfill", "from_snapshot_id": base["snapshot"]["snapshot_id"] if base else None, "source_revision_id": head.source_revision_id,
+                    "candidates_fingerprint": report_fp}
+    sources_report = None
     if candidates:
-        observed, skipped = [], []
-        for cand in candidates:
-            try:
-                observed.append(bk.observed_rule_from_candidate(cand))
-            except bk.ContractError as exc:
-                skipped.append({"candidate_id": cand["candidate_id"], "reason": exc.code})
-        report.update(observed_from="extraction_candidates", candidates=len(candidates), skipped=skipped)
+        # rules, supporting facts and incomplete statements; code conditions and links to configuration values of THIS revision (business_sources)
+        from core.change_intelligence.v2 import business_sources as bs
+        rev = store.source_revision_view(tenant_id, workspace_id, head.source_revision_id)
+        paths = {a["artifact_id"]: a.get("logical_path") or a["artifact_id"] for a in rev["artifacts"]}
+        observations = store.source_observations(tenant_id, workspace_id, head.source_revision_id)
+        structured = bs.structured_values(observations, paths)
+        observed, sources_report = bs.observed_rules(candidates, structured, paths, bs.code_facts(observations, paths))
+        sources_report["carried_files"] = carried                                  # files whose candidates come from an earlier revision with identical bytes
+        report.update(observed_from="extraction_candidates", candidates=len(candidates), skipped=sources_report["skipped"], sources=sources_report, carried_files=carried)
     else:
         observed, reread = br.reobserve_rules(previous_observed, _scalar_reader(store, tenant_id, workspace_id, head.source_revision_id), new_revision_id=head.source_revision_id)
         report.update(observed_from="structured_read_back", reread=reread)
     merged = br.rebase(base["rules"] if base else [], observed, previous_observed=previous_observed)
     rules = merged["rules"]
+    if candidates:                                                              # a file extracted again in this revision: its earlier observed rules that the new extraction did not
+        re_read = {c.get("artifact_revision_id") for c in candidates if not c.get("carried_from_revision")}   # reproduce are withdrawn (kept for history, marked), never left live
+        for r in rules:
+            home = ((r.get("source_bindings") or [{}])[0]).get("artifact_id")       # the file the rule was extracted from (a linked configuration value is appended after it)
+            if r["rule_id"] in merged["missing_observed"] and r.get("authority") == "OBSERVED" and home in re_read and r.get("status") != "SUPERSEDED":
+                r["status"] = "SUPERSEDED"
+                r.setdefault("unknown_fields", [])
+        report["withdrawn_observed"] = sorted(r["rule_id"] for r in rules if r["rule_id"] in merged["missing_observed"] and r.get("status") == "SUPERSEDED")
     reread = report.get("reread") or []
     lost_roots = {e["rule_id"] for e in reread if e.get("mapping_lost")}
     changed_refs = {str(b["evidence_ref"]) for e in reread if e.get("changed") for r in rules if r["rule_id"] == e["rule_id"] for b in r.get("source_bindings") or []
@@ -365,7 +419,10 @@ def derive_from_head(store, tenant_id, workspace_id, *, actor_id, idempotency_ke
     rel_list, gap_list = _merge_state(rules, base["relations"] if base else [], base["gaps"] if base else [])
     rv = br.revalidate(rel_list, gap_list, changed_observed=merged["changed_observed"], missing_observed=set(merged["missing_observed"]) | lost_roots, changed_refs=changed_refs,
                        lost_mapping_targets=lost_targets)
-    rel_list, gap_list = rv["relations"], sorted(rv["gaps"], key=lambda g: g["gap_id"])
+    rel_list, gap_list = rv["relations"], rv["gaps"]
+    if sources_report:
+        gap_list = _link_gaps(gap_list, sources_report["unresolved_references"], {r["rule_id"]: r for r in rules})
+    gap_list = sorted(gap_list, key=lambda g: g["gap_id"])
     report.update(relations_recheck=rv["relations_recheck"], gaps_reopened=rv["gaps_reopened"], uncertain_links=rv["uncertain_links"],
                   supersedes_pending=(view["pending"]["snapshot"]["snapshot_id"] if (accepted is not None and view["pending"] is not None and _working(view) is view["pending"]) else None))
     content_hash = canonical_hash({"rules": rules, "relations": rel_list, "gaps": gap_list})
@@ -379,11 +436,56 @@ def derive_from_head(store, tenant_id, workspace_id, *, actor_id, idempotency_ke
                              gaps=gap_list, decisions=[], expected_version=head.version, expected_business_revision=view["business_head"]["business_revision"],
                              source_revision_id=head.source_revision_id, km_revision_id=head.knowledge_revision_id, decision_epoch=head.decision_epoch,
                              idempotency_key=f"{idempotency_key}-derive", coverage={"origin": report["origin"], "from_snapshot_id": report["from_snapshot_id"], "observed_from": report["observed_from"],
+                                                                                   "candidates_fingerprint": report_fp,
                                                                                    "carried_targets": merged["carried_targets"], "statuses": merged["statuses"], "missing_observed": merged["missing_observed"],
                                                                                    "changed_observed": merged["changed_observed"], "mapping_lost": report["mapping_lost"], "relations_recheck": report["relations_recheck"],
                                                                                    "gaps_reopened": report["gaps_reopened"], "uncertain_links": report["uncertain_links"], "supersedes_pending": report["supersedes_pending"],
-                                                                                   "behavioral_verification": "not_tested", **_gap_counts(gap_list)})
+                                                                                   "behavioral_verification": "not_tested", **_gap_counts(gap_list),
+                                                                                   **({"sources": sources_report} if sources_report else {})})
     return {"snapshot_id": snapshot_id, "replayed": result.replayed, "version": result.version, "report": report}
+
+
+def _fingerprint_of_lineage(store, tenant_id, workspace_id, base) -> Optional[str]:
+    """The fingerprint recorded on the snapshot the base was analysed / accepted from (an analysis or an acceptance copies rules without re-reading them)."""
+    seen = set()
+    cov = base["snapshot"]["coverage"] or {}
+    with read_snapshot(store) as cur:
+        while True:
+            parent = cov.get("base_snapshot_id") or cov.get("from_snapshot_id")
+            if not parent or parent in seen:
+                return None
+            seen.add(parent)
+            cur.execute("SELECT coverage FROM v2_business_snapshots WHERE tenant_id=%s AND workspace_id=%s AND snapshot_id=%s", (tenant_id, workspace_id, parent))
+            row = cur.fetchone()
+            if row is None:
+                return None
+            cov = _as_object(row[0]) or {}
+            if cov.get("candidates_fingerprint"):
+                return cov["candidates_fingerprint"]
+
+
+def candidates_fingerprint(candidates) -> str:
+    """Identity of the extraction candidates the observed rules were read from (sorted candidate ids); a new extraction of a file changes it."""
+    return canonical_hash(sorted(c["candidate_id"] for c in candidates if isinstance(c, dict) and c.get("candidate_id")))
+
+
+def _link_gaps(gaps: list, unresolved: list, rules_by_id: Mapping) -> list:
+    """One `uncertain_link` question per comparison whose configuration value could not be found exactly once in this revision; an existing one is kept."""
+    out = {g["gap_id"]: g for g in gaps}
+    for u in unresolved:
+        rule = rules_by_id.get(u["rule_id"])
+        if rule is None or not u.get("reference"):
+            continue
+        gid = business_graph.gap_id_for("uncertain_link", [u["rule_id"]], u["reference"])
+        if gid in out:
+            continue
+        where = ("no configuration value with that name" if u["reason"] == "not_found"
+                 else "several values with that name: " + ", ".join(u["candidates"]) if u["reason"] == "several_values" else "a value with that name that is not a number")
+        out[gid] = {"gap_id": gid, "kind": "uncertain_link", "status": "OPEN", "affected_rule_ids": [u["rule_id"]],
+                    "question": f"The code of \"{rule['title']}\" compares {u.get('field') or 'a field'} with {u['reference']}, but this source version has {where}. "
+                                "Which value does the rule use?", "evidence_refs": business_graph._evidence_refs(rule) or [u["reference"]],
+                    "requires_permission": "knowledge.confirm", "priority": "normal"}
+    return list(out.values())
 
 
 def analyse_workspace(store, tenant_id, workspace_id, *, actor_id, idempotency_key) -> dict:
@@ -396,7 +498,13 @@ def analyse_workspace(store, tenant_id, workspace_id, *, actor_id, idempotency_k
     head = store.head(tenant_id, workspace_id)
     view, base = _latest_view(store, tenant_id, workspace_id)
     derived = None
-    if base is None or (base["snapshot"]["source_revision_id"], base["snapshot"]["km_revision_id"], base["snapshot"]["decision_epoch"]) != (head.source_revision_id, head.knowledge_revision_id, head.decision_epoch):
+    moved = base is None or (base["snapshot"]["source_revision_id"], base["snapshot"]["km_revision_id"], base["snapshot"]["decision_epoch"]) != (head.source_revision_id, head.knowledge_revision_id, head.decision_epoch)
+    if not moved:                                                             # the same sources, extracted again (2026-10-22): the newest candidates must be read, not the old proposal replayed
+        cands, _ = current_candidates(store, tenant_id, workspace_id)
+        fp = candidates_fingerprint(cands)
+        known = (base["snapshot"]["coverage"] or {}).get("candidates_fingerprint") or _fingerprint_of_lineage(store, tenant_id, workspace_id, base)
+        moved = bool(cands) and any(not c.get("carried_from_revision") for c in cands) and fp != known
+    if moved:
         derived = derive_from_head(store, tenant_id, workspace_id, actor_id=actor_id, idempotency_key=idempotency_key)
         head = store.head(tenant_id, workspace_id)
         view, base = _latest_view(store, tenant_id, workspace_id)
@@ -406,22 +514,40 @@ def analyse_workspace(store, tenant_id, workspace_id, *, actor_id, idempotency_k
     content_hash = canonical_hash({"rules": rules, "relations": rel_list, "gaps": gap_list})
     derived_id = derived["snapshot_id"] if derived else None
     unbound = _unbound_values(store, tenant_id, workspace_id, meta["source_revision_id"], rules)
+    sources = _sources_summary(meta.get("coverage"))
     if content_hash == meta["content_hash"]:                 # nothing to add: the base already holds exactly this
         return {"snapshot_id": meta["snapshot_id"], "replayed": derived is None or derived["replayed"], "relations": len(rel_list), "gaps": len(gap_list), "derived": derived_id,
-                "unbound_values": unbound}
+                "unbound_values": unbound, "sources": sources}
     snapshot_id = "analysis-" + content_hash[:20]
     with read_snapshot(store) as cur:
         cur.execute("SELECT 1 FROM v2_business_snapshots WHERE tenant_id=%s AND workspace_id=%s AND snapshot_id=%s", (tenant_id, workspace_id, snapshot_id))
         exists = cur.fetchone() is not None
     if exists:
-        return {"snapshot_id": snapshot_id, "replayed": True, "relations": len(rel_list), "gaps": len(gap_list), "derived": derived_id, "unbound_values": unbound}
+        return {"snapshot_id": snapshot_id, "replayed": True, "relations": len(rel_list), "gaps": len(gap_list), "derived": derived_id, "unbound_values": unbound,
+                "sources": sources}
     decisions = []                       # analysis records no decision: it only proposes
     result = commit_snapshot(store, tenant_id, workspace_id, snapshot_id=snapshot_id, actor_id=actor_id, lifecycle_state="PENDING_HUMAN", rules=rules,
                              relations=rel_list, gaps=gap_list, decisions=decisions, expected_version=head.version, expected_business_revision=0,
                              source_revision_id=head.source_revision_id, km_revision_id=head.knowledge_revision_id, decision_epoch=head.decision_epoch,
-                             idempotency_key=idempotency_key, coverage={"origin": "analysis", "base_snapshot_id": meta["snapshot_id"], "unbound_values": unbound})
+                             idempotency_key=idempotency_key, coverage={"origin": "analysis", "base_snapshot_id": meta["snapshot_id"], "unbound_values": unbound,
+                                                                        **({"sources": sources} if sources else {})})
     return {"snapshot_id": snapshot_id, "replayed": False, "version": result.version, "relations": len(rel_list), "gaps": len(gap_list), "derived": derived_id,
-            "unbound_values": unbound}
+            "unbound_values": unbound, "sources": sources}
+
+
+def _sources_summary(coverage) -> dict | None:
+    """What reading the sources did with the extraction candidates (business_sources; contract section 18), short enough for the reading panel:
+    how many became rules, supporting facts or incomplete statements, the incomplete ones by title and file, the links made and the references that could not be
+    linked (each also an `uncertain_link` question). None when the rules were not read from extraction candidates."""
+    src = (coverage or {}).get("sources")
+    if not isinstance(src, dict):
+        return None
+    return {"supporting_facts": src.get("supporting_facts_count", 0), "incomplete": src.get("incomplete_count", 0), "source_links": src.get("source_links_count", 0),
+            "code_branches": src.get("code_branches", 0), "uncovered_branches": src.get("uncovered_branches_count", 0),
+            "uncovered_branch_items": [{"file": b.get("file"), "line": b.get("line")} for b in src.get("uncovered_branches") or []][:50],
+            "incomplete_items": [{"title": i.get("title"), "file": i.get("file"), "missing": i.get("missing")} for i in src.get("incomplete") or []][:50],
+            "unresolved_references": [{"reference": u.get("reference"), "reason": u.get("reason")} for u in src.get("unresolved_references") or []][:50],
+            "carried_files": len(src.get("carried_files") or [])}
 
 
 def _unbound_values(store, tenant_id, workspace_id, source_revision_id, rules) -> dict:
@@ -433,7 +559,7 @@ def _unbound_values(store, tenant_id, workspace_id, source_revision_id, rules) -
     return business_graph.unbound_values(rules, store.source_observations(tenant_id, workspace_id, source_revision_id), paths)
 
 
-def gap_queue(store, tenant_id, workspace_id) -> dict:
+def gap_queue(store, tenant_id, workspace_id, *, can_read_evidence: bool = False) -> dict:
     """Open questions of the latest snapshot, critical first. Read-only, scoped to the workspace."""
     view, snap = _latest_view(store, tenant_id, workspace_id)
     if snap is None:
@@ -462,7 +588,7 @@ def gap_queue(store, tenant_id, workspace_id) -> dict:
             out["options"] = [dict(o, compare=compare(o.get("rule_id"))) for o in g["options"]]
         return out
     from infra.adapters import v2_business_proposals
-    proposals = v2_business_proposals.proposals_for(store, tenant_id, workspace_id, snap)            # KNO-06: suggested by a model, labelled, open until a person acts
+    proposals = v2_business_proposals.proposals_for(store, tenant_id, workspace_id, snap, can_read_evidence=can_read_evidence)   # KNO-06: suggested by a model, labelled, open until a person acts
     open_gaps = sorted((shaped(g) for g in snap["gaps"] if g["status"] in ("OPEN", "REOPENED")), key=lambda g: (g["priority"] != "critical", g["gap_id"]))
     open_gaps += [shaped(g) for g in proposals["gaps"]]
     accepted_unknown = sorted((shaped(g) for g in snap["gaps"] if g["status"] == "ACCEPTED_UNKNOWN"), key=lambda g: g["gap_id"])

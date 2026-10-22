@@ -223,7 +223,8 @@ def test_guidance_cannot_add_drop_upgrade_or_resolve_items_and_a_hold_only_downg
     manual_ref = next(r for r, i in refs.items() if i["action"] == "MANUAL")
     g = bd.resolve_guidance(gobj(items=[gitem("F001", hold=True, rationale="The config also feeds the emergency path."), gitem(manual_ref, instruction="Rewrite section 2.1.", hold=True),
                                         gitem("F999"), gitem("F001", instruction="dup"), gitem(manual_ref, instruction="See [here](http://x)")], questions=["Is 1,500,000 inclusive?"]), d, LIMITS)
-    assert [r["reason"] for r in g["rejected"]] == ["ref_not_in_draft", "duplicate", "duplicate"] and len(g["accepted"]) == 2 and g["questions"] == ["Is 1,500,000 inclusive?"]
+    assert [r["reason"] for r in g["rejected"]] == ["ref_not_in_draft", "duplicate", "duplicate"] and len(g["accepted"]) == 2
+    assert g["questions"] == [] and [(a["text"], a["why_not_blocking"]) for a in g["advice"]] == [("Is 1,500,000 inclusive?", "no numbered item named")]   # a bare string: advice
     m = bd.merge_guidance(d, g, state={"status": "completed"})
     held = by_ref(m)["F001"]
     assert held["action"] == "MANUAL" and held["reason"] == "model_raised_a_concern" and held["server_action"] == "AI_EDIT_SUPPORTED" and held["held_edit"]["proposed"] == 1500000 and held["proposal_edit"] is None
@@ -233,6 +234,21 @@ def test_guidance_cannot_add_drop_upgrade_or_resolve_items_and_a_hold_only_downg
     bad = bd.resolve_guidance(gobj(items=[gitem("F001", instruction="<b>bold</b>")], summary="`code`"), d, LIMITS)
     assert bad["accepted"] == [] and bad["rejected"][0]["reason"] == "text_not_plain" and bad["summary"] == ""
     assert m["semantic_diff_hash"] == d["semantic_diff_hash"] and m["draft_hash"] != d["draft_hash"]
+
+
+def test_a_needed_question_holds_the_decision_only_on_an_item_the_server_sees_as_open_or_the_model_holds():
+    d = draft(VALUE)
+    manual_ref = next(i["ref"] for i in d["file_actions"] if i["action"] == "MANUAL")
+    tax = {"question": "Does the new threshold include tax?", "needed": True, "ref": "F001"}
+    g = bd.resolve_guidance(gobj(items=[gitem("F001")], questions=[tax]), d, LIMITS)                                              # F001: an edit the model lets proceed
+    assert g["questions"] == [] and [(a["ref"], a["why_not_blocking"]) for a in g["advice"]] == [("F001", "the item it names is not held or open")]
+    g = bd.resolve_guidance(gobj(items=[gitem("F001", hold=True)], questions=[tax, dict(tax, question="Which section of the policy?", ref=manual_ref),
+                                                                              dict(tax, question="Any other file?", ref="F999"), dict(tax, needed=False)]), d, LIMITS)
+    assert g["questions"] == ["Does the new threshold include tax?", "Which section of the policy?"] and g["question_items"] == ["F001", manual_ref]
+    assert [a["why_not_blocking"] for a in g["advice"]] == ["no numbered item named", "not needed to define the change"]
+    m = bd.merge_guidance(d, g, state={"status": "completed"})
+    blockers = [b for b in bd.semantic_blockers(m, acknowledged_flags=True) if b["code"] == "open_question"]
+    assert [(b["ref"], b["about"]) for b in blockers] == [("Q001", "F001"), ("Q002", manual_ref)] and blockers[0]["text"].startswith("Open question about F001: Does the new")
 
 
 def test_rendering_hides_paths_locators_and_instructions_without_evidence_rights_and_withholds_guidance_written_with_them():
@@ -311,14 +327,14 @@ def test_the_draft_is_built_without_a_model_for_a_confirmed_request_and_follows_
 def test_guidance_success_merges_text_downgrade_only_keeps_every_item_and_changes_no_knowledge(qa_env):
     q = qa_env
     cid, model = prepared(q, lambda p: gobj(items=[gitem("F001", hold=True, rationale="The emergency path reads the same key."), gitem("F002", instruction="Rewrite section 2.1."), gitem("F777")],
-                                              questions=["Inclusive of 1,500,000?"]))
+                                              questions=[{"question": "Inclusive of 1,500,000?", "needed": True, "ref": "F001"}, "Check with Finance first."]))
     before_knowledge = q.admin.get("/v2/business/knowledge", params={"workspace_id": q.env.ws}).json()["accepted"]
     before_counts = counts(q.env)
     plain_before = get_draft(q, q.admin, cid, "technical").json()
     r = ask_guidance(q, q.admin, cid)
     assert r.status_code == 200 and r.json()["job_id"].startswith("drg-")
     got = settle_guidance(q, q.admin, cid, "technical")
-    assert got["guidance"]["status"] == "completed" and model.calls == 1 and got["guidance"]["questions_for_human"] == ["Inclusive of 1,500,000?"] and got["guidance"]["rejected_count"] == 1
+    assert got["guidance"]["status"] == "completed" and model.calls == 1 and got["guidance"]["questions_for_human"] == ["Inclusive of 1,500,000?"] and [x["text"] for x in got["guidance"]["advice_for_human"]] == ["Check with Finance first."] and got["guidance"]["rejected_count"] == 1
     files = {f["ref"]: f for f in got["files"]}
     assert files["F001"]["action"] == "MANUAL" and files["F001"]["reason"] == "model_raised_a_concern" and files["F001"]["held_edit"]["proposed"] == 1500000 and files["F001"]["proposal_edit"] is None
     assert files["F002"]["model_instruction"] == "Rewrite section 2.1." and files["F002"]["action"] == "UNRESOLVED"                                 # the model cannot resolve a missing file

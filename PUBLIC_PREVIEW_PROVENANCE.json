@@ -2,42 +2,35 @@
   "schema": "ripple-public-preview-provenance/1",
   "source_repository": "private development repository (not named here)",
   "source_branch": "final-dev",
-  "source_commit": "7f1754c8941472fe7fc6a39692d46f08349c688c",
+  "source_commit": "6a0bf30bef7e3a91ee0117709220c91be498909e",
   "export_manifest": "SUBMISSION_MANIFEST.json",
-  "export_manifest_sha256": "3b2f4d66ec5bc08332147ab2023e9642b0825c35e38726b56f9a05a4b59cac5a",
-  "export_manifest_sha256_git": "2707ff128d6b6d9812786a2a1e526b6821c9d879e1e5d5997e14150d9c92f239",
+  "export_manifest_sha256": "c8d34e2d972b9091e15033c63de1a05474e6d6eb88feb5b766282948c811043c",
+  "export_manifest_sha256_git": "9d1a372d7d408fa1d794ce0d525cf1588ac9b53bd1798157ec6e3aff889da43e",
   "export_manifest_hash_note": "export_manifest_sha256 is the manifest file as written on disk by the export (CRLF). Under the shipped .gitattributes (text=auto eol=lf) Git stores and checks it out with LF, so a downloaded or checked-out manifest hashes to export_manifest_sha256_git. Same content; the manifest is unchanged. The manifest does not list itself.",
-  "export_overall_sha256": "7625d338b372da7fca5bdd962ceb570bf60696c82842cd377b09ceaeacad73d1",
-  "export_file_count": 1458,
+  "export_overall_sha256": "e4eb62385a5e0282491ee70acc72494d84d8f0a348b16a542cad5d7dbf9f213c",
+  "export_file_count": 1474,
   "export_tool": {
     "tool_sha256": "e4a43fea5048b4386b80742f763ef0be87ca96c187b46d0f2e822ba3a3121923",
     "policy_sha256": "21ae01f53daef2eb60c35d1acd6b0008729aa40e321c73ba2f23e53a01da3f48",
     "note": "equal to the export tool and policy files at the source commit"
   },
   "eol_policy": "Shipped .gitattributes: '* text=auto eol=lf'; reference_system/** and the Harbor sample input '-text' (exact bytes); Harbor sample data 'text eol=crlf'. Manifest hashes are raw bytes.",
-  "approval": "The owner approved source 7f1754c8 as the preview source and authorised this publication (2026-10-21).",
+  "approval": "The owner approved source 6a0bf30b as the preview source and authorised this publication (2026-10-22). The full SHA was resolved from the development repository and equals the manifest's source_commit.",
   "previous_public": {
-    "commit": "c72d700eecc6cace7b930b4c20c754fd928e684d",
-    "source_commit": "7cba7a6273b11b006493cbd5a5f87dfa561b69fd",
-    "export_overall_sha256": "2c7f561c19d74e951590e47643b5297f58d7b0156ee72bf15f7fd101f859e2fd",
-    "readme_sha256_published": "1c60aacd9630d6cec452a08010c4a319d9a5ce11b4e809b756fcf799c8d48785",
-    "note": "The provenance record of that commit (including its run of tests/contract tests/unit: 1379 passed, 3 skipped, 1 deselected, and a rehearsal smoke) describes that tree and remains in its history. It is not a result for this tree. Earlier public commits: 8dcbba2, 20f5de6 (tag preview-3), 0aff169 (preview-2), 840ca8b (preview-1)."
+    "commit": "34b05ef79252b4e8679b5fccd31a797eba0c563f",
+    "source_commit": "7f1754c8941472fe7fc6a39692d46f08349c688c",
+    "export_overall_sha256": "7625d338b372da7fca5bdd962ceb570bf60696c82842cd377b09ceaeacad73d1",
+    "readme_sha256_published": "26bc837cd65f17ca42af56c8b5ecbf97d9a18aeb86de2503e312844fe8b8631c",
+    "note": "The provenance record of that commit describes that tree and remains in its history. Earlier public commits: c72d700, 8dcbba2, 20f5de6 (tag preview-3), 0aff169 (preview-2), 840ca8b (preview-1)."
   },
-  "corrections_to_previous_public": [
-    {
-      "claim": "README of c72d700, section 7 and section 11: the pull request on the private sandbox repository had its human review still open",
-      "fact": "Project records document an agent self-check; they do not record a GitHub review. The owner accepted that pull request within the sandbox scope on 2026-10-21; it is not merged. The README now keeps these three layers apart."
-    }
-  ],
-  "earlier_corrections_kept": "The corrections recorded with c72d700 (assistant citation excerpt that did not reach the reader in the cadf555 build; the sandbox pull request that earlier READMEs said did not exist) remain in that commit's record and are summarised in README section 12.",
   "update_from_previous_public": {
     "method": "snapshot synchronisation from the clean export of the source commit; no history from the development repository was merged",
-    "product_files_added": 9,
-    "product_files_changed": 28,
+    "product_files_added": 16,
+    "product_files_changed": 30,
     "product_files_renamed": 1,
-    "product_files_note": "38 product files in all, as listed by the development repository's handoff for this source; the built bundle app/ui_next/assets/index-B1PNtip5.js is replaced by index-QRI4FbXv.js (Git records it as a rename)",
+    "product_files_note": "the built bundle app/ui_next/assets/index-QRI4FbXv.js is replaced by index-BFrHDEWY.js (Git records it as a rename); README.md also changed in the export and is overlaid (public_changes)",
     "files_removed": [
-      "app/ui_next/assets/index-B1PNtip5.js"
+      "app/ui_next/assets/index-QRI4FbXv.js"
     ],
     "replaced_from_export": [
       "SUBMISSION_MANIFEST.json"
@@ -46,9 +39,9 @@
   "public_changes": [
     {
       "path": "README.md",
-      "reason": "preview-specific statements: snapshot; changes since source 7cba7a6 (server-stated authority in the request assistant, business rules read from sources in the interface, AI runs held for a second person, status words, wide tables, rehearsal defaults); owner acceptances with exact scopes (session 1 rows by hand vs accepted automated evidence; C1-C5 automated evidence; captured desktop screens; sandbox PR #2 within its scope, not merged); RQA-05 PARTIAL, live checks 12 not met (P3), checks 13 by tests and replay only, no full live run on this build; A4/A5/A19 without a real model; REL-03 open; no production readiness or deploy; where each piece of evidence comes from",
-      "sha256_in_export": "05ef5e4b40f14862408be2580a8c4cb20b7804a3d3ef7a063213e28c3c68ce2a",
-      "sha256_published": "26bc837cd65f17ca42af56c8b5ecbf97d9a18aeb86de2503e312844fe8b8631c",
+      "reason": "preview-specific statements: snapshot; the delta since source 7f1754c8 (traced source-to-knowledge links with provenance, suggested disagreements with preview, decision and acceptance, applicability-aware answers, change to commit, document and refresh); a section on the staged live journey runs with evidence levels kept apart (built, journey, replay, model): J2 local integration closed by tests and caller replay, not a live pass; V6C spans two code versions; fresh V7/V7P not passed; no fresh end-to-end pass on this build; model-only answers 3 of 5 with server additions not counted; quality gates open; the owner's earlier scoped acceptances kept and the layered journey acceptance added; no production readiness or deploy",
+      "sha256_in_export": "82c43217481701daef4c015c9eaa83bc141dbe7985541b91fce77879867ce361",
+      "sha256_published": "90cd290d58161922ec1b17ef19d91058535dd07dc02766163ab283b8290f032e",
       "sha256_published_scope": "README.md as committed in the public commit that contains this file (LF bytes, identical to the Git blob)"
     }
   ],
@@ -59,15 +52,15 @@
   "manifest_scope": "SUBMISSION_MANIFEST.json describes the export of the source commit and is kept unchanged. README.md was rewritten after export (public_changes) and this file was added; every other listed file is reproduced byte for byte by a checkout (checks_for_this_tree).",
   "evidence_policy": "This repository is for reading source, README and progress. Product verification is done in the development repository; results quoted in the README come from its record unless stated otherwise. For this update only packaging and content checks were made; no tests, build, database, server or browser were run.",
   "checks_for_this_tree": {
-    "date": "2026-10-21",
+    "date": "2026-10-22",
     "runs": [
       {
         "check": "export tool of the source commit: verify on the export directory",
-        "result": "exit 0; files=1459 problems=0 broken_relative_links=0; publication scan of the final tree including the manifest exit 0 (as handed over by the development repository; rechecked)"
+        "result": "exit 0; files=1475 problems=0 broken_relative_links=0; publication scan of the final tree including the manifest exit 0"
       },
       {
         "check": "export tool of the source commit: eol-check on the export directory",
-        "result": "exit 0; 1458 files, 2 checkouts (autocrlf true and false), problems 0"
+        "result": "exit 0; 1474 files, 2 checkouts (autocrlf true and false), problems 0"
       },
       {
         "check": "content of the copy against the manifest: raw bytes of every listed file, checked out with core.autocrlf=true and with core.autocrlf=false",
@@ -78,12 +71,12 @@
         "result": "none found"
       },
       {
-        "check": "bundle reference: app/ui_next/index.html points to index-QRI4FbXv.js, rolldown-runtime-CbXtAM7H.js, vendor-DE6nbGDD.js, style-C6Ino6rs.css, all present",
+        "check": "bundle reference: app/ui_next/index.html points to index-BFrHDEWY.js, rolldown-runtime-CbXtAM7H.js, vendor-DE6nbGDD.js, style-C6Ino6rs.css, all present",
         "result": "ok"
       },
       {
         "check": "README relative links and in-page anchors; no internal references",
-        "result": "129 links, 0 missing targets, 0 unknown anchors"
+        "result": "151 links, 0 missing targets, 0 unknown anchors"
       },
       {
         "check": "publication scan of the committed tree: python -m tools.pitch_pack.scan <checkout> --allowlist tools/pitch_pack/scan_allowlist.json (the tree's scanner and allow-list, unchanged)",
@@ -91,10 +84,10 @@
       },
       {
         "check": "diff review against the previous public commit before commit and push",
-        "result": "38 product files, README.md, SUBMISSION_MANIFEST.json and this file"
+        "result": "47 product files (16 added, 30 changed, 1 bundle renamed), README.md, SUBMISSION_MANIFEST.json and this file"
       }
     ],
-    "raw_byte_result": "1457 of 1458 listed files equal the manifest sha256 byte for byte under both settings; README.md differs (public_changes); extra files: PUBLIC_PREVIEW_PROVENANCE.json and SUBMISSION_MANIFEST.json",
+    "raw_byte_result": "1473 of 1474 listed files equal the manifest sha256 byte for byte under both settings; README.md differs (public_changes); extra files: PUBLIC_PREVIEW_PROVENANCE.json and SUBMISSION_MANIFEST.json",
     "scan_result": "exit 0 on the tree including SUBMISSION_MANIFEST.json, README.md and this file; allow-list unchanged",
     "not_run": "pytest, frontend build and tests, database, rehearsal server and browser (not part of the preview process; the built bundle was not rebuilt)",
     "note": "Self-check on one machine, not independent validation."

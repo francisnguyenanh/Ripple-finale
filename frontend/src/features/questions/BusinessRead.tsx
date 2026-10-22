@@ -5,7 +5,7 @@
 import * as React from "react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Callout, Muted } from "@/components/bits";
+import { Callout, HowItWorks, Muted } from "@/components/bits";
 import { useSession } from "@/session";
 import type { Rec } from "@/features/changes/types";
 
@@ -20,6 +20,36 @@ function refusal(e: unknown): string {
     if (e.status === 409) return `The rules could not be read: ${msg || "the knowledge changed meanwhile"}. Reload and try again. Nothing was read.`;
   }
   return "The rules could not be read. Nothing was read.";
+}
+
+/** What reading did with the extracted statements (contract section 18): nothing is hidden, statements that are not rules are listed with what they lack. */
+function SourcesSummary({ s }: { s: Rec | null | undefined }) {
+  if (!s) return null;
+  const items = (s.incomplete_items ?? []) as Rec[];
+  const unresolved = (s.unresolved_references ?? []) as Rec[];
+  return (
+    <div className="grid gap-1 text-sm" data-testid="business-read-sources">
+      <span data-testid="business-read-counts">
+        {String(s.supporting_facts)} configuration value(s) kept as supporting facts; {String(s.source_links)} link(s) between files; {String(s.incomplete)} statement(s) not read as rules because they name no actor and no outcome.
+      </span>
+      {Number(s.code_branches) > 0 && (
+        <span data-testid="business-read-branches">
+          {String(s.code_branches)} decision branch(es) read from the code{Number(s.uncovered_branches) > 0 ? `; ${String(s.uncovered_branches)} of them had no extracted statement and are listed in the analysis` : ""}.
+        </span>
+      )}
+      {unresolved.length > 0 && (
+        <span data-testid="business-read-unlinked">{unresolved.length} comparison(s) could not be linked to one configuration value: each is a business question ({unresolved.map((u) => String(u.reference)).join(", ")}).</span>
+      )}
+      {items.length > 0 && (
+        <HowItWorks testid="business-read-incomplete" title={`Statements not read as rules (${String(s.incomplete)})`}>
+          <ul className="list-disc pl-5 grid gap-1">
+            {items.map((i, n) => <li key={n}>{String(i.title || "untitled")}{i.file ? <span className="text-muted"> - {String(i.file)}</span> : null}</li>)}
+          </ul>
+          <Muted>They stay in the analysis with their evidence; extract the file again or ask about it if one of them is a rule.</Muted>
+        </HowItWorks>
+      )}
+    </div>
+  );
 }
 
 /** `onRead` reloads the owning sections (rules, questions, knowledge version). `onNext` opens the Business questions section. */
@@ -49,6 +79,7 @@ export function ReadBusinessRules({ ws, onRead, onNext, refreshKey = 0 }: { ws: 
       {done ? (
         <div className="grid gap-2" data-testid="business-read-result">
           <span className="text-sm">{String(done.relations)} relation(s) and {String(done.gaps)} business question(s){done.replayed ? " (already read for these sources; nothing new)" : ""}.</span>
+          <SourcesSummary s={done.sources as Rec | null | undefined} />
           <span className="text-sm">Next: answer the business questions, then press "Accept this knowledge" in the Business questions section.</span>
           {onNext && <div><Button size="sm" data-testid="business-read-next" onClick={onNext}>Go to the business questions</Button></div>}
         </div>

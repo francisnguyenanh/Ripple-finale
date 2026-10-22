@@ -190,6 +190,12 @@ def context_pack(store, tenant_id, workspace_id, query, *, view="target", can_re
                 else:
                     pack["notes"].append(f"Semantic retrieval was not applied ({sem['layers']['expand'].get('reason') or sem['status']}); the lexical method above was used.")
                 pack["sufficiency"] = sem["sufficiency"]
+            by_rule = {r["rule_id"]: r for r in snap["rules"]}
+            for entry in ranked["items"]:                                   # bindings and gate-ness from the stored rule (index rows written before the fields existed)
+                r = by_rule.get(entry["item_id"]) if entry["kind"] == "rule" else None
+                if r is not None:
+                    entry.setdefault("bindings", bi.rule_bindings(r))
+                    entry.setdefault("gate", bi.rule_is_gate(r))
             selected = [v for i in ranked["items"] if i["kind"] == "rule" for v in [i["item_id"]] + [m["item_id"] for m in i.get("versions", [])]]
             pack.update(items=ranked["items"], coverage=ranked["coverage"], retrieval=ranked["retrieval"], index=state, served_from=served,
                         counterevidence=bi.counterevidence(selected, snap["rules"], snap["relations"], snap["gaps"]),

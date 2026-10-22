@@ -30,6 +30,7 @@ DRAFT_VERSION = "1.0.0"
 ACTIONS = ("AI_EDIT_SUPPORTED", "MANUAL", "NO_OP", "UNRESOLVED")
 MAX_ITEMS = 400
 GUIDE_KEYS = {"summary", "items", "questions_for_human"}
+GUIDE_QUESTION_KEYS = {"question", "needed", "ref"}
 GUIDE_ITEM_KEYS = {"ref", "instruction", "hold", "rationale"}
 STATEMENT = ("Draft only: it changes no rule, file or code. Every requested change has an outcome below; items marked unresolved or manual still need a person. "
              "Code entries are recommendations, not edits. Items marked unknown were not checked; they are not “no impact”.")
@@ -532,8 +533,12 @@ def validate_guidance_object(obj, limits: Mapping) -> dict:
         raise ValueError("types")
     if len(obj["items"]) > limits["max_items"] or len(obj["questions_for_human"]) > limits["max_questions"]:
         raise ValueError("sizes")
-    if not all(isinstance(q, str) for q in obj["questions_for_human"]):
-        raise ValueError("questions")
+    for q in obj["questions_for_human"]:                                       # version 2: {question, needed, ref|null}; a bare string is read as advice
+        if isinstance(q, str):
+            continue
+        if not isinstance(q, dict) or set(q) != GUIDE_QUESTION_KEYS or not isinstance(q["question"], str) or not isinstance(q["needed"], bool) \
+                or not (q["ref"] is None or isinstance(q["ref"], str)):
+            raise ValueError("questions")
     for it in obj["items"]:
         if not isinstance(it, dict) or set(it) != GUIDE_ITEM_KEYS or not isinstance(it["ref"], str) or not isinstance(it["instruction"], str) \
                 or not isinstance(it["hold"], bool) or not isinstance(it["rationale"], str):
@@ -561,8 +566,31 @@ def resolve_guidance(obj: Mapping, draft: Mapping, limits: Mapping) -> dict:
         seen.add(ref)
         accepted.append({"ref": ref, "instruction": text, "hold": bool(it["hold"]), "rationale": why})
     summary = _plain(obj["summary"], limits["max_summary_chars"]) or ""
-    questions = [q for q in (_plain(x, limits["max_question_chars"]) for x in obj["questions_for_human"]) if q]
-    return {"summary": summary, "accepted": accepted, "rejected": rejected, "questions": questions, "not_addressed": sorted(set(refs) - seen)}
+    held = {a["ref"] for a in accepted if a["hold"]}
+    questions, question_items, advice = [], [], []
+    for x in obj["questions_for_human"]:
+        text = _plain(x if isinstance(x, str) else x["question"], limits["max_question_chars"])
+        if not text:
+            continue
+        # a question blocks the knowledge decision only when the model says the change needs it answered AND it names an item the server numbered AND the server can
+        # see that item is open: its action is MANUAL / UNRESOLVED, or the model holds it in this same guidance. A "needed" question on an item whose edit the model
+        # lets proceed is inconsistent; a check the person may want to make ("have you verified ...") is advice. Advice is shown, never a blocker (2026-10-22, JOURNEY-V4-J4).
+        ref = x.get("ref") if isinstance(x, dict) else None
+        if not isinstance(x, dict) or not x["needed"]:
+            why = "not needed to define the change" if isinstance(x, dict) else "no numbered item named"
+        elif ref not in refs:
+            why = "no numbered item named"
+        elif ref in held or refs[ref].get("action") in ("MANUAL", "UNRESOLVED") or "action" not in refs[ref]:
+            why = None
+        else:
+            why = "the item it names is not held or open"
+        if why is None:
+            questions.append(text)
+            question_items.append(ref)
+        else:
+            advice.append({"text": text, "ref": ref, "why_not_blocking": why})
+    return {"summary": summary, "accepted": accepted, "rejected": rejected, "questions": questions, "question_items": question_items, "advice": advice,
+            "not_addressed": sorted(set(refs) - seen)}
 
 
 def merge_guidance(draft: Mapping, guidance: Mapping, *, state: Mapping) -> dict:
@@ -579,6 +607,7 @@ def merge_guidance(draft: Mapping, guidance: Mapping, *, state: Mapping) -> dict
             if g["hold"] and it["action"] == "AI_EDIT_SUPPORTED":
                 it.update(server_action="AI_EDIT_SUPPORTED", action="MANUAL", reason="model_raised_a_concern", held_edit=it["proposal_edit"], proposal_edit=None)
     out["guidance"] = {**dict(state), "summary": guidance.get("summary") or "", "questions_for_human": list(guidance.get("questions") or []),
+                       "question_items": list(guidance.get("question_items") or []), "advice_for_human": list(guidance.get("advice") or []),
                        "rejected": list(guidance.get("rejected") or []), "not_addressed": list(guidance.get("not_addressed") or [])}
     out["coverage"]["guidance"] = state.get("status")
     out["coverage"]["file_actions"] = {a: sum(1 for i in out["file_actions"] if i["action"] == a) for a in ACTIONS}
@@ -683,9 +712,11 @@ def semantic_blockers(draft: Mapping, *, acknowledged_flags: bool) -> list:
             for f in o["flags"]:
                 if f["severity"] == "HIGH":
                     out.append({"code": "flag_not_acknowledged", "ref": o["op_id"], "text": f"“{o['title']}”: {f['text']} The approver must acknowledge it."})
-    for q in draft.get("questions") or [{"ref": r, "question": t} for r, t in zip(question_refs(draft), (draft.get("guidance") or {}).get("questions_for_human") or [])]:
+    about = (draft.get("guidance") or {}).get("question_items") or []
+    for n, q in enumerate(draft.get("questions") or [{"ref": r, "question": t} for r, t in zip(question_refs(draft), (draft.get("guidance") or {}).get("questions_for_human") or [])]):
         if not q.get("clarification"):
-            out.append({"code": "open_question", "ref": q["ref"], "text": f"Open question: {q['question']}"})
+            item = about[n] if n < len(about) else None
+            out.append({"code": "open_question", "ref": q["ref"], "about": item, "text": f"Open question{f' about {item}' if item else ''}: {q['question']}"})
     for u in draft["unresolved"]:
         if u["kind"] == "no_source_mapping" and u.get("rule_id") in draft["write_scope"] and not u.get("clarification"):
             out.append({"code": "unmapped_changed_rule", "ref": u["ref"], "text": u["instruction"]})
@@ -739,7 +770,9 @@ def render(draft: Mapping, *, mode: str, can_read_evidence: bool, guidance_writt
         unresolved.append(row)
     g = dict(draft.get("guidance") or {})
     guidance = {"status": g.get("status", "not_requested"), "reason": g.get("reason"), "summary": None if hide_guidance else g.get("summary"), "summary_withheld": hide_guidance and bool(g.get("summary")),
-                "questions_for_human": [] if hide_guidance else list(g.get("questions_for_human") or []), "not_addressed_count": len(g.get("not_addressed") or []), "rejected_count": len(g.get("rejected") or [])}
+                "questions_for_human": [] if hide_guidance else list(g.get("questions_for_human") or []),
+                "advice_for_human": [] if hide_guidance else list(g.get("advice_for_human") or []),           # checks the person may want to make: shown, never blockers
+                "not_addressed_count": len(g.get("not_addressed") or []), "rejected_count": len(g.get("rejected") or [])}
     out = {"statement": draft["statement"], "status": draft["status"], "operations": ops,
            "rule_changes": [{"title": c["title"], "before": c["before_text"], "after": c["after_text"], "changes": [d["text"] for d in c["diff"]], "aspects": semantic_aspects(c["diff"]), "valid": c["valid"], "error": c["error"],
                              "flags": [f["text"] for f in c["flags"]]} for c in draft["rule_changes"]],

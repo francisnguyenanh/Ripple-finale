@@ -128,3 +128,16 @@ def test_a_document_of_an_older_knowledge_version_is_served_as_stale_and_a_scope
     assert c.status_code == 200 and c.headers["x-freshness"] == "stale" and c.headers["x-content-hash"] == st["content_hash"]
     fresh = ask(q, q.admin, modes=["business"]).json()["documents"][0]
     assert fresh["artifact_id"] != full and fresh["snapshot_id"] != st["snapshot_id"] and fresh["freshness"] == "generating"      # an explicit request on the new head is a new artifact
+
+
+def test_the_document_of_accepted_knowledge_lists_the_persons_decision_and_says_the_disagreement_was_decided(qa_env):
+    """Found 2026-10-21 by the journey harness: accepting copies the rules into a new snapshot without the decisions, and documents exist only for accepted knowledge,
+    so "Decisions people made" was always empty and a settled disagreement still said a person had to decide."""
+    from tests.final_loop.test_qry03_qa import DECISION_QUOTE
+    q = qa_env
+    out = ask(q, q.admin, modes=["business", "technical"]).json()
+    drain(q.env)
+    business, technical = (content(q, q.admin, d["artifact_id"]).text for d in out["documents"])
+    assert f"“{DECISION_QUOTE}”" in business and "No decision has been recorded." not in business
+    assert "disagree. A person decided the business rule:" in business and "A person has to decide which one is the business rule." not in business
+    assert "; decided by `rule-capex-finance-config-target`" in technical and ", gap `" in technical

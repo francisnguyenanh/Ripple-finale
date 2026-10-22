@@ -61,8 +61,18 @@ def normalize_request(body: dict, *, default_snapshot_id: str | None) -> dict:
 
 
 def snapshot_for(store, tenant_id, workspace_id, snapshot_id):
+    """The snapshot with the people's decisions its rules rest on. A decision is stored with the snapshot it was made on (a proposal); accepting copies the rules
+    into a new snapshot, so the decisions their provenance names are read from the workspace, not only from this snapshot."""
     with read_snapshot(store) as cur:
         snap = _snapshot_view(cur, tenant_id, workspace_id, snapshot_id)
+        if snap is not None:
+            own = {d["decision_id"] for d in snap["decisions"]}
+            wanted = sorted({p["decision_id"] for r in snap["rules"] for p in r.get("provenance") or [] if p.get("kind") == "human_decision" and p.get("decision_id")} - own)
+            if wanted:
+                cur.execute("""SELECT decision_id, actor_id, kind, quote, body FROM v2_business_decisions WHERE tenant_id=%s AND workspace_id=%s AND decision_id = ANY(%s)
+                    ORDER BY decision_id""", (tenant_id, workspace_id, wanted))
+                snap["decisions"] = sorted(snap["decisions"] + [{"decision_id": r[0], "actor_id": r[1], "kind": r[2], "quote": r[3], "body": _as_object(r[4])} for r in cur.fetchall()],
+                                           key=lambda d: d["decision_id"])
     if snap is None:
         raise TenantScopeError("snapshot not found")
     return snap

@@ -89,12 +89,19 @@ def build_document(snapshot: Mapping, decisions: Iterable[Mapping], *, mode: str
     facts = [rule_fact(r) for r in rules]
     relations = sorted((e for e in snapshot["relations"] if e["status"] != "REJECTED" and (not wanted or e["from"] in ids or e["to"] in ids)), key=lambda e: e["edge_id"])
     conflicts = [e for e in relations if e["type"] == "conflicts_with"]
+    pairs = {frozenset((e["from"], e["to"])) for e in conflicts}
+    for g in sorted(snapshot["gaps"], key=lambda g: g["gap_id"]):            # a disagreement a person settled that no stored relation shows (e.g. suggested by a model)
+        rids = sorted(g.get("affected_rule_ids") or [])
+        settled = g.get("kind") == "conflicting_facts" and g.get("status") == "RESOLVED" and len(rids) == 2
+        if settled and frozenset(rids) not in pairs and (not wanted or set(rids) & ids):
+            conflicts.append({"edge_id": g["gap_id"], "from": rids[0], "to": rids[1]})
+            pairs.add(frozenset(rids))
     gaps = sorted((g for g in snapshot["gaps"] if not wanted or set(g["affected_rule_ids"]) & ids), key=lambda g: g["gap_id"])
     open_gaps = [g for g in gaps if g["status"] in ("OPEN", "REOPENED")]
     unknown = [g for g in gaps if g["status"] == "ACCEPTED_UNKNOWN"]
     meta = snapshot["snapshot"]
     by_id = {r["rule_id"]: r for r in rules}
-    decision_rows = sorted((d for d in decisions if d["kind"] == "answer_gap" and (not wanted or any(d["decision_id"] in business_graph._decision_refs(r) for r in rules))),
+    decision_rows = sorted((d for d in decisions if d["kind"] in ("answer_gap", "business_change") and (not wanted or any(d["decision_id"] in business_graph._decision_refs(r) for r in rules))),
                            key=lambda d: d["decision_id"])
     doc = {
         "schema": SCHEMA, "mode": mode, "locale": locale, "template_version": template_version, "scope": scope,
@@ -107,7 +114,8 @@ def build_document(snapshot: Mapping, decisions: Iterable[Mapping], *, mode: str
                      "open_questions": len(open_gaps), "critical_open": sum(1 for g in open_gaps if g["priority"] == "critical"), "accepted_unknown": len(unknown),
                      "partial": bool(open_gaps or unknown), "proposal": meta["lifecycle_state"] != "ACCEPTED"},
         "relations": [{"edge_id": e["edge_id"], "type": e["type"], "from": e["from"], "to": e["to"], "status": e["status"], "provenance_refs": list(e["provenance_refs"])} for e in relations],
-        "conflicts": [{"edge_id": e["edge_id"], "rules": [e["from"], e["to"]], "titles": [by_id[x]["title"] if x in by_id else x for x in (e["from"], e["to"])]} for e in conflicts],
+        "conflicts": [{"edge_id": e["edge_id"], "rules": [e["from"], e["to"]], "titles": [by_id[x]["title"] if x in by_id else x for x in (e["from"], e["to"])],
+                       **({"decided_by": d, "decided_title": by_id[d]["title"]} if (d := _decided_by(active, {e["from"], e["to"]})) else {})} for e in conflicts],
         "questions": [{"gap_id": g["gap_id"], "kind": g["kind"], "question": g["question"], "status": g["status"], "priority": g["priority"],
                        "affected_rule_ids": g["affected_rule_ids"], "evidence_refs": g["evidence_refs"]} for g in open_gaps + unknown],
         "decisions": [{"decision_id": d["decision_id"], "quote": d["quote"], "gap_id": (d.get("body") or {}).get("gap_id"), "summary": (d.get("body") or {}).get("summary", [])}
@@ -115,6 +123,16 @@ def build_document(snapshot: Mapping, decisions: Iterable[Mapping], *, mode: str
     }
     validate_document(doc)
     return doc
+
+
+def _decided_by(active: list, pair: set) -> Optional[str]:
+    """The decided rule that settles a disagreement: an active TARGET rule, CONFIRMED by a person's decision, whose root is one side of the pair (the same version link
+    the answers use). The sources still disagree; the knowledge no longer does."""
+    from core.change_intelligence.v2.business_rebase import root_of
+    for r in active:
+        if r["authority"] == "TARGET" and r["status"] == "CONFIRMED" and business_graph._decision_refs(r) and root_of(r["rule_id"]) in pair:
+            return r["rule_id"]
+    return None
 
 
 def validate_document(doc: Mapping) -> None:
@@ -250,8 +268,12 @@ def render_markdown(doc: Mapping, template: Mapping) -> str:
             if not doc["conflicts"]:
                 lines += ["No disagreement between sources is recorded.", ""]
             for c in doc["conflicts"]:
-                lines.append(("- " + " and ".join(f"“{md_text(t)}”" for t in c["titles"]) + " disagree. A person has to decide which one is the business rule.") if business
-                             else f"- {code(c['edge_id'])}: {code(c['rules'][0])} conflicts with {code(c['rules'][1])}")
+                if business:
+                    pair = "- " + " and ".join(f"“{md_text(t)}”" for t in c["titles"]) + " disagree."
+                    lines.append(pair + (f" A person decided the business rule: “{md_text(c['decided_title'])}”. The sources themselves are unchanged and still disagree." if c.get("decided_by")
+                                        else " A person has to decide which one is the business rule."))
+                else:
+                    lines.append(f"- {code(c['edge_id'])}: {code(c['rules'][0])} conflicts with {code(c['rules'][1])}" + (f"; decided by {code(c['decided_by'])}" if c.get("decided_by") else ""))
             lines.append("")
         elif section == "unknowns":
             if not doc["questions"]:
@@ -273,7 +295,7 @@ def render_markdown(doc: Mapping, template: Mapping) -> str:
             if not doc["decisions"]:
                 lines += ["No decision has been recorded." if business else "none", ""]
             for d in doc["decisions"]:
-                lines.append(f"- “{md_text(d['quote'])}”" + ("" if business else f" ({code(d['decision_id'])}, gap {code(d['gap_id'])})"))
+                lines.append(f"- “{md_text(d['quote'])}”" + ("" if business else f" ({code(d['decision_id'])}, " + (f"gap {code(d['gap_id'])})" if d.get("gap_id") else "business change)")))
             lines.append("")
     return "\n".join(lines).rstrip("\n") + "\n"
 

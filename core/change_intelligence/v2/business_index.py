@@ -119,6 +119,28 @@ def _scope_text(scope: Mapping) -> str:
     return "; ".join(f"{k}: {', '.join(map(str, v)) if isinstance(v, list) else v}" for k, v in sorted(scope.items()))
 
 
+_APPROVAL_WORDS = re.compile(r"\b(?:approv\w*|authori[sz]\w*|sign(?:s|ed)?[- ]?off)\b", re.I)
+_CODE_VALUE = re.compile(r"^[A-Z][A-Z0-9_]*$")
+_QUALIFIED_VALUE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\.[A-Z][A-Z0-9_]*$")
+_GATE_VALUE_WORDS = re.compile(r"(?:^|_)(?:NEEDS?|REQUIRES?|APPROV\w*|AUTHORI[SZ]\w*|SIGN_?OFF)(?:_|$)")
+
+
+def rule_is_gate(rule: Mapping) -> bool:
+    """Whether a rule is an approval gate (someone has to approve / authorise / sign off before the case proceeds), read from the rule itself, never from a name alone:
+    the modelled kind `review_required`; an outcome whose words (kind, stated text, predicate) say approval / authorisation / sign-off (a periodic "review" is not one);
+    or a code value as outcome (`NEEDS_FINANCE`) whose own words say something is needed / required / approved AND a known actor (the actor came from a stated role
+    check, §18: a route name alone never names an actor and alone never makes a gate). 2026-10-22, after live run JOURNEY-V5-J3."""
+    out = rule.get("outcome") or {}
+    kind = str(out.get("kind") or "")
+    if kind == "review_required":
+        return True
+    words = " ".join(str(out.get(k) or "") for k in ("kind", "stated_text", "predicate"))
+    if _APPROVAL_WORDS.search(words):
+        return True
+    member = kind.rsplit(".", 1)[-1] if _QUALIFIED_VALUE.match(kind) else kind              # `RouteType.NEEDS_FINANCE` as the code wrote it: the member is the value
+    return bool(_CODE_VALUE.match(member) and _GATE_VALUE_WORDS.search(member) and rule.get("actor_ref"))
+
+
 def rule_item(rule: Mapping) -> dict:
     actor = rule["actor_ref"].replace("role-", "").replace("-", " ") if rule["actor_ref"] else "actor unknown"
     exceptions = "; ".join(e["text"] for e in rule["exceptions"])
@@ -127,7 +149,13 @@ def rule_item(rule: Mapping) -> dict:
     return {"item_id": rule["rule_id"], "kind": "rule", "text": text, "authority": rule["authority"], "status": rule["status"],
             "implementation_status": rule["implementation_status"], "title": rule["title"], "actor_ref": rule["actor_ref"], "condition": rule["condition"],
             "exceptions": rule["exceptions"], "scope": rule["scope"], "outcome": rule["outcome"],
-            "evidence_refs": business_graph._evidence_refs(rule), "decision_ids": business_graph._decision_refs(rule), "unknown_fields": rule.get("unknown_fields", [])}
+            "evidence_refs": business_graph._evidence_refs(rule), "decision_ids": business_graph._decision_refs(rule), "unknown_fields": rule.get("unknown_fields", []),
+            "bindings": rule_bindings(rule), "gate": rule_is_gate(rule)}
+
+
+def rule_bindings(rule: Mapping) -> list:
+    """Where the rule is bound in the sources: (artifact, evidence locator) pairs, so a claim that cites a passage can be read through the rule bound to that passage."""
+    return [{"artifact_id": b["artifact_id"], "evidence_ref": b["evidence_ref"]} for b in rule.get("source_bindings") or [] if b.get("artifact_id") and b.get("evidence_ref")]
 
 
 def decision_item(decision: Mapping) -> dict:
@@ -294,9 +322,24 @@ def counterevidence(selected_rule_ids: Iterable[str], rules: Iterable[Mapping], 
             if other in by_id and by_id[other]["status"] not in _WITHDRAWN:
                 out.append({"kind": "conflicting_rule", "rule_id": other, "title": by_id[other]["title"], "with": e["from"] if other == e["to"] else e["to"],
                             "edge_id": e["edge_id"], "evidence_refs": e["provenance_refs"], "authority": by_id[other]["authority"], "text": rule_item(by_id[other])["text"]})
+    covered = {frozenset((c["rule_id"], c["with"])) for c in out if c["kind"] == "conflicting_rule"}
+    roots = {rid[:-len("-target")] if rid.endswith("-target") else rid for rid in selected}       # a decided rule stands for the observed rule it replaces
+    selected = selected | roots | {rid for rid in by_id if rid.endswith("-target") and rid[:-len("-target")] in roots}
     for g in sorted(gaps, key=lambda g: g["gap_id"]):
         if g["status"] in ("OPEN", "REOPENED") and selected & set(g["affected_rule_ids"]):
             out.append({"kind": "open_question", "gap_id": g["gap_id"], "question": g["question"], "priority": g["priority"], "affected_rule_ids": g["affected_rule_ids"]})
+        # a disagreement recorded as a question (by the analysis, or suggested by a model and answered by a person) is a disagreement for the answer too, whether or
+        # not a stored relation names the pair (2026-10-22: rules with different actors or subjects never get a conflicts_with edge)
+        if g.get("kind") == "conflicting_facts" and g["status"] in ("OPEN", "REOPENED", "RESOLVED") and len(g.get("affected_rule_ids") or []) == 2:
+            a, b = sorted(g["affected_rule_ids"])
+            if frozenset((a, b)) in covered or not (selected & {a, b}):
+                continue
+            other = b if a in selected else a
+            if other in by_id and by_id[other]["status"] not in _WITHDRAWN:
+                out.append({"kind": "conflicting_rule", "rule_id": other, "title": by_id[other]["title"], "with": a if other == b else b, "edge_id": g["gap_id"],
+                            "evidence_refs": list(g.get("evidence_refs") or []), "authority": by_id[other]["authority"], "text": rule_item(by_id[other])["text"],
+                            "from_question": g["gap_id"], "question_status": g["status"]})
+                covered.add(frozenset((a, b)))
     return out
 
 
