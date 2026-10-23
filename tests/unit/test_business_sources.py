@@ -190,3 +190,40 @@ def test_the_reading_summary_lists_what_was_not_read_as_a_rule_and_what_could_no
     vals = values("routing_rules:\n  capex_threshold: 2000000\n")
     _, rep = bs.observed_rules([code_cand("c1", CAPEX_LINE)], vals, PATHS)
     assert _sources_summary({"sources": rep})["unresolved_references"] == [{"reference": "config.capex_finance_threshold_jpy", "reason": "not_found"}]
+
+
+def test_a_configuration_value_whose_outcome_only_restates_the_value_is_a_supporting_fact_not_a_rule():
+    """Closure C-10 (live run JOURNEY-V8): the model returned each approval.yaml key with `outcome` = the value itself (`1000000`, `JPY`, `1.0.0`); those became rules and the
+    change request picked one. Such a candidate is a supporting fact; a real outcome or an actor still makes a rule."""
+    loc = [{"locator": json.dumps({"type": "key_path", "key_path": "routing_rules.standard_manager_threshold_jpy"})}]
+    value_only = {"subject": "routing_rules.standard_manager_threshold_jpy", "predicate": "is set to", "value": 1000000, "operator": "==", "actor": None, "outcome": "1000000", "evidence": loc}
+    assert bs.classify(value_only)[0] == "supporting_fact"
+    assert bs.classify(dict(value_only, value="1,000,000"))[0] == "supporting_fact"
+    assert bs.classify(dict(value_only, value="1.0.0", outcome="1.0.0"))[0] == "supporting_fact"
+    assert bs.classify(dict(value_only, outcome="RouteType.NEEDS_MANAGER"))[0] == "rule"                     # a real outcome
+    assert bs.classify(dict(value_only, actor="role-manager"))[0] == "rule"                                  # an actor
+    route = dict(value_only, subject="routing_rules.high_risk_route", value="NEEDS_DIRECTOR", outcome="NEEDS_DIRECTOR", actor="role-needs-director")
+    assert bs.classify(route)[0] == "supporting_fact"                                                         # the value turned into a role name is not a stated actor
+    prose = {"subject": "Purchase requests", "value": 1000000, "outcome": "approval from the requesting department's manager", "actor": None, "evidence": []}
+    assert bs.classify(prose)[0] == "rule"
+
+
+REC_V8 = json.loads((ROOT / "tests/fixtures/final_knowledge_loop/recorded/journey_v8_j1_candidates.json").read_text(encoding="utf-8"))
+
+
+def test_recorded_v8_output_configuration_values_are_supporting_facts_and_the_approval_rules_and_the_traced_route_stay():
+    """Closure C-10 on the recorded JOURNEY-V8-J1 output: the eight approval.yaml answers repeated their value as the "outcome"; seven become supporting facts with their
+    `path#key` evidence (the eighth, `high_risk_route`, whose actor is only its value as a role name, too); the approval rules keep 1,000,000 with an
+    order operator; the CAPEX route keeps its traced link to the configured 2,000,000."""
+    (rules, report), _ = recorded(REC_V8)
+    titles = [r["title"] for r in rules]
+    assert not any(t.startswith(("routing_rules.", "matching_rules.", "currency", "version")) for t in titles), titles
+    facts = {f["evidence_refs"][0] for f in report["supporting_facts"]}
+    assert {YAML_PATH + "#routing_rules.standard_manager_threshold_jpy", YAML_PATH + "#routing_rules.capex_finance_threshold_jpy"} <= facts
+    def leaves(c):
+        return [c] if c and "field" in c else [x for k in ("all", "any") for y in (c or {}).get(k, []) for x in leaves(y)]
+    approvals = [r for r in rules if any(l.get("value") == 1000000 and l.get("op") in ("gte", "gt") for l in leaves(r["condition"]))]
+    assert len(approvals) >= 3
+    capex = [r for r in rules if any(l.get("value") == 2000000 for l in leaves(r["condition"])) and any(l.get("value") == "CAPEX" for l in leaves(r["condition"]))]
+    assert capex and all(any(p.get("method") == "attribute_name" and p.get("to_ref", "").endswith("capex_finance_threshold_jpy") for p in r["provenance"]) for r in capex)
+

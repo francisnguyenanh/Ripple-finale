@@ -16,7 +16,7 @@ from core.change_intelligence.v2.serialize import canonical_hash
 DECISIONS = ("ALLOW", "DENY", "REQUIRES_APPROVAL", "INDETERMINATE")
 # how an outcome kind of a triggered rule counts; a kind outside these lists is UNCLASSIFIED and makes the decision indeterminate
 DENY_WORDS = ("rejected", "refused", "blocked", "denied", "forbidden")
-APPROVAL_WORDS = ("review", "approval", "required", "onboarding", "audit")
+APPROVAL_WORDS = ("review", "approval", "required", "onboarding", "audit", "needs_")   # "needs_": a code route value such as RouteType.NEEDS_MANAGER (C-11, 2026-10-22)
 EFFECT_WORDS = ("free_", "charge", "allowed", "accepted", "due", "applies")
 MAX_FACTS = 50
 

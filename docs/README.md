@@ -9,6 +9,7 @@ Read in this order if you want to judge what Ripple is, what was verified and wh
 | [`contracts/FINAL_KNOWLEDGE_LOOP.md`](contracts/FINAL_KNOWLEDGE_LOOP.md) | the Final knowledge loop: shapes, grammar, lifecycle, permissions, limits, retrieval adapter, carry-over, model suggestions and readings |
 | [`evaluation/FINAL_AI_QUALITY_PLAN.md`](evaluation/FINAL_AI_QUALITY_PLAN.md) | what AI quality would be measured, the pinned prompts, the one-case live pilot of 2026-10-17 (a self-check, not a gate) and the not-approved set-sized pilot; no pin carries gate evidence on this build |
 | [`runbooks/FINAL_RECOVERY.md`](runbooks/FINAL_RECOVERY.md) | operator recovery steps of the Final loop |
+| [`runbooks/FINAL_DEPLOY_ROLLBACK.md`](runbooks/FINAL_DEPLOY_ROLLBACK.md) | how a deploy would be built, verified and rolled back (procedure only; nothing deployed) |
 | [`judges/START_HERE.md`](judges/START_HERE.md) | the Phase 1 judge guide (Markdown source of the static pages in `../site/judges/`), kept as history |
 | [`release/FINAL_RELEASE_CHECKLIST.md`](release/FINAL_RELEASE_CHECKLIST.md) | the Final build: what is done (self-check), what is OPEN (live quality, human acceptance) and what the owner decides |
 | [`release/FINAL_CLAIMS_EVIDENCE_LIMITS.md`](release/FINAL_CLAIMS_EVIDENCE_LIMITS.md) | every Final claim, the tests that back it, its limit; what is **not** claimed |

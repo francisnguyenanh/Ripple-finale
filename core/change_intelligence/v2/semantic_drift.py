@@ -22,7 +22,9 @@ LABEL = ("Semantic drift ADVISORY: a model's reading of the diff, with witness l
 
 _CMP = re.compile(r"(>=|<=|==|!=|>|<|\bgte\b|\blte\b|\bgt\b|\blt\b|\beq\b|\bne\b)")
 _NUMBER = re.compile(r"(?<![A-Za-z0-9_])(\d{1,3}(?:[,_]\d{3})+|\d+)(?:\.(\d+))?")
-_NOT_PLAIN = re.compile(r"[<>`|\\]|\*\*|^#|\]\(|https?://", re.M)
+# markup is refused (a tag `<b>`, `</x>`, `<!--`, backticks, pipes, markdown links, URLs); a comparison operator is not markup: an operator-change statement has to name it
+# (2026-10-22, live diagnostic SUR04-V1: a finding naming ">=" and ">" was refused as not plain text)
+_NOT_PLAIN = re.compile(r"<[A-Za-z/!]|[`|\\]|\*\*|^#|\]\(|https?://", re.M)
 
 
 def index_diff(diff_text: str, *, max_lines_per_file: int = 400) -> dict:

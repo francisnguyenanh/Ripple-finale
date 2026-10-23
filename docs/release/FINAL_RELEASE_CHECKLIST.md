@@ -22,10 +22,23 @@ Four kinds of evidence are kept apart: **built** = the function exists and is ve
 |---|---|---|---|---|---|
 | Sources → observed knowledge with traced code / configuration links | yes | v3 J1 passed (4 / 4 required rules, CAPEX route traced) | — | partial: code outcomes / actors came from the server's code facts, not the model | PARTIAL (model omissions labelled) |
 | Model-suggested disagreement → person's decision → accepted knowledge | yes | v4 J2 passed the frozen gate (no planted pair) | — | the suggestion named the right pair; band / actor precision not measured | PARTIAL |
-| Grounded answers on a concrete case (A4a, A4b, A5, A19) | yes | v4: 1 / 5; v5 re-ask: 0 / 2; v6c (continuation on fresh v6 knowledge): **5 / 5 shown answers** (no safety breach in any run) | A19 (both views), A5, A4a, A4b pass on the stored v5 outputs | v6c model-only 3 / 5: A4a, A19T, A19O on the model's own output; A4b notices the missing category but does not ask; A5 abstains without its own JPY question | **PARTIAL** (shown answers pass once; model quality below the shown answers; not independent) |
+| Grounded answers on a concrete case (A4a, A4b, A5, A19) | yes | v4: 1 / 5; v5 re-ask: 0 / 2; v6c: 5 / 5 shown; v8: 4 / 5; **v9 (fresh, one version): 5 / 5 shown** (no safety breach in any run) | A19 (both views), A5, A4a, A4b pass on the stored v5 outputs | v6c model-only 3 / 5: A4a, A19T, A19O on the model's own output; A4b notices the missing category but does not ask; A5 abstains without its own JPY question | **PARTIAL** (shown answers pass once; model quality below the shown answers; not independent) |
 | Change request → guidance → person's decision → commit → document → refresh | yes | v5 J4 passed to the refresh (change reused from v4; guidance v2; decision and commit by the operator for the person; document; refresh read back; honest `pending` for the prose rule) | — | guidance: one advisory question, no blocker | PARTIAL (passed in the recorded synthetic scope; not human acceptance; not runtime verified) |
-| One continuous end-to-end live run on the final version | — | **attempted twice on new workspaces (2026-10-22): v6 — J1 passed, J2 refused before any model call by the input ceiling (fixed afterwards); v7 — J1 passed, the model suggested the right disagreement and the server refused its question as over the length limit (fixed afterwards); both stopped at J2 by the frozen rules. The continuation v6c (J2–J4 on the v6 knowledge after the first fix) passed its gates but spans two code versions** | — | — | **OPEN** (not claimed) |
+| One continuous end-to-end live run on the final version | yes | **v9 (2026-10-22, new workspace, one version `0b410d23`): J1, J2, J3 (5 / 5 shown), J4 to the refresh (`verified`, source-aligned) — every gate passed.** Earlier attempts v6, v7, v8 stopped on product defects, all fixed (history kept) | — | v9 model-only answers 2 / 5 (the server binds passages and asks the fact questions) | **DONE at B** (synthetic, self-authored, not independent; operator-simulated decisions; behaviour not tested) |
 | Independent evaluation on unseen, reviewer-built sets | — | — | — | — | **OPEN** |
 | Human acceptance of AI quality | — | — | — | — | **OPEN** (owner accepted the layered evidence as recorded, not the quality) |
 
-Total recorded provider cost for all live work under the 2.00 USD mandate: 1.09885270 USD (ledger reconciled with the database after every run).
+Total recorded provider cost for all live work under the 2.00 USD mandate: 1.22117030 USD (ledger reconciled with the database after every run).
+
+## Extension roles: live diagnostics of 2026-10-22 (self-authored sets, frozen before collect, Flash-Lite; synthetic data or the owner's Harbor sandbox)
+
+| Role | Live result | Threshold | Status |
+|---|---|---|---|
+| SUR-04 semantic drift advisory (on local diffs of the owner's Harbor sandbox, never pushed) | 5 / 6; planted drift recall 0.75; false drift 0.00; never a pass | met (diagnostic) | PARTIAL — quality evidence self-authored; required-check integration on a real repository OPEN (remote branch-protection write not granted) |
+| SUR-05 proposed correspondence on refresh | 4 / 6 (scorer corrected after viewing, both reported); precision 0.571, recall 0.571 | not met | OPEN (quality) |
+| SUR-07 ROI analyst (synthetic data) | 4 / 6; declared-question 0.667; no kept claim word or stray number | not met | OPEN (quality); real data / data-owner acceptance OPEN |
+| SUR-03 proposal-only coder | not measured (set design: configured thresholds never reach the coder) | — | OPEN |
+| SUR-08 review synthesis memo | not run (a board run of several specialist calls per item; worst case above the remaining allowance for six items) | — | OPEN |
+| MON-ROI replay on extracted knowledge | defect found and fixed (scope marker read as a field; route values needing an approver not read as approvals): reports "unsupported" honestly now | — | PARTIAL (engine); real data OPEN |
+
+Deploy procedure: [`../runbooks/FINAL_DEPLOY_ROLLBACK.md`](../runbooks/FINAL_DEPLOY_ROLLBACK.md) (nothing deployed; target platform is the owner's decision).

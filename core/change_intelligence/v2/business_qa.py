@@ -310,6 +310,19 @@ def _span(ref) -> Optional[tuple]:
         return None
 
 
+def rules_bound_to_passages(refs: Iterable[str], obs_loc: Mapping, items: Iterable[Mapping]) -> list:
+    """Per cited passage, the ONE structured rule bound to it (same artifact, overlapping lines); a passage with no rule or with several rules adds nothing. The union over
+    the cited passages, in citation order. 2026-10-22, live run JOURNEY-V8 A4b (closure C-09): a claim citing the policy passage and the manager-guide passage, each the
+    source of its own manager rule, was left unchecked because the two passages together named two rules."""
+    items = list(items)
+    out: list = []
+    for r in refs:
+        one = rule_bound_to_passages([r], obs_loc, items)
+        if one and one not in out:
+            out.append(one)
+    return out
+
+
 def rule_bound_to_passages(refs: Iterable[str], obs_loc: Mapping, items: Iterable[Mapping]) -> Optional[str]:
     """The ONE structured rule bound (artifact + overlapping line span, from the stored source bindings) to the passages a claim cites, when the claim cites no rule
     itself; None when no rule or several rules are bound there (nothing is guessed). Live finding JOURNEY-V4 / V5 J3 A4a: the model cited the policy passage instead
@@ -452,11 +465,10 @@ def judge_claims(claims: Iterable[Mapping], pack: Mapping, question: str, frozen
         refs = list(dict.fromkeys(c["refs"]))
         from_decision = [r for d in refs for r in decided_rule.get(d, []) if r not in refs and r in readable]
         refs = refs + list(dict.fromkeys(from_decision))
-        from_passage = None
+        from_passage: list = []
         if refs and not any(r in by_id and by_id[r].get("kind") == "rule" for r in refs):
-            from_passage = rule_bound_to_passages(refs, obs_loc, pack["items"])              # the rule read from the cited passage: stored binding, same lines
-            if from_passage and from_passage in readable:
-                refs = refs + [from_passage]
+            from_passage = [x for x in rules_bound_to_passages(refs, obs_loc, pack["items"]) if x in readable]   # the rule read from each cited passage: stored binding, same lines
+            refs = refs + from_passage
         if text is None:
             dropped.append({"reason": "unsafe_or_empty_text", "text": str(c["text"])[:80]})
         elif not refs:
@@ -484,8 +496,8 @@ def judge_claims(claims: Iterable[Mapping], pack: Mapping, question: str, frozen
                          "uses_evidence": any(r in obs_text for r in refs), "applicability": "not_checked", "conditional_on": [], "assumptions": []}
                 if from_decision:
                     claim["refs_from_decision"] = list(dict.fromkeys(from_decision))      # added by the server from the decision the claim cites
-                if from_passage and from_passage in refs:
-                    claim["refs_from_passage"] = [from_passage]                           # added by the server from the binding of the cited passage
+                if from_passage:
+                    claim["refs_from_passage"] = list(from_passage)                      # added by the server from the binding of the cited passages
                 if concrete:
                     app = claim_applicability(refs, by_id, qf["facts"], universe)
                     if app["status"] == "not_applicable":

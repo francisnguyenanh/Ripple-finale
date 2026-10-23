@@ -85,10 +85,26 @@ def _evidence_kinds(cand: Mapping) -> set:
     return {(locator(e) or {}).get("type") for e in cand.get("evidence") or [] if isinstance(e, Mapping)}
 
 
+def _restates_value(cand: Mapping) -> bool:
+    """The candidate's "outcome" is only its own value written again (`version: 1.0.0` → outcome "1.0.0"; `standard_manager_threshold_jpy: 1000000` → "1000000"):
+    a configuration value says what is set, not what happens. 2026-10-22, live run JOURNEY-V8 (closure C-10): such values became rules and a change request picked one."""
+    return cand.get("value") is not None and _norm_value(cand.get("outcome")) == _norm_value(cand.get("value"))
+
+
+def _norm_value(v) -> str:
+    return str(v).strip().lower().replace(",", "").replace("_", "").replace("-", "").replace(" ", "")
+
+
+def _actor_restates_value(cand: Mapping) -> bool:
+    """The "actor" is only the value turned into a role name (`high_risk_route: NEEDS_DIRECTOR` → actor `role-needs-director`): a route value, not a stated role."""
+    actor = str(cand.get("actor") or "")
+    return cand.get("value") is not None and actor.lower().startswith("role-") and _norm_value(actor[5:]) == _norm_value(cand.get("value"))
+
+
 def classify(cand: Mapping) -> tuple:
     """-> ("rule" | "supporting_fact" | "incomplete", missing fields)."""
-    has_actor = isinstance(cand.get("actor"), str) and bool(cand["actor"].strip())
-    has_outcome = isinstance(cand.get("outcome"), str) and bool(cand["outcome"].strip())
+    has_actor = isinstance(cand.get("actor"), str) and bool(cand["actor"].strip()) and not _actor_restates_value(cand)
+    has_outcome = isinstance(cand.get("outcome"), str) and bool(cand["outcome"].strip()) and not _restates_value(cand)
     if has_actor or has_outcome:
         return "rule", []
     kinds = _evidence_kinds(cand)

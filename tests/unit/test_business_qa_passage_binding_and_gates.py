@@ -84,3 +84,19 @@ def test_an_approval_gate_is_read_from_the_rule_itself_never_from_a_route_name_a
     assert not bi.rule_is_gate(dict(MANAGER, outcome={"kind": "ROUTE_STANDARD", "predicate": ""}))                              # a route name alone
     item = bi.rule_item(MANAGER)
     assert item["gate"] is True and item["bindings"] == [{"artifact_id": ART, "evidence_ref": SPAN}]
+
+
+def test_a_claim_citing_two_passages_each_bound_to_its_own_rule_is_read_through_both():
+    """Closure C-09 (live run JOURNEY-V8 A4b): the claim cited the policy passage and the manager-guide passage, each the source of one manager rule. Each passage is read
+    through its own rule; a passage bound to two rules still adds nothing."""
+    guide = rule("rule-guide-manager", "purchase request - requires manager approval", {"field": "request.net_amount_jpy", "op": "gte", "value": 1000000, "unit": "JPY"},
+                 {"kind": "unspecified", "predicate": "", "stated_text": "manager approval requested"}, bindings=(("art-guide", json.dumps({"type": "line_span", "line_start": 12, "line_end": 13})),))
+    guide_passage = {"observation_id": "obs-art-guide-1.0.0-000004", "artifact_id": "art-guide", "locator": {"type": "line_span", "line_start": 12, "line_end": 13},
+                     "raw_value": "A purchase request of 1,000,000 JPY or more requires your approval."}
+    claim = dict(PASSAGE_CLAIM, refs=["obs-art-policy-1.0.0-000007", "obs-art-guide-1.0.0-000004"])
+    final, kept, _ = run("Who has to sign off a 1.2 million yen standard purchase?", [MANAGER, guide, CAPEX], [claim], observations=(PASSAGE, guide_passage))
+    assert kept[0]["refs_from_passage"] == ["rule-policy-manager", "rule-guide-manager"] and kept[0]["applicability"] == "applies" and final["status"] == "ANSWERED"
+    twin = rule("rule-policy-twin", "Requests - are approved", {"field": "purchase_request.amount", "op": "gte", "value": 1000000, "unit": "JPY"}, MANAGER["outcome"])
+    _, kept, _ = run("Who has to sign off a 1.2 million yen standard purchase?", [MANAGER, twin, guide, CAPEX], [claim], observations=(PASSAGE, guide_passage))
+    assert kept[0]["refs_from_passage"] == ["rule-guide-manager"]                                     # the policy lines name two rules: only the guide passage binds
+

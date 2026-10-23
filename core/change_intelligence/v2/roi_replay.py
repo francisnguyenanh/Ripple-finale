@@ -140,7 +140,7 @@ def evaluable_rules(rules: Iterable[Mapping], fact_keys: Iterable[str] = FACT_KE
         if r.get("condition") is None:
             out.append({"rule_id": r["rule_id"], "reason": "rule_condition_unknown"})
             continue
-        fields = _fields_of(r["condition"]) | set((r.get("scope") or {}).keys())
+        fields = _fields_of(r["condition"]) | {k for k, v in (r.get("scope") or {}).items() if isinstance(v, list) and v}   # a marker such as {"unresolved": true} is not a field (C-11)
         for e in r.get("exceptions") or []:
             fields |= _fields_of(e.get("condition")) if isinstance(e, Mapping) else set()
         missing = sorted(fields - keys)

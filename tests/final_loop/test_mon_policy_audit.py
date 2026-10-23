@@ -183,9 +183,9 @@ def test_roi_replay_route_compares_two_accepted_revisions_over_the_callers_recor
     assert r["pin"]["target"]["business_revision"] == 2 and r["denominators"]["cohort"] == 5 and r["denominators"]["replayed"] + r["denominators"]["unsupported"] == 5
     assert "records" not in r and r["dataset"]["hash"]                                                                             # the caller's rows are not echoed or stored
     with psycopg2.connect(q.env.dsn) as cx, cx.cursor() as cur:
-        cur.execute("SELECT count(*), max(payload->>'report_hash') FROM v2_audit WHERE tenant_id=%s AND workspace_id=%s AND event_type='ROI_REPLAY_RUN'", (q.env.tenant, q.env.ws))
-        n, h = cur.fetchone()
-    assert n == 2 and h == r["report_hash"]
+        cur.execute("SELECT count(*), array_agg(payload->>'report_hash') FROM v2_audit WHERE tenant_id=%s AND workspace_id=%s AND event_type='ROI_REPLAY_RUN'", (q.env.tenant, q.env.ws))
+        n, hashes = cur.fetchone()
+    assert n == 2 and r["report_hash"] in hashes                                                  # (was max(): the lexically larger hash, not the latest run; corrected 2026-10-22)
     # refusals: unknown revision, missing assumption, oversized/empty cohort, a viewer-less stranger
     assert _roi(q, q.admin, records=records, baseline_revision=1, target_revision=9, assumptions=assumptions).status_code == 409
     assert _roi(q, q.admin, records=records, baseline_revision=1, target_revision=2, assumptions={}).status_code == 400
