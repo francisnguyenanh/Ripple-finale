@@ -151,7 +151,9 @@ Support tier: the confirmed request, rule changes, impact, current decisions. Hi
 - **`authority_accounting`:** model_assertions, model_kept, model_contradicted, model_unsupported, model_unknown_fact, server_corrections, shown_authority and shown_from_model. Evaluations score the model from the `model_*` counts only: a contradicted assertion is a model error even when the reader sees the corrected sentence. What the reader sees is scored separately (`aig-03-scorer/2`, developing tool).
 - **Q2:** collected under checks/5 and scored by `aig-03-q2-scorer/1`. It stays as recorded and says nothing about checks/6 live behaviour.
 
-### 6.z Server-stated authority (`request-assistant-answer/5`, `request-assistant-checks/13`, config version 9, `request-assistant-context/3`; supersedes the model-chosen assertions of 6.y for new answers)
+### 6.z Server-stated authority (`request-assistant-answer/5`, `request-assistant-checks/14`, config version 10, `request-assistant-context/3`; supersedes the model-chosen assertions of 6.y for new answers)
+- **Config version 10 (2026-10-23):** the prompt tells the model that request and draft facts describe what is asked and must be written as proposals; checks/14 enforces it.
+- **checks/14 (2026-10-23):** a block whose cited facts are all proposal facts (`request`, or a `rule_change` from the draft) must say it is proposed / requested ("proposes", "requested", "should", ...); otherwise it is refused as `proposal_stated_as_in_effect` (what is asked is never shown as the rule in effect). A block that also cites the current rule, the state or a decision is not affected.
 - **Responsibility split:**
   - Who holds each step, what the reader may do and who the request is waiting on comes only from the reader's task record, filtered by the reader's rights and bound to the pack version.
   - The model does not state it and is not the source for it.

@@ -89,7 +89,7 @@ def _settle(q, client, cid, key, tries=120):
         drain(q.env)
         got = client.get(f"/v2/business/changes/{cid}/code/candidate", params={"workspace_id": q.env.ws}).json()
         part = got.get(key)
-        if part and part.get("status") in ("completed", "failed"):
+        if part and part.get("job_status") in ("completed", "failed"):       # the job's own state; `status` becomes the result's status once completed
             return got
         time.sleep(0.3)
     return got

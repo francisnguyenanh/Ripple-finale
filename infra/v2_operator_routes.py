@@ -2,6 +2,8 @@
 POST: only an administrator (`membership.manage`), a human actor, same Origin rule as every v2 mutation, a reason of at least 10 characters; audited. No redeploy, no terminal."""
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -41,13 +43,14 @@ def flags(request: Request, workspace_id: str):
 
 
 @router.post("/v2/operator/flags")
-async def set_flag(request: Request):
+@db_route
+def set_flag(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity = _identity_store()
     if identity is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, key, value, reason = body.get("workspace_id"), body.get("key"), body.get("value"), body.get("reason")
     if not isinstance(workspace_id, str) or not workspace_id:
         return _error("workspace_id required", 400)

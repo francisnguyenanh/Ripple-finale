@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import pathlib
+import re
 
 from core.change_intelligence.v2 import roi_analyst as ra
 from core.change_intelligence.v2 import roi_replay
@@ -82,13 +83,16 @@ class RoiAnalystExecutor:
         report = replay_for(ctx.store, tenant, ws, payload, payload["assumptions"])
         table = ra.metric_table(report)
         declared = sorted(k for k in ra.ASSUMPTION_KEYS if payload["assumptions"].get(k) is not None) + ["minutes_per_approval_range"]
-        assumptions = "\n".join(f"- {k}: {report['assumptions'].get(k)}" for k in ("minutes_per_approval", "minutes_per_approval_range", "hourly_cost"))
-        prompt = frozen["prompt_template"].replace("{metrics}", "\n".join(f"- {k} = {v}" for k, v in sorted(table.items()))).replace("{assumptions}", assumptions)
+        shown = [k for k in ("minutes_per_approval", "minutes_per_approval_range", "hourly_cost") if k in declared and report["assumptions"].get(k) is not None]
+        assumptions = "\n".join(f"- {k}: {report['assumptions'].get(k)}" for k in shown)                    # only what was declared (no "hourly_cost: None")
+        parts = {"{metrics}": "\n".join(f"- {k} = {v}" for k, v in sorted(table.items())), "{assumptions}": assumptions, "{declared_keys}": ", ".join(declared)}
+        prompt = re.sub(r"\{metrics\}|\{assumptions\}|\{declared_keys\}", lambda m: parts[m.group(0)], frozen["prompt_template"])     # one pass: data never expands a placeholder
+        schema = ra.schema_for(frozen["output_schema"], declared)
         from infra.worker import extraction
-        if extraction._input_token_bound(prompt, frozen["output_schema"]) > config.max_input_tokens_per_call:
+        if extraction._input_token_bound(prompt, schema) > config.max_input_tokens_per_call:
             raise NonRetryableExecutionError("budget_exceeded", "the metric pack exceeds the input ceiling")
         ctx.request_context.update(ra_frozen=frozen, ra_sha=sha, ra_report=report, ra_table=table, ra_declared=declared)
-        return ExecutionRequest(prompt=prompt, schema=frozen["output_schema"], provider_calls_planned=1, external=True)
+        return ExecutionRequest(prompt=prompt, schema=schema, provider_calls_planned=1, external=True)
 
     def execute(self, ctx: ExecutionContext, request: ExecutionRequest, calls: ProviderCallBudget) -> ExecutionOutcome:
         rc = ctx.request_context
@@ -110,6 +114,6 @@ class RoiAnalystExecutor:
         result = {"schema": ra.SCHEMA, "executor_id": EXECUTOR_ID, "config_sha256": rc["ra_sha"], "synthetic": True, "dataset": {k: report["dataset"].get(k) for k in ("label", "hash")},
                   "baseline_revision": payload["baseline_revision"], "target_revision": payload["target_revision"], "report_hash": report["report_hash"],
                   "metrics": rc["ra_table"], "model_status": model["status"], "statements": out["kept"], "assumption_questions": out["questions"],
-                  "scenarios": out["scenarios"], "rejected": out["rejected"], "label": ra.LABEL, "provider_calls": 1, "applies_nothing": True,
+                  "scenarios": out["scenarios"], "notes": out["notes"], "rejected": out["rejected"], "label": ra.LABEL, "provider_calls": 1, "applies_nothing": True,
                   "model": {"pinned": model_id, "served": actual}}
         return ExecutionOutcome(result=json.loads(_canon_json(result)), model_id=actual, input_tokens=in_t, output_tokens=out_t, thought_tokens=th_t)

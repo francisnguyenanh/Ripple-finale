@@ -29,9 +29,12 @@ _FOREIGN_AMOUNT = re.compile(r"(?:\d[\d,]*(?:\.\d+)?\s*(?:million|thousand|m\b|k
 FOREIGN_QUESTION = "What is the amount in JPY? The rules are written in JPY and an amount in another currency is never converted."
 _MULT = {"million": 1_000_000, "m": 1_000_000, "thousand": 1_000, "k": 1_000, None: 1, "": 1}
 FACT_WORDS = {
-    "request.category": ((r"\bcapex\b|capital (?:equipment|expenditure|asset|acquisition)|long-term asset", "CAPEX"), (r"\bopex\b|operational expenditure|operating expense", "OPEX")),
-    "process": ((r"\bemergency\b", "EMERGENCY"), (r"\bstandard\b", "STANDARD")),
-    "supplier.risk": ((r"risk register|high[- ]risk|\brisky\b", "HIGH"),),
+    # sealed-set v2 finding (2026-10-23): hyphenated spellings ("operating-expense", "capital-equipment"), "non-emergency" / "ordinary", and a stated NORMAL risk
+    # ("normal risk", "not on the risk register", "not flagged") were not read, so the server asked for facts the question had already given (W06, W08, W13, W15, W16)
+    "request.category": ((r"\bcapex\b|capital[- ](?:equipment|expenditure|asset|acquisition)|long-term asset", "CAPEX"), (r"\bopex\b|operational[- ]expenditure|operating[- ]expense", "OPEX")),
+    "process": ((r"(?<!non-)(?<!non )\bemergency\b", "EMERGENCY"), (r"\bstandard\b|\bordinary\b|\broutine\b|non[- ]emergency", "STANDARD")),
+    "supplier.risk": ((r"not (?:on|in) the (?:high[- ])?risk (?:register|list)|not flagged|normal[- ]risk|risk (?:is|of) normal|\blow[- ]risk\b", "NORMAL"),
+                      (r"risk register|high[- ]risk|\brisky\b", "HIGH")),
     "supplier.status": ((r"\bblocked\b", "BLOCKED"),),
     "purchase.category": ((r"licen[cs]e renewal|renew\w*\s+(?:of\s+)?(?:the\s+|our\s+|an?\s+|its\s+)?(?:existing\s+)?software\s+licen[cs]e", "SOFTWARE_LICENCE"),),   # a NEW subscription is not a renewal
 }
@@ -122,7 +125,12 @@ def amount_field_stands_for_the_case(field: str, unit) -> bool:
         return False
     if field.endswith("_jpy"):
         return True
-    return bool(_AMOUNT_NAME.search(field)) and isinstance(unit, str) and unit.strip().upper() == "JPY"
+    return bool(_AMOUNT_NAME.search(field)) and isinstance(unit, str) and unit.strip().upper() in _JPY_UNITS
+
+
+# the same currency written as the sources write it (a rule extracted from "1,000,000 yen" carries unit "yen"); live comparison QA-COMPARE-V1R: a rule compared in
+# "yen" made the server ask for the amount the question had already given
+_JPY_UNITS = ("JPY", "YEN", "円", "¥", "￥")
 
 
 def _fields_in(cond) -> set:
@@ -417,6 +425,12 @@ def build_prompt(frozen: Mapping, question: str, pack: Mapping, *, previous: Opt
 
 # ---- validation ---------------------------------------------------------------------------------------------------------------------
 
+# contract v3 (2026-10-23): a claim about a concrete case may state whether its cited rule applies to the case. A stated "no" that the server's applicability check
+# confirms is kept as a verified explanation of non-application (sealed run FNL-EVAL-20261023: "below the threshold, so no manager approval" was dropped and the
+# answer abstained); a "yes" or no stance on a rule that does not apply is dropped as before; a "no" on a rule that applies contradicts the check and is dropped.
+STANCES = ("yes", "no", "depends")
+
+
 def validate_model_object(obj, frozen: Mapping) -> dict:
     """Shape only: keys, types, enums, sizes. Raises ValueError(reason); claims are judged one by one later."""
     lim = frozen["limits"]
@@ -429,7 +443,7 @@ def validate_model_object(obj, frozen: Mapping) -> dict:
     if not isinstance(obj["clarifying_questions"], list) or len(obj["clarifying_questions"]) > lim["max_questions"] or not all(isinstance(q, str) for q in obj["clarifying_questions"]):
         raise ValueError("clarifying_questions")
     for c in obj["claims"]:
-        if not isinstance(c, dict) or set(c) != {"text", "refs", "basis"} or not isinstance(c["text"], str) or not isinstance(c["refs"], list) \
+        if not isinstance(c, dict) or set(c) - {"applies"} != {"text", "refs", "basis"} or c.get("applies", "yes") not in STANCES or not isinstance(c["text"], str) or not isinstance(c["refs"], list) \
                 or not all(isinstance(r, str) for r in c["refs"]) or c["basis"] not in BASES:
             raise ValueError("claim_shape")
     return obj
@@ -500,9 +514,19 @@ def judge_claims(claims: Iterable[Mapping], pack: Mapping, question: str, frozen
                     claim["refs_from_passage"] = list(from_passage)                      # added by the server from the binding of the cited passages
                 if concrete:
                     app = claim_applicability(refs, by_id, qf["facts"], universe)
+                    stance = c.get("applies")
+                    if app["status"] == "not_applicable" and stance == "no":
+                        claim.update(applicability="does_not_apply", conditional_on=[], stance="no", stance_verified=True, why_not=app["why"][:4])
+                        kept.append(claim)                                               # the model said the rule does not reach the case and the check agrees
+                        continue
                     if app["status"] == "not_applicable":
                         dropped.append({"reason": "claim_not_applicable", "text": text[:80], "detail": app["why"][:4], "refs": refs, "basis": c["basis"]})
                         continue
+                    if stance == "no" and app["status"] == "applies":
+                        dropped.append({"reason": "claim_contradicts_applicability", "text": text[:80], "detail": ["rule_applies_to_this_case"], "refs": refs, "basis": c["basis"]})
+                        continue
+                    if stance:
+                        claim["stance"] = stance
                     claim["applicability"], claim["conditional_on"] = app["status"], app["missing"]
                     if app["status"] == "applies" and qf["assumed"]:
                         strict = claim_applicability(refs, by_id, {k: v for k, v in qf["facts"].items() if k not in qf["assumed"]}, universe)

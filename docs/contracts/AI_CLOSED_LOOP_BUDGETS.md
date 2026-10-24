@@ -174,6 +174,25 @@ job stops, reports the unscheduled artifacts (`budget_deferred_artifact_ids`) an
 - `RIPPLE_BUDGET_PER_JOB_CAP_USD` / `RIPPLE_BUDGET_TOTAL_CAP_USD` — if set, override the corresponding YAML keys **after** the file is loaded and validated (i.e., the file must still be valid on its own; an env override cannot rescue an otherwise-invalid file, and an override value is itself validated by the same "valid Decimal, `> 0`" rule as §3, raising `BudgetConfigError` if it is not). These two are the only overrides at H, matching the owner decision's two owner-set numbers (§0.3 of the support matrix) being the ones most likely to need a same-day demo-time adjustment without a code change.
 - No env override exists for `model_prices`, `max_output_tokens`, `max_input_tokens_per_call`, `max_retries`, `max_provider_calls_per_job`, `fail_closed_on_missing_usage`, or the latency SLO targets — those require a config-file change (and, for `max_retries`, a worker startup restart to re-run the cross-check in §5).
 
+## 6a. Role allowlist (`enabled_roles`)
+
+The budget configuration names the AI job kinds this server may run. The code is `infra/ai_kinds.py`, enforced by `infra/provider_gate.py` and `infra/worker/job_worker.py`.
+
+| Value | Meaning |
+|---|---|
+| key absent | **no** AI job kind runs (fail closed; reason `ai_roles_not_configured`) |
+| `all` | every AI job kind (development, tests, evaluation); a production configuration lists its kinds |
+| list | only these kinds; each must be an AI job kind (`AI_KINDS`) or `retrieval.semantic`; an unknown or repeated name makes the configuration invalid |
+
+- **At the request:** the route refuses before anything is created: HTTP 409 with `code` `role_not_enabled` (or `ai_roles_not_configured`, `ai_config_unreadable`), the kind and a next action. No job row, no budget reservation, no provider call.
+- **At execution:** the worker reads the configuration again for every claim. A kind removed after the job was queued ends `FAILED` with reason `role_not_enabled: ...` before any provider reservation, attempt journal entry or call (0 calls, 0 cost).
+- **Order:** the global AI switch and the trial window decide first (AI off keeps AI jobs queued, and a request is refused as switched off). Then the allowlist applies; then the existing permission, model-data policy, quota and cap checks. The allowlist only removes capability; it never admits a job or grants a permission.
+- **Without a budget configuration** no provider call is possible at all (every AI executor refuses `budget_config_required`), so the allowlist has nothing to allow.
+- **Chat** (`intent.interpret`): when the kind is not enabled, a new conversation is kept and nothing is sent (as with the switch off); "Ask the AI" returns the explained 409.
+- **Request assistant:** the page's feature flag reads `off` unless `request.qa` is enabled, so the launcher is hidden; the routes refuse by themselves.
+- **Semantic retrieval:** the external semantic layer runs only when `retrieval.semantic` is enabled (and `RIPPLE_SEMANTIC_RETRIEVAL` selects a provider); otherwise answers use the lexical layers, labelled as a fallback.
+- A role model pin (`role_model_ids`) chooses the model; it is not a feature switch.
+
 ## 7. The three ADR-005 gaps this contract closes, plus the input-ceiling fix
 
 ### 7.1 How `max_output_tokens` reaches the provider

@@ -81,7 +81,19 @@ def _roi_analyst(r):
     return kept, len(r.get("rejected") or []), 0, None
 
 
-EXTRACT = {"knowledge.qa": _qa, "change.understand": _understand, "gap.answer_interpret": _interpret, "change.impact_deps": _accepted_rejected,
+def _request_qa(r):
+    """AH-05.3: the request assistant's checked-block contract. Retained = model blocks kept; rejected = model blocks / limitations refused; server_added = the
+    authority sentences the server renders from the task record (never counted as the model's reasoning). A refused answer has retained 0 -> 'rejected'."""
+    blocks = r.get("blocks") or []
+    server = sum(1 for b in blocks if b.get("kind") == "authority")
+    return len(blocks) - server, len(r.get("rejected") or []), server, None
+
+
+def _extraction(r):
+    return len(r.get("candidates") or []), len(r.get("rejected") or []), 0, None
+
+
+EXTRACT = {"knowledge.qa": _qa, "request.qa": _request_qa, "extraction": _extraction, "change.understand": _understand, "gap.answer_interpret": _interpret, "change.impact_deps": _accepted_rejected,
            "change.draft_guidance": _accepted_rejected, "knowledge.gap_proposals": _proposals, "knowledge.mining": _mining, "document.variant": _variant,
            "gap.interview_question": _interview, "ma.specialist": _specialist, "change.risk_memo": _memo, "ma.synthesis_memo": _memo, "ci.semantic_drift": _drift, "source.correspondence": _correspondence, "code.diff_proposal": _code_proposal, "roi.analyst": _roi_analyst}
 

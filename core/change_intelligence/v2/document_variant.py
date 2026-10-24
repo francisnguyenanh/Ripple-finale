@@ -195,7 +195,12 @@ def check(model: Mapping, pack: Mapping, audience_cfg: Mapping, fidelity: Mappin
                 rejected.append({"section": s["id"], "reason": f"paragraph_over_limit:{over}", "text": text[:160], "fact_ids": list(p["fact_ids"])[:8]})
                 continue
             claims = p.get("claims", [])
-            reason = _paragraph_reason(text, p["fact_ids"], by_id, pack, narrative) or _claims_reason(text, p["fact_ids"], claims, by_id, rule_ids) \
+            # claim rows restate thresholds / actors / outcomes: a narrative paragraph that cites the rules it summarises but states no number and carries no claim has
+            # nothing to restate (contract version 3 asks it to cite them; EV-VARIANT-V4 refused such summaries for missing rows). Its role words are still checked
+            # against the cited facts and its sentences by the clause checks; with a number or any claim row, the rows must match as for every paragraph.
+            claims_exempt = narrative and not claims and not _NUMBER.findall(text)
+            reason = _paragraph_reason(text, p["fact_ids"], by_id, pack, narrative) \
+                or (None if claims_exempt else _claims_reason(text, p["fact_ids"], claims, by_id, rule_ids)) \
                 or _clause_reason(text, [by_id[x] for x in p["fact_ids"] if x in rule_ids], pack, fidelity)
             if reason:
                 rejected.append({"section": s["id"], "reason": reason, "text": text[:160], "fact_ids": list(p["fact_ids"])})

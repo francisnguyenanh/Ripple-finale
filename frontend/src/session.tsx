@@ -1,6 +1,7 @@
 import * as React from "react";
 import { ApiError, Auth, type Head, type SandboxStatus, type WorkspaceInfo } from "@/lib/api";
 import { hashFor, parseHash, replaceHash, type Route } from "@/lib/route";
+import { kindEnabled, parseAiKinds } from "@/lib/aiKinds";
 
 export type Mode = "business" | "technical";
 
@@ -15,6 +16,8 @@ export interface Session {
   notice: string;
   /** The server operator switched the AI provider off: AI actions are refused until it is armed under an approved allocation. */
   aiOff: boolean;
+  /** Whether an AI job kind can be started on this server now: the provider is on and the kind is in the server's role allowlist. */
+  aiKind: (kind: string) => boolean;
   /** Permissions of the signed-in account in the open workspace. */
   can: (permission: string) => boolean;
   roles: string[];
@@ -80,6 +83,7 @@ export function SessionProvider({
   }, []);
   const notice = document.querySelector('meta[name="ripple-notice"]')?.getAttribute("content") ?? "";
   const aiOff = document.querySelector('meta[name="ripple-provider"]')?.getAttribute("content") === "LIVE_DISARMED";
+  const aiKinds = React.useMemo(() => parseAiKinds(document.querySelector('meta[name="ripple-ai-kinds"]')?.getAttribute("content")), []);
 
   const start = React.useCallback(async () => {
     try {
@@ -133,6 +137,7 @@ export function SessionProvider({
   const mine = workspaces.find((w) => w.workspace_id === ws);
   const value: Session = {
     account: boot.account, workspaces, route, mode, setMode, head, sandbox, notice, aiOff,
+    aiKind: (k) => !aiOff && kindEnabled(aiKinds, k),
     can: (p) => !!mine && mine.permissions.includes(p),
     roles: mine?.roles ?? [],
     signOut, expire, refresh, reloadWorkspaces, reloadNonce, reload: () => setReloadNonce((n) => n + 1),

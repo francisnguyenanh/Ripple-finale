@@ -23,13 +23,14 @@ from tests.ai2t03.conftest import scoped_store  # noqa: F401  (fixture reuse)
 def _config(**overrides):
     values = dict(
         per_job_cap_usd=None, total_cap_usd=None,
-        max_output_tokens=123, max_input_tokens_per_call=4000,
+        max_output_tokens=123, max_input_tokens_per_call=24000,   # the production ceiling: at 4000 the Final extraction prompt (b68d1f79) was refused before the path under test
         max_retries=0, max_provider_calls_per_job=1,
         model_prices={"gemini-priced": ModelPrice("gemini-priced", __import__("decimal").Decimal("0.01"),
                                                    __import__("decimal").Decimal("0.02"))},
         default_model_id="gemini-priced", fail_closed_on_missing_usage=True,
         latency_slo_p50_seconds=10.0, latency_slo_p95_seconds=30.0,
     )
+    values.setdefault("enabled_roles", "all")  # role allowlist: explicit (absent = no AI kind may run)
     values.update(overrides)
     from decimal import Decimal
     values.setdefault("per_job_cap_usd", Decimal("1"))

@@ -75,3 +75,27 @@ def test_a_choice_for_another_rule_or_an_unknown_intent_retargets_nothing():
         out = bc.resolve(model("rule-capex-finance-policy", 4000000), REQUEST, RULES, DECIDED, LIMITS, pin=PIN, choices=choices)
         assert out["status"] == "CLARIFY" and out["operations"] == [] and out["retargeted"] == []
 
+
+
+def test_a_request_that_names_the_decided_version_is_re_aimed_at_it_visibly():
+    """Live finding SUR08-V1 items 05 / 06 (2026-10-23): the request said "as people decided it" and the understanding still asked which version was meant."""
+    req = "Change the CAPEX Finance review threshold, as people decided it, from 2,000,000 to 5,000,000 JPY."
+    out = bc.resolve(model("rule-capex-finance-config", 5000000, quote=req), req, RULES, DECIDED, LIMITS, pin=PIN)
+    assert out["status"] == "READY" and out["questions"] == [] and out["operations"][0]["rule_id"] == "rule-capex-finance-config-target"
+    assert out["retargeted"] == [{"from": "rule-capex-finance-config", "to": "rule-capex-finance-config-target", "intent": "named_decided_version", "quote": req}]
+    plain = "Change the CAPEX Finance review threshold from 2,000,000 to 5,000,000 JPY."
+    out2 = bc.resolve(model("rule-capex-finance-config", 5000000, quote=plain), plain, RULES, DECIDED, LIMITS, pin=PIN)
+    assert out2["status"] == "CLARIFY" and out2["rejected"][0]["reason"] == "observed_rule_has_decided_version" and out2["retargeted"] == []
+
+
+def test_an_actor_with_an_apostrophe_in_the_request_is_read():
+    """Live finding SUR08-V1 item 03 (2026-10-23): "the requester's own manager" was held as unreadable (slug hyphen vs apostrophe)."""
+    req = "Purchases from high-risk suppliers should be approved by the requester's own manager instead of the Operations Director."
+    rules = dict(OBSERVED)
+    rid = next(r for r in rules if "high-risk" in r)
+    m = {"status": "READY", "message": "Ready.", "operations": [{"kind": "set_actor", "rule_id": rid, "candidate_rule_ids": [], "desired": "the requester's own manager", "user_quote": req}],
+         "questions": [], "assumptions": []}
+    out = bc.resolve(m, req, rules, [], LIMITS, pin=PIN)
+    assert out["status"] == "READY" and out["operations"][0]["desired"] == "role-the-requester-s-own-manager", out
+    bad = bc.resolve(dict(m, operations=[dict(m["operations"][0], desired="the plant manager")]), req, rules, [], LIMITS, pin=PIN)
+    assert bad["status"] == "CLARIFY" and bad["rejected"][0]["reason"].startswith("desired_not_supported:actor_not_in_request")

@@ -64,7 +64,15 @@ class DraftGuidanceExecutor:
         if not {"change.prepare", "ai.use"} <= perms or "ai_suspended" in v2_business.current_roles(ctx.store, tenant, ws, asker):
             raise NonRetryableExecutionError("authority_revoked", "the person who asked no longer holds the permission")
         can_evidence = bool(payload["evidence_access"]) and "evidence.read" in perms          # the lower of what was asked with and what is held now
-        got = v2_business_change.draft_for_intent(ctx.store, tenant, ws, payload["intent_id"])
+        probe = v2_business_change.impact_for_intent(ctx.store, tenant, ws, payload["intent_id"])
+        if probe is None:
+            raise NonRetryableExecutionError("intent_not_confirmed", "the change request is not confirmed")
+        from infra import v2_business_routes as routes
+        deps, dep_state = routes._dependency_input(ctx.store, tenant, ws, payload["intent_id"], probe)
+        gate = routes.dependency_gate(probe, dep_state)
+        if gate is not None:                                              # never run on its own: the dependency job is a paid, admitted job of its own
+            raise NonRetryableExecutionError("dependencies_incomplete", gate["next_action"])
+        got = v2_business_change.draft_for_intent(ctx.store, tenant, ws, payload["intent_id"], proposed_dependencies=deps, dependency_state=dep_state)
         if got is None:
             raise NonRetryableExecutionError("intent_not_confirmed", "the change request is not confirmed")
         draft = got["draft"]

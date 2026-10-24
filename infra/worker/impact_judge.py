@@ -33,7 +33,7 @@ from infra.worker.execution_types import (is_timeout_exception,
     ProviderCallBudget, ProviderExecutionError, ProviderInvalidResponseError,
     ProviderRateLimitError, ProviderTimeoutError,
 )
-from infra.worker.live_analysis import _client_for_model, _field, _token_count
+from infra.worker.live_analysis import generate_and_close, _client_for_model, _field, _token_count
 
 CONFIG_PATH = pathlib.Path(__file__).resolve().parents[2] / "config" / "ai10_impact_judge.json"
 _MODEL_KEYS = {"depends", "evidence_quote", "reason"}
@@ -158,7 +158,7 @@ class ImpactJudgeExecutor:
         calls.consume()
         try:
             client = _client_for_model(model_id)
-            response = client.models.generate_content(
+            response = generate_and_close(client,
                 model=model_id, contents=request.prompt,
                 config={"max_output_tokens": ctx.max_output_tokens, "temperature": 0.0,
                         "response_mime_type": "application/json"})

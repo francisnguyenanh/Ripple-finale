@@ -160,7 +160,8 @@ def derive_gaps(rules: Iterable[Mapping], kinds: Iterable[str] = ALL_GAP_KINDS) 
 
 
 def traverse(edges: Iterable[Mapping], start: str, *, max_hops: int = MAX_HOPS, max_nodes: int = MAX_NODES) -> dict:
-    """Bounded breadth-first walk (edges taken as undirected). Cycle-safe; says how many nodes it left out and why."""
+    """Bounded breadth-first walk (edges taken as undirected). Cycle-safe; says how many nodes it left out and why, and which nodes of the connected part it never
+    reached (`unreached`)."""
     adj: dict = {}
     for e in edges:
         adj.setdefault(e["from"], []).append((e, e["to"]))
@@ -183,8 +184,14 @@ def traverse(edges: Iterable[Mapping], start: str, *, max_hops: int = MAX_HOPS, 
             order.append(other)
             paths[other] = paths[node] + [e["edge_id"]]
             queue.append((other, depth + 1))
+    rest, stack = set(), list(order)                         # the rest of the connected part: what the limits actually left out (a role or concept is not a rule)
+    while stack:
+        for _, other in adj.get(stack.pop(), []):
+            if other not in seen and other not in rest:
+                rest.add(other)
+                stack.append(other)
     return {"start": start, "nodes": order, "paths": paths, "omitted": {"nodes_over_cap": omitted_nodes, "beyond_hops": too_deep, "max_hops": max_hops,
-                                                                          "max_nodes": max_nodes}}
+                                                                          "max_nodes": max_nodes}, "unreached": sorted(rest)}
 
 
 MAX_UNBOUND_LISTED = 50

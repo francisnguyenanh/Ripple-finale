@@ -17,6 +17,9 @@ const CODES: Record<string, string> = {
   model_data_policy_denied: "the project policy does not allow this data to be sent to the AI, so nothing was sent",
   provider_disarmed: "AI actions are switched off on this server, so nothing was sent",
   allocation_exhausted: "the approved allowance for this kind of AI action is used up, so nothing was sent",
+  role_not_enabled: "this AI feature is not enabled on this server, so nothing was sent",
+  ai_roles_not_configured: "no AI feature is enabled on this server, so nothing was sent",
+  ai_config_unreadable: "the server's AI configuration cannot be read, so nothing was sent",
   quota_used: "the AI replies of this conversation are used up",
   stale: "it is out of date",
   UNAVAILABLE: "not available",
@@ -85,6 +88,9 @@ export function failureAdvice(reason: unknown): FailureAdvice {
   }
   if (r.startsWith("budget_exceeded") || r.startsWith("allocation_exhausted")) {
     return { what: "The approved cost or job allowance for this kind of AI action is used up, so nothing was sent.", next: "An administrator has to approve more allowance. Nothing was changed.", retryHelps: false };
+  }
+  if (r.startsWith("role_not_enabled") || r.startsWith("ai_roles_not_configured") || r.startsWith("ai_config_unreadable")) {
+    return { what: "This AI feature is not enabled on this server, so nothing was sent and nothing was charged.", next: "The operator decides which AI features this server offers. Saved results can still be read.", retryHelps: false };
   }
   if (r.startsWith("provider_disarmed")) {
     return { what: "AI actions are switched off on this server, so nothing was sent.", next: "Ask the operator to switch them on, then use Try again.", retryHelps: false };

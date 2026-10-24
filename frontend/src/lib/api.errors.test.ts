@@ -13,7 +13,7 @@ describe("limit and refusal wording", () => {
     expect(t).not.toContain("HTTP 503");
   });
   it("budget, concurrency and operator switch use the server's own sentence and next action", () => {
-    for (const code of ["budget_exceeded", "concurrency_limit", "ai_switched_off", "person_quota"]) {
+    for (const code of ["budget_exceeded", "concurrency_limit", "ai_switched_off", "person_quota", "role_not_enabled", "ai_roles_not_configured", "ai_config_unreadable"]) {
       const t = errorText(new ApiError(409, { code, error: "E.", next_action: "N." }));
       expect(t).toBe("E. N.");
     }

@@ -48,9 +48,12 @@ class _Pool:
         self.guard = threading.Lock()
         self.peak = 0
         self.in_use = 0
+        self.timeouts = 0
 
     def acquire(self):
         if not self.slots.acquire(timeout=_wait()):
+            with self.guard:
+                self.timeouts += 1
             raise PoolBusy(f"no database connection free after {_wait():.0f}s (pool of {self.size})")
         try:
             with self.guard:
@@ -118,7 +121,15 @@ def connection(dsn: str):
 
 def stats(dsn: str) -> dict:
     p = _pools.get(dsn)
-    return {"size": p.size, "in_use": p.in_use, "idle": len(p.idle), "peak": p.peak} if p else {}
+    return {"size": p.size, "in_use": p.in_use, "idle": len(p.idle), "peak": p.peak, "timeouts": p.timeouts} if p else {}
+
+
+def busy_counts() -> dict:
+    """AH-01.6: process-wide pool counters for the overload log line (no DSN, no identifiers)."""
+    with _lock:
+        pools = list(_pools.values())
+    return {"pools": len(pools), "in_use": sum(p.in_use for p in pools), "peak": max((p.peak for p in pools), default=0),
+            "timeouts": sum(p.timeouts for p in pools)}
 
 
 def reset() -> None:

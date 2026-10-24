@@ -58,7 +58,7 @@ export function errorText(e: unknown): string {
   const wait = e.retryAfter ? ` Try again in ${e.retryAfter} second${e.retryAfter === 1 ? "" : "s"}.` : "";
   if (e.status === 429) return `Too many requests from this session.${wait || " Wait a moment and try again."} Nothing was lost and nothing was changed.`;
   if (e.status === 503) return `The service is busy or paused a safety counter for a moment.${wait || " Try again shortly."} Nothing was changed.`;
-  if (["provider_disarmed", "allocation_exhausted", "budget_exceeded", "concurrency_limit", "ai_switched_off", "member_ai_off", "person_quota"].includes(String(b.code)) && typeof b.error === "string")
+  if (["provider_disarmed", "allocation_exhausted", "budget_exceeded", "concurrency_limit", "ai_switched_off", "member_ai_off", "person_quota", "role_not_enabled", "ai_roles_not_configured", "ai_config_unreadable"].includes(String(b.code)) && typeof b.error === "string")
     return `${b.error}${typeof b.next_action === "string" ? " " + b.next_action : ""}`;
   if (e.status >= 500) return `The server could not complete the request (HTTP ${e.status}). Nothing was changed.`;
   if (b.code === "sandbox_lease_required")

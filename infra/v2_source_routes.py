@@ -14,6 +14,8 @@ fetches a URL or reads a client-named local path.
 
 from __future__ import annotations
 
+from infra.db_offload import db_route, request_body
+from infra.v2_policy_routes import _json_body_sync
 import base64
 import binascii
 import os
@@ -105,6 +107,19 @@ async def _bounded_json(request: Request):
     return body if isinstance(body, dict) else {}
 
 
+def _bounded_json_sync(request: Request):
+    """`_bounded_json` for a `db_route(max_bytes=MAX_REQUEST_BYTES)` function: None above the limit, {} when not a JSON object."""
+    raw = request_body(request)
+    if raw is None:
+        return None
+    try:
+        import json
+        body = json.loads(raw)
+    except ValueError:
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
 def _entries(body: dict) -> list[tuple]:
     """Upload entries `(path, bytes, role)` from `files` or one `archive`."""
     files, archive = body.get("files"), body.get("archive")
@@ -124,10 +139,11 @@ def _entries(body: dict) -> list[tuple]:
 
 
 @router.post("/v2/sources/imports")
-async def prepare_import(request: Request):
+@db_route(max_bytes=MAX_REQUEST_BYTES)
+def prepare_import(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
-    body = await _bounded_json(request)
+    body = _bounded_json_sync(request)
     if body is None:
         return _error("request body too large", 413)
     if any(field in body for field in _REFERENCE_FIELDS):
@@ -190,10 +206,11 @@ def read_import(request: Request, import_id: str, workspace_id: str):
 
 
 @router.post("/v2/sources/imports/{import_id}/commit")
-async def commit_import(request: Request, import_id: str):
+@db_route(max_bytes=MAX_REQUEST_BYTES)
+def commit_import(request: Request, import_id: str):
     if not _origin_ok(request):
         return _error("origin refused", 403)
-    body = await _bounded_json(request) or {}
+    body = _bounded_json_sync(request) or {}
     workspace_id = body.get("workspace_id")
     expected_version = body.get("expected_version")
     acks = body.get("acknowledged_skips", [])
@@ -278,10 +295,11 @@ def _refresh_prepare_view(view: dict) -> dict:
 
 
 @router.post("/v2/sources/refresh/prepare")
-async def prepare_refresh(request: Request):
+@db_route(max_bytes=MAX_REQUEST_BYTES)
+def prepare_refresh(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
-    body = await _bounded_json(request)
+    body = _bounded_json_sync(request)
     if body is None:
         return _error("request body too large", 413)
     unknown = sorted(set(body) - _REFRESH_PREPARE_FIELDS)
@@ -341,10 +359,11 @@ async def prepare_refresh(request: Request):
 
 
 @router.post("/v2/sources/refresh/commit")
-async def commit_refresh(request: Request):
+@db_route(max_bytes=MAX_REQUEST_BYTES)
+def commit_refresh(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
-    body = await _bounded_json(request) or {}
+    body = _bounded_json_sync(request) or {}
     unknown = sorted(set(body) - _REFRESH_COMMIT_FIELDS)
     if unknown:
         return _error("unsupported_field: " + ",".join(str(u) for u in unknown[:5]), 400)
@@ -418,7 +437,8 @@ def read_refresh(request: Request, refresh_id: str, workspace_id: str):
 
 
 @router.post("/v2/sources/refresh/{refresh_id}/correspondence")
-async def request_refresh_correspondence(request: Request, refresh_id: str):
+@db_route(max_bytes=MAX_REQUEST_BYTES)
+def request_refresh_correspondence(request: Request, refresh_id: str):
     """SUR-05: ask a model to propose where the content and obligations of deleted / changed artifacts continue on the new side of a PREPARED or COMMITTED refresh. Proposals
     only: never a rename proof, nothing changes. Human actor with `source.import`, `ai.use` and `evidence.read` (excerpts of the sources go to the model)."""
     from infra.v2_policy_routes import _json_body, _v2_store
@@ -427,7 +447,7 @@ async def request_refresh_correspondence(request: Request, refresh_id: str):
     identity, store = _services()[0], _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, attempt = body.get("workspace_id"), body.get("attempt", 1)
     if not isinstance(workspace_id, str) or not workspace_id.strip() or isinstance(attempt, bool) or not isinstance(attempt, int) or not 1 <= attempt <= 3:
         return _error("workspace_id and attempt (1-3) required", 400)
@@ -497,14 +517,15 @@ def read_revision(request: Request, revision_id: str, workspace_id: str):
 
 
 @router.post("/v2/sources/revisions/{revision_id}/evidence:validate")
-async def validate_evidence(request: Request, revision_id: str):
+@db_route(max_bytes=MAX_REQUEST_BYTES)
+def validate_evidence(request: Request, revision_id: str):
     """AI3-T02 `evidence.show`/validator: resolve and validate `EvidenceRef`s
     (typed locator + quote/raw_value, no client-supplied path/URL) against
     one already-committed, ACL-scoped source revision's real observations.
     Read-only; never persists or mutates a claim's `citation_valid`/support."""
     if not _origin_ok(request):                       # a read-only POST is still a cookie-authenticated POST: same Origin / custom-header gate as every other POST
         return _error("origin refused", 403)
-    body = await _bounded_json(request) or {}
+    body = _bounded_json_sync(request) or {}
     workspace_id, refs = body.get("workspace_id"), body.get("refs")
     if not isinstance(workspace_id, str) or not workspace_id:
         return _error("workspace_id required", 400)
@@ -586,14 +607,15 @@ def export_artifact(request: Request, revision_id: str, artifact_id: str, worksp
 
 
 @router.post("/v2/retrieval:query")
-async def retrieval_query(request: Request):
+@db_route(max_bytes=MAX_REQUEST_BYTES)
+def retrieval_query(request: Request):
     """AI3-T03: scoped lexical/vector/structural retrieval over the CURRENT
     revision's durable index projection. Same `project.read` ACL as every
     other read route in this file; a not-ready index reports its status
     rather than ever answering from a stale or wrong revision."""
     if not _origin_ok(request):                       # a read-only POST is still a cookie-authenticated POST: same Origin / custom-header gate as every other POST
         return _error("origin refused", 403)
-    body = await _bounded_json(request) or {}
+    body = _bounded_json_sync(request) or {}
     workspace_id, query = body.get("workspace_id"), body.get("query")
     top_k = body.get("top_k", 10)
     if not isinstance(workspace_id, str) or not workspace_id:

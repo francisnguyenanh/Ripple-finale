@@ -10,6 +10,8 @@ A request the caller may not read, another person's run and a missing one answer
 """
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -58,8 +60,9 @@ def preparation_manifest(request: Request, intent_id: str, workspace_id: str, ta
 
 
 @router.post("/v2/intents/{intent_id}/preparation")
-async def preparation_start(request: Request, intent_id: str):
-    body = await _json_body(request)
+@db_route
+def preparation_start(request: Request, intent_id: str):
+    body = _json_body_sync(request)
     ws = body.get("workspace_id")
     return _run(request, ws, lambda store, tenant, a, submit: prep.start(store, tenant, ws, intent_id, a, manifest_hash=body.get("manifest_hash"),
                                                                          target=body.get("target_candidate_id"), accepted=body.get("accepted_refs"), submit=submit),
@@ -77,14 +80,16 @@ def preparation_status(request: Request, run_id: str, workspace_id: str):
 
 
 @router.post("/v2/preparation/runs/{run_id}/advance")
-async def preparation_advance(request: Request, run_id: str):
-    body = await _json_body(request)
+@db_route
+def preparation_advance(request: Request, run_id: str):
+    body = _json_body_sync(request)
     ws = body.get("workspace_id")
     return _run(request, ws, lambda store, tenant, a, submit: prep.advance(store, tenant, ws, run_id, a, submit=submit), mutating=True)
 
 
 @router.post("/v2/preparation/runs/{run_id}/cancel")
-async def preparation_cancel(request: Request, run_id: str):
-    body = await _json_body(request)
+@db_route
+def preparation_cancel(request: Request, run_id: str):
+    body = _json_body_sync(request)
     ws = body.get("workspace_id")
     return _run(request, ws, lambda store, tenant, a, _s: prep.cancel(store, tenant, ws, run_id, a), mutating=True)

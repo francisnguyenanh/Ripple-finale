@@ -128,24 +128,30 @@ def test_requester_confirms_and_sees_the_meaning_an_approver_decides_separately_
     a.get_by_test_id("mode-technical").click()
     expect(a.get_by_test_id("rev-technical")).to_contain_text("semantic diff", timeout=WAIT)
     a.get_by_test_id("mode-business").click()
-    # 4. the requester clarifies an open item: the draft is revised and the approval is out of date
+    # 4. the knowledge owner clarifies an open item: the draft is revised and the approval is out of date. (The requester, without evidence rights, has no open item
+    #    of their own here: the file items are withheld and the request raised no question or hold; an earlier version of this step leaned on a false
+    #    "relation walk stopped" item the server no longer raises, 2026-10-24.)
     req.reload()
     expect(req.get_by_test_id("chg-review")).to_be_visible(timeout=WAIT)
     expect(req.locator("[data-testid=rev-decision][data-kind=knowledge]")).to_have_attribute("data-current", "true", timeout=WAIT)
-    opener = req.get_by_test_id("rev-clarify-open").first                                          # EUI-06: the form opens under the item it is about
+    assert req.get_by_test_id("rev-clarify-open").count() == 0                                        # nothing the requester can clarify without evidence rights
+    k = sign_in(pw_browser, server, env.ws, env.admin, f"cred-a-{env.nonce}")
+    k.goto(link)
+    expect(k.get_by_test_id("chg-review")).to_be_visible(timeout=WAIT)
+    opener = k.get_by_test_id("rev-clarify-open").first                                          # EUI-06: the form opens under the item it is about
     ref = opener.get_attribute("data-ref")
     opener.click()
-    form = req.locator(f'[data-testid="rev-clarify"][data-ref="{ref}"]')
+    form = k.locator(f'[data-testid="rev-clarify"][data-ref="{ref}"]')
     expect(form).to_contain_text("Clarifying:")
-    assert req.get_by_test_id("rev-clarify").count() == 1                                          # one open form at a time
+    assert k.get_by_test_id("rev-clarify").count() == 1                                          # one open form at a time
     form.get_by_test_id("rev-clarify-disposition").select_option("answered")
     expect(form.get_by_test_id("rev-clarify-submit")).to_be_disabled()                             # an answer needs words
     form.get_by_test_id("rev-clarify-disposition").select_option("manual_later")
     form.get_by_test_id("rev-clarify-submit").click()
-    expect(req.get_by_test_id("rev-note")).to_contain_text("revised", timeout=WAIT)
-    assert req.get_by_test_id("rev-rail").get_by_test_id("rev-note").count() == 1                 # the outcome shows in the rail, beside the controls
-    expect(req.locator("[data-testid=rev-decision][data-kind=knowledge]")).to_have_attribute("data-current", "false", timeout=WAIT)
-    expect(req.locator("[data-testid=rev-decision][data-kind=clarification]")).to_have_count(1)
+    expect(k.get_by_test_id("rev-note")).to_contain_text("revised", timeout=WAIT)
+    assert k.get_by_test_id("rev-rail").get_by_test_id("rev-note").count() == 1                 # the outcome shows in the rail, beside the controls
+    expect(k.locator("[data-testid=rev-decision][data-kind=knowledge]")).to_have_attribute("data-current", "false", timeout=WAIT)
+    expect(k.locator("[data-testid=rev-decision][data-kind=clarification]")).to_have_count(1)
     # 5. the approver sees the stale decision, decides again for the revised draft and approves the file edits separately
     a.reload()
     expect(a.locator("[data-testid=rev-decision][data-kind=knowledge]")).to_contain_text("out of date", timeout=WAIT)
@@ -159,5 +165,5 @@ def test_requester_confirms_and_sees_the_meaning_an_approver_decides_separately_
     assert a.locator("[data-testid=rev-decision]").count() == 4                                   # approve, clarification, approve, file edits
     assert admin.get("/v2/business/knowledge", params={"workspace_id": env.ws}).json()["accepted"] == knowledge_before                    # decisions committed no knowledge
     assert model.calls == 1                                                                      # one understanding call; the review and the decisions asked no model
-    for page in (req, a, v):
+    for page in (req, a, v, k):
         assert not page._errors, page._errors

@@ -15,6 +15,7 @@ import { useNotify } from "@/lib/notify";
 import { hashFor } from "@/lib/route";
 import { PageHeader } from "@/pages/Page";
 import { useSession } from "@/session";
+import { aiWhy } from "@/lib/aiKinds";
 import { jobState, isTerminal, type Job, type Rec } from "@/features/changes/types";
 import { AnalysisButtons, FileStages, LifeSummary, costNote } from "./Lifecycle";
 import { useParam } from "@/lib/param";
@@ -158,7 +159,7 @@ function SelectedFile({ ws, rev, a, row, provider, busy, onAnalyze, onClose }: {
           <div className="grid gap-1" data-testid="sources-selected-actions">
             <div className="flex flex-wrap gap-2 items-center">
               {row ? <AnalysisButtons ws={ws} row={row} canRun={s.can("source.import")} busy={busy} onStart={() => onAnalyze(a)} provider={provider} />
-                : s.can("source.import") && <Button disabled={s.aiOff} onClick={() => onAnalyze(a)}>Analyze</Button>}
+                : s.can("source.import") && <Button disabled={!s.aiKind("extraction")} title={aiWhy(s, "extraction")} onClick={() => onAnalyze(a)}>Analyze</Button>}
               {s.can("evidence.read") && <a role="link" tabIndex={0} className="text-primary underline cursor-pointer text-sm"
                 onClick={() => void downloadArtifact(ws, rev, a, notify.fail)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void downloadArtifact(ws, rev, a, notify.fail); } }}>Export</a>}
             </div>
@@ -493,7 +494,7 @@ export function SourcesPage() {
                   {rowOf(a) && <FileStages row={rowOf(a)!} provider={life?.provider as Rec} />}
                   <div className="flex flex-wrap gap-2 items-center">
                     {rowOf(a) ? <AnalysisButtons ws={ws} row={rowOf(a)!} canRun={s.can("source.import")} busy={starting === a.artifact_id} onStart={() => void analyze(a)} provider={life?.provider as Rec} />
-                      : s.can("source.import") && <Button disabled={s.aiOff} title={s.aiOff ? "AI actions are switched off on this server" : undefined} onClick={() => void analyze(a)}>Analyze</Button>}
+                      : s.can("source.import") && <Button disabled={!s.aiKind("extraction")} title={aiWhy(s, "extraction")} onClick={() => void analyze(a)}>Analyze</Button>}
                     <Button data-testid="artifact-details" aria-pressed={selId === a.artifact_id} onClick={() => setSelId(selId === a.artifact_id ? "" : String(a.artifact_id))}>{selId === a.artifact_id ? "Hide details" : "Details"}</Button>
                     {s.can("evidence.read") && <Button onClick={() => setArt(a)}><Search size={14} aria-hidden="true" />Evidence</Button>}
                     {s.can("evidence.read") && <a role="link" tabIndex={0} data-testid="export-link-source" className="text-primary underline cursor-pointer text-sm"

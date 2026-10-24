@@ -10,6 +10,8 @@ Nothing here pushes, merges or deploys; the Final routes (`.../code`, `.../code/
 """
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -62,8 +64,9 @@ def read_code_candidate(request: Request, change_id: str, workspace_id: str, can
 
 
 @router.post("/v2/business/changes/{change_id}/code/candidate")
-async def create_code_candidate(request: Request, change_id: str):
-    body = await _json_body(request)
+@db_route
+def create_code_candidate(request: Request, change_id: str):
+    body = _json_body_sync(request)
     repo_id = body.get("repo_id")
     if not isinstance(repo_id, str) or not repo_id:
         return _error("repo_id required", 400)
@@ -75,8 +78,9 @@ async def create_code_candidate(request: Request, change_id: str):
 
 
 @router.post("/v2/business/changes/{change_id}/code/candidate/validate")
-async def validate_code_candidate(request: Request, change_id: str):
-    body = await _json_body(request)
+@db_route
+def validate_code_candidate(request: Request, change_id: str):
+    body = _json_body_sync(request)
     cid = body.get("candidate_job_id")
     if not isinstance(cid, str) or not cid:
         return _error("candidate_job_id required", 400)
@@ -85,8 +89,9 @@ async def validate_code_candidate(request: Request, change_id: str):
 
 
 @router.post("/v2/business/changes/{change_id}/code/candidate/decide")
-async def decide_code_candidate(request: Request, change_id: str):
-    body = await _json_body(request)
+@db_route
+def decide_code_candidate(request: Request, change_id: str):
+    body = _json_body_sync(request)
     cid = body.get("candidate_job_id")
     if not isinstance(cid, str) or not cid or not isinstance(body.get("patch_hash"), str) or not isinstance(body.get("validation_hash"), str):
         return _error("candidate_job_id, patch_hash and validation_hash required", 400)
@@ -96,8 +101,9 @@ async def decide_code_candidate(request: Request, change_id: str):
 
 
 @router.post("/v2/business/changes/{change_id}/code/candidate/publish")
-async def publish_code_candidate(request: Request, change_id: str):
-    body = await _json_body(request)
+@db_route
+def publish_code_candidate(request: Request, change_id: str):
+    body = _json_body_sync(request)
     cid = body.get("candidate_job_id")
     if not isinstance(cid, str) or not cid:
         return _error("candidate_job_id required", 400)
@@ -128,7 +134,8 @@ router.add_api_route("/v2/business/changes/{change_id}/code/candidate/rollback",
 
 
 @router.post("/v2/sources/git/sync")
-async def git_sync(request: Request):
+@db_route
+def git_sync(request: Request):
     """FEX-01 (local only): read a declared LOCAL repository at its current commit into one source refresh revision through the existing refresh path. `source.import`, human
     actor. The same commit against the same source revision is one job; the result names the commit, the history shape and the files added/changed/deleted/skipped."""
     if not _origin_ok(request):
@@ -136,7 +143,7 @@ async def git_sync(request: Request):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, repo_id = body.get("workspace_id"), body.get("repo_id")
     if not (isinstance(workspace_id, str) and workspace_id.strip()) or not isinstance(repo_id, str) or not repo_id:
         return _error("workspace_id and repo_id required", 400)

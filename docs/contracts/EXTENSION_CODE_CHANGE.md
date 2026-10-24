@@ -97,6 +97,10 @@ or `UNCERTAIN` are listed as **not implemented** in the candidate; they are neve
   other content is `branch_conflict` and is never overwritten. The ledger records `pr_published` (branch, commit, PR number/url). Nothing merges, deletes a branch or changes
   branch protection.
 
+Optional `"source_root": "<folder>"` per declared repository (added 2026-10-23): the folder of the workspace's imported sources that corresponds to the repository root.
+A recommendation path that starts with `<folder>/` is resolved without that prefix (for example sources imported as `fixtures/harbor_public/app/emergency.py` against a
+repository rooted at `app/`). It is declared, never inferred; without it a path resolves only when equal to, or a unique suffix of, a tracked file.
+
 ## 6a. Remote repository (FEX-01 read, FEX-05 pull request)
 
 Declared by the operator per repository in `RIPPLE_EXTENSION_CONFIG`:
@@ -153,6 +157,8 @@ ready, unavailable_reason: null|"repo_not_ready"|"remote_config_invalid", sync: 
 A repository may declare `visible_to` (role names); without it every reader of the workspace sees it. A repository outside the member's visibility is absent, and
 `POST /v2/sources/git/sync` and `POST .../code/candidate` refuse it with the same `repo_not_declared` as an undeclared one. Never a path, URL, remote repository
 name, token variable or token. `configured: false` = nothing declared (the interface shows the feature as unavailable, with that reason).
+
+**Job state.** In the candidate read, `candidate.job_status` and `validation.job_status` are the jobs' own states (`pending` / `completed` / `failed`, always present); `status` carries the job state until the job completed and the result's status (`PROPOSED`, `PASSED`, ...) after. Added 2026-10-23.
 
 **Per-action hints.** `GET /v2/business/changes/{id}/code/candidate?workspace_id=[&repo_id=]` gains `can`:
 `{for_candidate, binding: {patch_hash, validation_hash}, repo_id, actions: {create_candidate|validate|approve|reject|publish: {allowed, reason_code, reason}}, statement}`.

@@ -264,8 +264,7 @@ def record_decision(store, tenant_id, workspace_id, change_id, *, actor_id: str,
         cur.execute("SELECT 1 FROM v2_jobs WHERE tenant_id=%s AND workspace_id=%s AND job_id=%s FOR UPDATE", (tenant_id, workspace_id, change_id))
         if cur.fetchone() is None:
             raise TenantScopeError("change request not found")
-        head = store._lock_head(cur, tenant_id, workspace_id)
-        if idempotency_key:
+        if idempotency_key:                                                                     # decisions on this change are serialised by the job row lock above
             cur.execute("""SELECT decision_id, payload_hash FROM v2_business_change_decisions WHERE tenant_id=%s AND workspace_id=%s AND intent_id=%s AND idempotency_key=%s""",
                         (tenant_id, workspace_id, change_id, idempotency_key))
             prior = cur.fetchone()
@@ -273,7 +272,8 @@ def record_decision(store, tenant_id, workspace_id, change_id, *, actor_id: str,
                 if prior[1] != payload_hash:
                     raise BusinessKnowledgeRefused("idempotency_conflict", "the same key was used for a different decision")
                 return {"decision_id": prior[0], "replayed": True, "kind": kind, "action": action}
-        store._recheck_actor_authority(cur, tenant_id, workspace_id, actor_id, permission)
+        store._recheck_actor_authority(cur, tenant_id, workspace_id, actor_id, permission)            # AH-03: account, membership, then the head (revoke's order)
+        head = store._lock_head(cur, tenant_id, workspace_id)
         cur.execute("SELECT accepted_snapshot_id, business_revision FROM v2_business_heads WHERE tenant_id=%s AND workspace_id=%s", (tenant_id, workspace_id))
         row = cur.fetchone() or (None, 0)
         pin = draft["pin"]

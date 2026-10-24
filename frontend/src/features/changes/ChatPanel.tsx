@@ -11,6 +11,7 @@ import { humanize, num } from "@/lib/fmt";
 import { useAction } from "@/lib/useAction";
 import { useNotify } from "@/lib/notify";
 import { useSession } from "@/session";
+import { aiWhy } from "@/lib/aiKinds";
 import { Permission, Turns } from "./ChatBits";
 import { AIInterpretationPreview } from "@/components/decision/AIInterpretationPreview";
 import { useFlow } from "./flow";
@@ -144,15 +145,16 @@ function AiHeld({ chat }: { chat: Chat }) {
       <strong>The AI has not been asked yet</strong>
       {block ? <span data-testid="chat-ai-block" data-reason={block}>{why[block] ?? "The AI cannot be used for this conversation right now."} Nothing was sent to the AI.</span>
         : s.aiOff ? <span data-testid="chat-ai-block" data-reason="provider_off">AI actions are switched off on this server, so no reply was requested. Saved results can still be read. Nothing was sent to the AI.</span>
+        : !s.aiKind("intent.interpret") ? <span data-testid="chat-ai-block" data-reason="role_not_enabled">AI interpretation of chat messages is not enabled on this server, so no reply was requested. The conversation is kept. Nothing was sent to the AI.</span>
         : <span>Nothing was sent to the AI yet. It answers when you send a message, or press the button.</span>}
       {mine && !block && (
         <div className="flex flex-wrap gap-2 mt-1">
-          <Button variant="primary" data-testid="chat-allow" title={s.aiOff ? "AI actions are switched off on this server" : undefined} disabled={pending || s.aiOff} onClick={ask}>Ask the AI</Button>
+          <Button variant="primary" data-testid="chat-allow" title={aiWhy(s, "intent.interpret")} disabled={pending || !s.aiKind("intent.interpret")} onClick={ask}>Ask the AI</Button>
         </div>
       )}
       {!mine && block === "sandbox_hold" && chat.can_allow && (
         <div className="flex flex-wrap gap-2 mt-1">
-          <Button variant="primary" data-testid="chat-allow-other" title={s.aiOff ? "AI actions are switched off on this server" : undefined} disabled={pending || s.aiOff}
+          <Button variant="primary" data-testid="chat-allow-other" title={aiWhy(s, "intent.interpret")} disabled={pending || !s.aiKind("intent.interpret")}
             onClick={async () => { if (await run(() => api("POST", `/v2/chat/${encodeURIComponent(chat.conversation_id)}/allow`, { workspace_id: ws, turns: 1 }))) await refresh(); }}>Allow the AI to reply</Button>
         </div>
       )}

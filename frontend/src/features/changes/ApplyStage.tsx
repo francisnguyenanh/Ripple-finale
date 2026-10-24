@@ -9,6 +9,7 @@ import { downloadArtifact } from "@/lib/download";
 import { useAction } from "@/lib/useAction";
 import { useNotify } from "@/lib/notify";
 import { useSession } from "@/session";
+import { aiWhy } from "@/lib/aiKinds";
 import { ExplanationCard } from "@/features/explain/ExplanationCard";
 import { CompletionFindings, gateWords, dispositionGroups, dispositionsReady, dispositionPayload, type Disp } from "./CompletionFindings";
 import { useFlow } from "./flow";
@@ -277,7 +278,7 @@ export function QueryStage() {
             </div>
           </details>
           <div className="flex flex-wrap gap-2">
-            <Button variant="primary" data-testid="action-run-query" title={s.aiOff ? "AI actions are switched off on this server" : undefined} disabled={pending || s.aiOff} onClick={async () => {
+            <Button variant="primary" data-testid="action-run-query" title={aiWhy(s, "gap.answer")} disabled={pending || !s.aiKind("gap.answer")} onClick={async () => {
               if (!q.trim() || !scope.length) { notify.status("Enter a question; at least one file must be searched."); return; }
               const id = newId("ui-query");
               if (await create("gap.answer", id, { question: q.trim(), question_id: id, artifact_ids: scope, intent_id: ids.intent || undefined })) { setIds({ query: id }); await refresh(); }

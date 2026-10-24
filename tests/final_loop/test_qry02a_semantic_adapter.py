@@ -303,6 +303,30 @@ def test_pack_default_is_disarmed_and_labelled(env, pack_env):
     assert pack["sufficiency"] == "unknown" and any("Semantic retrieval was not applied" in n for n in pack["notes"])
 
 
+def test_an_item_the_judge_reads_as_unrelated_is_set_aside_and_listed_but_counter_evidence_stays(env, pack_env):
+    """Live run QRY02B-V4 (2026-10-24): a distractor the judge labelled `unrelated` stayed in the pack. It now leaves the pack and is listed under `set_aside`; an
+    item that is counter-evidence of a kept rule stays whatever its label, and `unknown` (not read) stays."""
+    keep = "rule-capex-finance-config-target"
+
+    def judge_all_unrelated(layer, request, timeout):
+        ids = [i["item_id"] for i in request["items"]]
+        if layer == "judge":
+            return {"labels": {i: ("supports" if i == keep else "unrelated") for i in ids}, "sufficiency": "sufficient"}
+        return good(layer, request, timeout)
+    vbi.set_semantic_adapter(sr.SemanticAdapter(sr.ScriptedProvider(judge_all_unrelated)))
+    plain = ask(pack_env, env, "Who reviews CAPEX requests?", semantic=False)
+    pack = ask(pack_env, env, "Who reviews CAPEX requests?")
+    kept = {i["item_id"] for i in pack["items"]}
+    aside = {i["item_id"] for i in pack["set_aside"]}
+    assert keep in kept and aside and not (aside & kept) and all(i["relevance"] == "unrelated" for i in pack["set_aside"])
+    partners = {c["rule_id"] for c in pack["counterevidence"] if c["kind"] == "conflicting_rule"}
+    assert partners and not (aside & partners)                                                    # counter-evidence is never set aside
+    assert all(i["item_id"] in partners or i["relevance"] != "unrelated" for i in pack["items"])
+    assert {c["rule_id"] for c in plain["counterevidence"] if c["kind"] == "conflicting_rule"} <= partners | aside | kept
+    vbi.set_semantic_adapter(sr.SemanticAdapter(sr.ScriptedProvider(good)))
+    assert ask(pack_env, env, "Who reviews CAPEX requests? (all supporting)")["set_aside"] == []
+
+
 def test_pack_with_a_synthetic_provider_keeps_authority_and_counterevidence_and_labels_everything(env, pack_env):
     p = sr.ScriptedProvider(good)
     vbi.set_semantic_adapter(sr.SemanticAdapter(p))

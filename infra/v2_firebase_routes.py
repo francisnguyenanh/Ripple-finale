@@ -9,6 +9,8 @@ Mode `off` answers 503 on the exchange; `local-mock` accepts mock tokens only; `
 """
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -31,7 +33,8 @@ def firebase_config():
 
 
 @router.post("/v2/auth/firebase/exchange")
-async def firebase_exchange(request: Request):
+@db_route
+def firebase_exchange(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
@@ -42,7 +45,7 @@ async def firebase_exchange(request: Request):
         verifier = ext.verifier_for(cfg)
     except ext.VerifierUnavailable as exc:
         return JSONResponse({"error": "external sign-in unavailable", "code": str(exc)}, status_code=503, headers=_NO_STORE)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     try:
         out = ext.exchange(store, identity, body.get("id_token"), cfg=cfg, verifier=verifier)
     except ext.ExchangeDenied:
@@ -75,15 +78,17 @@ def _links_shell(request, workspace_id, action, *, mutating=True):
 
 
 @router.post("/v2/auth/external/links")
-async def link_external(request: Request):
-    body = await _json_body(request)
+@db_route
+def link_external(request: Request):
+    body = _json_body_sync(request)
     return _links_shell(request, body.get("workspace_id"), lambda store, authority: ext.link(store, authority["tenant_id"], body["workspace_id"], issuer=body.get("issuer"), project_id=body.get("project_id"),
                                                                                            subject=body.get("subject"), identity_tenant=body.get("identity_tenant") or "", account_id=body.get("account_id"), actor_id=authority["account_id"]))
 
 
 @router.post("/v2/auth/external/links/revoke")
-async def revoke_external(request: Request):
-    body = await _json_body(request)
+@db_route
+def revoke_external(request: Request):
+    body = _json_body_sync(request)
     return _links_shell(request, body.get("workspace_id"), lambda store, authority: ext.revoke_link(store, authority["tenant_id"], body["workspace_id"], issuer=body.get("issuer") or "", project_id=body.get("project_id") or "",
                                                                                                   subject=body.get("subject") or "", identity_tenant=body.get("identity_tenant") or "", actor_id=authority["account_id"]))
 

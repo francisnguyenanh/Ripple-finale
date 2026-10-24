@@ -46,6 +46,7 @@ function AnswerCard({ data, mode }: { data: Rec; mode: string }) {
           {(a.claims as Rec[]).map((c, i) => (
             <li key={i} data-testid="qa-claim" data-basis={c.basis} data-origin={(c.origin as string) ?? "model"} className="rounded-md border border-border p-3 grid gap-1">
               <span>{c.text as string}</span>
+              {c.applicability === "does_not_apply" && <Muted testid="qa-claim-not-applicable">Checked: this rule does not apply to this case (its condition is not met).</Muted>}
               <Muted>{((c.authority_labels ?? []) as string[]).join(", ")}{((c.sources ?? []) as string[]).length ? ` - ${(c.sources as string[]).join("; ")}` : ""}{c.origin === "server_applicability" ? " - added by the rule check, not written by the AI" : ""}</Muted>
               <Tech><Muted>refs {((c.refs ?? []) as string[]).map((r) => r).join(", ") || "withheld"} - basis <code>{c.basis as string}</code> - origin <code>{(c.origin as string) ?? "model"}</code></Muted></Tech>
             </li>

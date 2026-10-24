@@ -10,7 +10,7 @@ import { useSession } from "@/session";
 import { useFlow } from "./flow";
 
 export interface Note { note_id: number; reviewer: string; verdict: "comment" | "request_changes" | "ready"; text: string; created_at: string }
-export interface Notes { notes: Note[]; open_change_requests: string[] }
+export interface Notes { notes: Note[]; open_change_requests: string[]; total?: number; has_more?: boolean; next_before?: string | null }
 
 const WORDS: Record<Note["verdict"], string> = { comment: "commented", request_changes: "asked for changes", ready: "marked it ready for approval" };
 
@@ -34,8 +34,17 @@ export function ReviewNotes({ proposalId, proposalBy, st, set }: { proposalId: s
   const s = useSession();
   const { run, pending } = useAction();
   const [text, setText] = React.useState("");
+  const [older, setOlder] = React.useState<{ notes: Note[]; next: string | null } | null>(null);
   const whyId = React.useId();
+  React.useEffect(() => { setOlder(null); }, [proposalId, st]);
   if (!st) return null;
+  const next = older ? older.next : st.has_more ? st.next_before ?? null : null;
+  const loadOlder = async () => {                                                    // the history is read in pages, newest first; open requests never depend on it
+    if (!next) return;
+    const r = await run(() => api<Notes>("GET", `/v2/changes/${encodeURIComponent(proposalId)}/review-notes?workspace_id=${encodeURIComponent(ws)}&before=${encodeURIComponent(next)}`));
+    if (r) setOlder({ notes: [...r.notes, ...(older?.notes ?? [])], next: r.has_more ? r.next_before ?? null : null });
+  };
+  const shown = [...(older?.notes ?? []), ...st.notes];
   const mayReview = s.can("change.review") && proposalBy !== s.account;
   const post = async (verdict: Note["verdict"]) => {
     if (verdict !== "ready" && !text.trim()) return;
@@ -51,8 +60,14 @@ export function ReviewNotes({ proposalId, proposalBy, st, set }: { proposalId: s
         </Callout>
       )}
       {st.notes.length === 0 && <Muted testid="review-no-notes">No reviewer has written a note on this proposal. A review is optional; the approver can decide without one.</Muted>}
+      {next && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Muted testid="review-older-count">{(st.total ?? shown.length) - shown.length} older note(s) not shown.</Muted>
+          <Button size="sm" variant="ghost" data-testid="review-older" disabled={pending} onClick={() => void loadOlder()}>Show older notes</Button>
+        </div>
+      )}
       <ul className="grid gap-1 text-sm">
-        {st.notes.map((n) => (
+        {shown.map((n) => (
           <li key={n.note_id} data-testid="review-note" data-verdict={n.verdict}>
             <strong>{n.reviewer}</strong> {WORDS[n.verdict]}{n.text ? `: ${n.text}` : ""} <span className="text-muted">{new Date(n.created_at).toLocaleString()}</span>
           </li>

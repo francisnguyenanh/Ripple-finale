@@ -16,6 +16,8 @@ Design decisions (see JUDGE_EXECUTION_STATUS.md):
 
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 import json
 import os
 import threading
@@ -223,10 +225,11 @@ def sandbox_status(request: Request, workspace_id: str):
 
 
 @router.post("/v2/sandbox/lease")
-async def sandbox_lease(request: Request):
+@db_route
+def sandbox_lease(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, action = body.get("workspace_id"), body.get("action")
     identity, ctx, store, err = _ctx(request, workspace_id if isinstance(workspace_id, str) else "")
     if err is not None:
@@ -271,11 +274,12 @@ async def sandbox_lease(request: Request):
 
 
 @router.post("/v2/sandbox/pump")
-async def sandbox_pump(request: Request):
+@db_route
+def sandbox_pump(request: Request):
     """Run already-admitted jobs of the sandbox workspace, bounded. Needs the active lease. Never approves/creates."""
     if not _origin_ok(request):
         return _error("origin refused", 403)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     identity, ctx, store, err = _ctx(request, workspace_id if isinstance(workspace_id, str) else "")
     if err is not None:

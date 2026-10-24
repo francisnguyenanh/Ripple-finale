@@ -18,7 +18,7 @@ from infra.adapters.v2_identity import PostgresIdentityStore
 from infra.adapters.v2_postgres import StaleAuthorityError
 from tests.final_loop.test_chg01_change_request import ACTOR_REQ, NUM_REQ, OP_ACTOR, OP_VALUE, model_obj, understand
 from tests.final_loop.test_chg02_impact import confirmed
-from tests.final_loop.test_chg03_draft import ask_guidance, gitem, gobj, settle_guidance
+from tests.final_loop.test_chg03_draft import ask_guidance, deps_first, gitem, gobj, settle_guidance
 from tests.final_loop.test_kno01_business_store import counts, ws  # noqa: F401  (ws is a fixture)
 from tests.final_loop.test_qry03_qa import qa_env, use  # noqa: F401  (qa_env is a fixture)
 
@@ -155,6 +155,7 @@ def test_a_clarification_revises_the_draft_labels_the_item_and_makes_the_earlier
 def test_an_open_question_from_the_guidance_blocks_the_knowledge_decision_until_a_person_answers_it(qa_env):
     q = qa_env
     cid, approver = prepared(q)
+    deps_first(q, q.admin, cid)                                                                                                              # guidance needs the dependency step first
     use(q, lambda p: gobj(items=[gitem("F001", instruction="Change the key and run the tests.", hold=True)],                                  # the model holds F001 ...
                           questions=[{"question": "Does the new threshold include tax?", "needed": True, "ref": "F001"},                       # ... and needs this answered: blocks
                                      {"question": "Have you verified this with the latest financial control policy?", "needed": False, "ref": None},   # advice: shown, never a blocker

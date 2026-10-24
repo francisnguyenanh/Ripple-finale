@@ -9,6 +9,7 @@ import { basename, draftPhrase, gapPhrase, humanize, newId, valueText } from "@/
 import { useAction } from "@/lib/useAction";
 import { useNotify } from "@/lib/notify";
 import { useSession } from "@/session";
+import { aiWhy } from "@/lib/aiKinds";
 import { PurposeChat } from "@/features/freetext/PurposeChat";
 import { feedbackSurface, gapReplySurface } from "@/features/freetext/surfaces";
 import { useParam } from "@/lib/param";
@@ -140,7 +141,7 @@ function GapItem({ g, draftId, arts }: { g: Gap; draftId: string; arts: string[]
               }}>Save as comment (not authoritative)</Button>
             )}
             {s.can("change.prepare") && arts.length > 0 && (
-              <Button data-testid="gap-suggest" title={s.aiOff ? "AI actions are switched off on this server" : undefined} disabled={pending || s.aiOff} onClick={async () => {
+              <Button data-testid="gap-suggest" title={aiWhy(s, "gap.answer")} disabled={pending || !s.aiKind("gap.answer")} onClick={async () => {
                 const r = await create("gap.answer", newId("ui-suggest"), { question: g.text, question_id: `suggest:${g.gap_id}`, artifact_ids: arts });
                 if (r) await refresh();
               }}>Ask the AI to suggest (model call, needs approval)</Button>
@@ -262,8 +263,8 @@ export function DraftStage() {
       <JobLine name="draft" job={d?.draft ?? null} usePhase retry />
       {s.can("change.prepare") && (
         <div className="flex flex-wrap gap-2">
-          <Button variant="primary" data-testid="action-run-draft" title={s.aiOff ? "AI actions are switched off on this server" : undefined} disabled={!confirmed || running || pending || s.aiOff} onClick={() => generate(false)}>Generate GenAI draft</Button>
-          {r && !lin?.revised_by && <Button data-testid="action-revise-draft" title={s.aiOff ? "AI actions are switched off on this server" : undefined} disabled={!confirmed || running || pending || s.aiOff} onClick={() => generate(true)}>Revise this draft with confirmed feedback (uses the paid model)</Button>}
+          <Button variant="primary" data-testid="action-run-draft" title={aiWhy(s, "change.draft")} disabled={!confirmed || running || pending || !s.aiKind("change.draft")} onClick={() => generate(false)}>Generate GenAI draft</Button>
+          {r && !lin?.revised_by && <Button data-testid="action-revise-draft" title={aiWhy(s, "change.draft")} disabled={!confirmed || running || pending || !s.aiKind("change.draft")} onClick={() => generate(true)}>Revise this draft with confirmed feedback (uses the paid model)</Button>}
           <ApproveJobButton job={d?.draft ?? null} label="Approve this model call (a different person than the requester)" testid="action-approve-draft" />
         </div>
       )}

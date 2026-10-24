@@ -37,7 +37,10 @@ def _intent_facts(store, tenant, ws, tv, authority, upstream: dict) -> list:
         upstream["form_fields_omitted"] = omitted
     pid = (tv.get("coverage") or {}).get("proposal_job_id")
     if pid:
-        notes = sorted(w.review_notes(store, tenant, ws, pid), key=lambda n: (n["created_at"], str(n["note_id"])), reverse=True)   # newest first, by stored identity
+        digest = w.review_digest(store, tenant, ws, pid, newest=ra.MAX_FACTS)              # AH-02: at most as many notes as one pack can hold, read in SQL order
+        notes = sorted(digest["notes"], key=lambda n: (n["created_at"], str(n["note_id"])), reverse=True)   # newest first, by stored identity
+        if digest["total"] > len(digest["notes"]):
+            upstream["review_notes_omitted"] = digest["total"] - len(digest["notes"])        # counted, never silent
         for n in notes:                                                                  # the notes route shows these to project.read; the reviewer stays "a reviewer"
             out.append(ra.fact("review_note", f"A reviewer's note ({n['verdict']}): {n['text']}" if n["text"] else f"A reviewer's note: {n['verdict']}", "review_note",
                                tier="history", key=f"review_note:{n['note_id']}"))

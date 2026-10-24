@@ -157,12 +157,15 @@ def resolve_proposals(obj: Mapping, rules: Mapping[str, Mapping], existing_gaps:
         elif (kind, tuple(sorted(rids))) in asked or _norm_question(question) in asked_questions:
             no("already_asked")
         else:
-            allowed = set().union(*(rule_refs(rules[r]) for r in rids)) if can_read_evidence else set(rids)
+            named = set().union(*(rule_refs(rules[r]) for r in rids)) if can_read_evidence else set(rids)
+            # a missing exception may cite the shown rule that is in fact the unstated exception (contract section 20), as long as it also cites the named rule
+            # (2026-10-24, live run PROPOSALS-V9-S3: two such correct suggestions were refused because the second reference belonged to the exception rule)
+            allowed = named | (set().union(*(rule_refs(r) for r in rules.values())) if can_read_evidence else set(rules)) if kind == "missing_exception" else named
             refs = _canonical_refs(g["evidence_refs"], allowed)
             key = (kind, tuple(sorted(rids)))                                     # one question per pair and kind in a proposal: another wording of the same disagreement is a duplicate
             if not refs or len(refs) > limits["max_evidence_refs"]:
                 no("evidence_refs_missing_or_too_many")
-            elif not set(refs) <= allowed:
+            elif not set(refs) <= allowed or not set(refs) & named:
                 no("evidence_ref_not_in_the_named_rules")
             elif key in seen:
                 no("duplicate")
@@ -226,13 +229,28 @@ def _leaves(cond):
 
 def _case_key(rule: Mapping):
     """What kind of case a rule decides, named the same way whatever the source called the fields: (category marker, 'amount') for a rule that compares a monetary
-    amount; None when it compares no amount. The category comes from a condition literal (CAPEX), the scope or the title words; absent = ''."""
+    amount; (category marker, measure, concepts) for a rule that compares another ordered quantity (days, hours, months, litres...: the unit, else the last word of
+    the field) — such pairs are offered only inside a shared concept (CORE-V5-S2 P-07: two return windows in days were never offered); None otherwise. The category
+    comes from a condition literal (CAPEX), the scope or the title words; absent = ''."""
     leaves = _leaves(rule.get("condition"))
-    amount = next((l for l in leaves if l.get("op") in _ORDER and isinstance(l.get("field"), str) and _AMOUNT_FIELD.search(l["field"])), None)
-    if amount is None:
-        return None, None
+    ordered = [l for l in leaves if l.get("op") in _ORDER and isinstance(l.get("field"), str) and _is_number(l.get("value"))]
+    amount = next((l for l in ordered if _AMOUNT_FIELD.search(l["field"])), None)
     cat, _basis = _case_category(rule, leaves)
-    return (cat, "amount"), amount
+    if amount is not None:
+        return (cat, "amount"), amount
+    if not ordered:
+        return None, None
+    leaf = ordered[0]
+    measure = str(leaf.get("unit") or "").strip().lower() or re.split(r"[._]", leaf["field"].lower())[-1]
+    return (cat, measure, tuple(sorted(rule.get("concept_ids") or []))), leaf
+
+
+def _is_number(v) -> bool:
+    try:
+        float(str(v).replace(",", ""))
+        return not isinstance(v, bool)
+    except ValueError:
+        return False
 
 
 def _case_category(rule: Mapping, leaves: list) -> tuple:
@@ -268,6 +286,8 @@ def candidate_pairs(rules: Iterable[Mapping]) -> list:
         for k2, l2, r2 in items[i + 1:]:
             if k1 != k2 or l1.get("op") != l2.get("op"):
                 continue
+            if len(k1) == 3 and not k1[2]:                                      # a non-money measure needs a shared concept (else the pair is noise)
+                continue
             same_value = str(l1.get("value")) == str(l2.get("value"))
             same_actor = (r1.get("actor_ref") or "") == (r2.get("actor_ref") or "")
             if same_value and same_actor:
@@ -278,7 +298,8 @@ def candidate_pairs(rules: Iterable[Mapping]) -> list:
             if not same_actor:
                 why.append(f"actors {r1.get('actor_ref') or 'unknown'} and {r2.get('actor_ref') or 'unknown'}")
             basis = sorted({_case_category(r, _leaves(r.get("condition")))[1] for r in (r1, r2)} - {"none"})
-            out.append({"rule_ids": sorted([r1["rule_id"], r2["rule_id"]]), "case": k1[0] or "any category", "why": "; ".join(why), "case_from": basis})
+            out.append({"rule_ids": sorted([r1["rule_id"], r2["rule_id"]]), "case": k1[0] or "any category", "why": "; ".join(why), "case_from": basis,
+                        "measure": k1[1]})
     out.sort(key=lambda x: (x["case"], x["rule_ids"]))
     return out[:MAX_PAIRS]
 
@@ -293,7 +314,8 @@ def build_prompt_with_coverage(frozen: Mapping, rules: Iterable[Mapping], asked:
     rules = list(rules)
     asked, edges = list(asked), list(edges)
     all_pairs = candidate_pairs(rules)
-    pairs = [f"- {p['rule_ids'][0]} and {p['rule_ids'][1]}: both decide a {p['case']} purchase by its amount but state different {p['why']}"
+    pairs = [(f"- {p['rule_ids'][0]} and {p['rule_ids'][1]}: both decide a {p['case']} purchase by its amount but state different {p['why']}" if p.get("measure", "amount") == "amount"
+              else f"- {p['rule_ids'][0]} and {p['rule_ids'][1]}: both decide the same kind of case by its {p['measure']} but state different {p['why']}")
              + (f" (case read from: {', '.join(p['case_from'])})" if p.get("case_from") else "") for p in all_pairs]
     lines, used = [], 0
     for r in rules:

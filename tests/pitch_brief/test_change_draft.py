@@ -277,7 +277,7 @@ def test_endpoint_guard_refuses_non_global_or_non_vertex_before_any_client(env, 
         assert m.calls == 0 and built == []
 
 
-def test_input_admission_counts_whole_request_before_consuming_budget(env, ch, monkeypatch):
+def test_input_admission_counts_whole_request_before_consuming_budget(env, ch, monkeypatch, tmp_path):
     # a ceiling that the evidence alone fits but instructions+schema+margin do not -> refused, zero calls
     import os
     cfg = open(os.environ["RIPPLE_BUDGET_CONFIG_PATH"], encoding="utf-8").read()
@@ -285,7 +285,7 @@ def test_input_admission_counts_whole_request_before_consuming_budget(env, ch, m
     _, body = run(env, ch, monkeypatch, m)
     plen = len(m.prompts[0].encode("utf-8"))
     tight = cfg.replace("max_input_tokens_per_call: 24000", f"max_input_tokens_per_call: {plen}")
-    p = os.environ["RIPPLE_BUDGET_CONFIG_PATH"] + ".tight"
+    p = str(tmp_path / "budget.tight.yaml")                                       # never next to the configured file (it may be a tracked one)
     open(p, "w", encoding="utf-8").write(tight)
     monkeypatch.setenv("RIPPLE_BUDGET_CONFIG_PATH", p)
     m2 = Model()

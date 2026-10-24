@@ -76,7 +76,7 @@ def _action(op: Mapping, title: str) -> str:
     k = op["kind"]
     if k == "set_value":
         d = op["desired"]
-        return f"Change the value of “{title}” from {op['before']['value']} to {d['value']} {d['unit']}."
+        return f"Change the value of “{title}” from {op['before']['value']} to {d['value']} {d.get('unit') or ''}".rstrip() + "."
     if k == "set_actor":
         return f"Change who acts on “{title}” from {str(op['before']).replace('role-', '')} to {str(op['desired']).replace('role-', '')}."
     if k == "add_or_change_condition":
@@ -109,10 +109,13 @@ def build_report(operations: Iterable[Mapping], rules: Mapping[str, Mapping], re
     for o in ops:
         if o["kind"] == "set_actor" and any(e["from"] == o["desired"] or e["to"] == o["desired"] for e in relations):
             starts.append(o["desired"])
+    walked, unreached = set(), set()
     for start in dict.fromkeys(starts):
         walk = bg.traverse(relations, start, max_hops=LIMITS["max_hops"], max_nodes=LIMITS["max_nodes"])
         omitted["nodes_over_cap"] += walk["omitted"]["nodes_over_cap"]
         omitted["beyond_hops"] += walk["omitted"]["beyond_hops"]
+        walked.update(walk["nodes"])
+        unreached.update(walk["unreached"])
         for node in walk["nodes"]:
             if node == start or not node.startswith("rule-") or node in write_ids:
                 continue
@@ -129,9 +132,10 @@ def build_report(operations: Iterable[Mapping], rules: Mapping[str, Mapping], re
             cur = items.get(node)
             if cur is None or (cur["link"] == "inferred_dependency" and link == "confirmed_link"):
                 items[node] = {"rule_id": node, "title": rules[node]["title"], "link": link, "severity": sev, "reasons": ["related_by_graph"], "path": path}
-    if omitted["nodes_over_cap"] or omitted["beyond_hops"]:
-        gaps.append({"kind": "graph_traversal_limited", "ref": "", "text": f"The graph walk stopped at {LIMITS['max_hops']} steps / {LIMITS['max_nodes']} items and left out "
-                     f"{omitted['nodes_over_cap'] + omitted['beyond_hops']} further item(s); they are unknown, not unaffected."})
+    left_rules = sorted(n for n in unreached - walked if n.startswith("rule-") and n in rules)    # only a connected rule the walk never reached makes the report incomplete
+    if left_rules:
+        gaps.append({"kind": "graph_traversal_limited", "ref": "", "rule_ids": left_rules[:20], "count": len(left_rules), "text": f"The graph walk stopped at "
+                     f"{LIMITS['max_hops']} steps / {LIMITS['max_nodes']} items; {len(left_rules)} further connected rule(s) were not checked; they are unknown, not unaffected."})
     for rid in write_ids:                                    # a conflicting rule is read-only evidence and never part of the write scope
         for e in relations:
             if e["type"] == "conflicts_with" and rid in (e["from"], e["to"]):
@@ -347,13 +351,17 @@ def build_dep_prompt(frozen: Mapping, changes: Iterable[str], rules: Iterable[Ma
     lines, used = [], 0
     for r in rules:
         line = f"- id={r['rule_id']} actor={r.get('actor_ref')} concepts={','.join(r.get('concept_ids') or [])} status={r.get('status')}\n  title: {r['title']}"
+        if r.get("condition") is not None:                       # contract version 2: the condition (thresholds) the dependency may rest on
+            from core.change_intelligence.v2.business_index import condition_text
+            line += f"\n  when: {condition_text(r['condition'])}"
         if can_read_evidence:
             line += "\n  references: " + "; ".join(sorted(rule_refs(r) - {r["rule_id"]}))
         if used + len(line) > max_chars:
             break
         lines.append(line)
         used += len(line)
-    return frozen["prompt_template"].replace("{changes}", "\n".join(changes)).replace("{found}", "\n".join(found) or "(none)").replace("{rules}", "\n".join(lines) or "(none)")
+    parts = {"{changes}": "\n".join(changes), "{found}": "\n".join(found) or "(none)", "{rules}": "\n".join(lines) or "(none)"}
+    return re.sub(r"\{changes\}|\{found\}|\{rules\}", lambda m: parts[m.group(0)], frozen["prompt_template"])     # one pass: data never expands a placeholder
 
 
 def merge_dependencies(report: Mapping, proposed: Mapping, *, rules_not_shown: int = 0) -> dict:

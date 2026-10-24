@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Callout, Muted, StatePill, Tech } from "@/components/bits";
 import { useAction } from "@/lib/useAction";
 import { useSession } from "@/session";
+import { aiWhy } from "@/lib/aiKinds";
 import { useNotify } from "@/lib/notify";
 import { useParam } from "@/lib/param";
 import { useFlow } from "@/features/changes/flow";
@@ -118,7 +119,7 @@ export function SimulationAnalysisCard({ ws, simulationJobId, impactJobId }: { w
       {r.status === "none" && (
         <>
           <Muted>No AI reading exists for this simulation. Writing one uses the paid model (one call, within your AI permission).</Muted>
-          {s.can("ai.use") && <div><Button data-testid="sim-analysis-request" title={s.aiOff ? "AI actions are switched off on this server" : undefined} disabled={pending || s.aiOff} onClick={async () => { if (await run(() => api("POST", "/v2/simulation-analyses", { workspace_id: ws, simulation_job_id: simulationJobId, impact_job_id: impactJobId }), { stale: true })) await load(); }}>Ask the AI to read this simulation (uses the paid model)</Button></div>}
+          {s.can("ai.use") && <div><Button data-testid="sim-analysis-request" title={aiWhy(s, "sim.analysis")} disabled={pending || !s.aiKind("sim.analysis")} onClick={async () => { if (await run(() => api("POST", "/v2/simulation-analyses", { workspace_id: ws, simulation_job_id: simulationJobId, impact_job_id: impactJobId }), { stale: true })) await load(); }}>Ask the AI to read this simulation (uses the paid model)</Button></div>}
         </>
       )}
       {r.status === "waiting_for_approval" && (

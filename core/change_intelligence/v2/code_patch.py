@@ -41,8 +41,13 @@ def path_allowed(path: str, allowlist: Iterable[str], protected: Iterable[str] =
     return None
 
 
-def resolve_file(rec_path: str, repo_files: Iterable[str]) -> tuple[Optional[str], str]:
-    """The one repository file a recommendation path names (equal, or ending in '/<path>'); (None, reason) otherwise."""
+def resolve_file(rec_path: str, repo_files: Iterable[str], source_root: Optional[str] = None) -> tuple[Optional[str], str]:
+    """The one repository file a recommendation path names (equal, or ending in '/<path>'); (None, reason) otherwise. `source_root` (declared per repository,
+    optional) is the folder the workspace's sources were imported from: a recommendation path under it is read relative to the repository root
+    (live finding SUR03-V2-A10: sources imported as `fixtures/harbor_public/app/...`, repository rooted at `app/...`). Never guessed from the paths."""
+    root = (normalize_path(source_root) or "").rstrip("/") if source_root else ""
+    if root and isinstance(rec_path, str) and rec_path.startswith(root + "/"):
+        rec_path = rec_path[len(root) + 1:]
     rec_norm = normalize_path(rec_path)
     if rec_norm is None:
         return None, "path_outside_allowlist"
@@ -115,7 +120,7 @@ def literal_sites(repo_files: Iterable[str], read_file, *, before_value, allowli
 
 
 def plan(recommendations: Iterable[Mapping], operations: Mapping[str, Mapping], repo_files: Iterable[str], read_file, *, allowlist: Iterable[str],
-         protected: Iterable[str] = PROTECTED_DEFAULT, extra_sites: Iterable[Mapping] = ()) -> dict:
+         protected: Iterable[str] = PROTECTED_DEFAULT, extra_sites: Iterable[Mapping] = (), source_root: Optional[str] = None) -> dict:
     """Build the candidate: `{files[{path, before_hash, after_hash, replacements}], diff, patch_hash, implemented[{ref, rule_id, path}], not_implemented[{ref, reason}]}`.
     `read_file(path) -> str` reads the checkout; `operations` = op_id -> operation (for the decided value)."""
     repo_files = list(repo_files)
@@ -129,7 +134,7 @@ def plan(recommendations: Iterable[Mapping], operations: Mapping[str, Mapping], 
         if op.get("kind") != "set_value" or not isinstance(op.get("desired"), Mapping):
             skipped.append({"ref": ref, "reason": "operation_not_a_literal_change"})
             continue
-        path, why = resolve_file(rec["path"], repo_files)
+        path, why = resolve_file(rec["path"], repo_files, source_root)
         if path is None:
             skipped.append({"ref": ref, "reason": why, "detail": rec["path"]})
             continue

@@ -17,6 +17,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from infra.adapters import v2_request_threads as rt
+from infra.db_offload import run_db
 from infra.adapters import v2_request_tasks
 from infra.adapters.v2_identity import IdentityDenied
 from infra.adapters.v2_policy import PermissionDenied, require, require_human_actor
@@ -64,14 +65,14 @@ def _run(request: Request, workspace_id, action, *, mutating: bool, not_found: s
 @router.post("/v2/requests/{family}/{request_id}/assistant/threads")
 async def create_assistant_thread(request: Request, family: str, request_id: str):
     body = await _json_body(request)
-    return _run(request, body.get("workspace_id"), lambda store, tenant, a: rt.create_thread(store, tenant, body["workspace_id"], family, request_id, a),
+    return await run_db(_run, request, body.get("workspace_id"), lambda store, tenant, a: rt.create_thread(store, tenant, body["workspace_id"], family, request_id, a),
                 mutating=True, not_found=v2_request_tasks.NOT_FOUND)
 
 
 @router.post("/v2/requests/{family}/{request_id}/assistant/ask")
 async def first_ask_assistant(request: Request, family: str, request_id: str):
     body = await _json_body(request)
-    return _run(request, body.get("workspace_id"), lambda store, tenant, a: rt.first_ask(store, tenant, body["workspace_id"], family, request_id, a, question=body.get("question"),
+    return await run_db(_run, request, body.get("workspace_id"), lambda store, tenant, a: rt.first_ask(store, tenant, body["workspace_id"], family, request_id, a, question=body.get("question"),
                                                                                          idempotency_key=body.get("idempotency_key")),
                 mutating=True, not_found=v2_request_tasks.NOT_FOUND)
 
@@ -90,7 +91,7 @@ def read_assistant_thread(request: Request, thread_id: str, workspace_id: str):
 @router.post("/v2/request-assistant/threads/{thread_id}/messages")
 async def ask_assistant(request: Request, thread_id: str):
     body = await _json_body(request)
-    return _run(request, body.get("workspace_id"), lambda store, tenant, a: rt.ask(store, tenant, body["workspace_id"], thread_id, a, question=body.get("question"),
+    return await run_db(_run, request, body.get("workspace_id"), lambda store, tenant, a: rt.ask(store, tenant, body["workspace_id"], thread_id, a, question=body.get("question"),
                                                                                    idempotency_key=body.get("idempotency_key"), after_seq=body.get("after_seq")),
                 mutating=True, not_found=rt.THREAD_NOT_FOUND)
 
@@ -112,5 +113,5 @@ def citation_source(request: Request, thread_id: str, message_id: str, fact_ref:
 @router.post("/v2/request-assistant/threads/{thread_id}/messages/{message_id}/cancel")
 async def cancel_assistant_message(request: Request, thread_id: str, message_id: str):
     body = await _json_body(request)
-    return _run(request, body.get("workspace_id"), lambda store, tenant, a: rt.cancel(store, tenant, body["workspace_id"], thread_id, message_id, a),
+    return await run_db(_run, request, body.get("workspace_id"), lambda store, tenant, a: rt.cancel(store, tenant, body["workspace_id"], thread_id, message_id, a),
                 mutating=True, not_found=rt.THREAD_NOT_FOUND)

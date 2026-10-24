@@ -11,6 +11,7 @@ place permissions are evaluated, so no route hand-rolls its own role check.
 
 from __future__ import annotations
 
+from infra.db_offload import db_route, request_json
 import os
 
 from fastapi import APIRouter, Request
@@ -107,6 +108,15 @@ async def _json_body(request: Request) -> dict:
     return body if isinstance(body, dict) else {}
 
 
+def _json_body_sync(request: Request) -> dict:
+    """`_json_body` for a `db_route` function (the body was read on the event loop)."""
+    try:
+        body = request_json(request)
+    except Exception:
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
 def _enforce_job_quota(store: PostgresV2Store, tenant_id: str, workspace_id: str,
                        kind: str) -> int | None:
     """Quota admission and project budget enforcement: actually CALL the quota
@@ -144,13 +154,14 @@ def _enforce_job_quota(store: PostgresV2Store, tenant_id: str, workspace_id: str
 
 
 @router.post("/v2/jobs")
-async def create_job(request: Request):
+@db_route
+def create_job(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, kind, job_id = body.get("workspace_id"), body.get("kind"), body.get("job_id")
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
     if not all(isinstance(x, str) and x for x in (workspace_id, kind, job_id)):
@@ -560,13 +571,14 @@ def job_status(request: Request, job_id: str, workspace_id: str):
 
 
 @router.post("/v2/jobs/{job_id}/approve")
-async def approve_job(request: Request, job_id: str):
+@db_route
+def approve_job(request: Request, job_id: str):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     if not isinstance(workspace_id, str) or not workspace_id:
         return _error("workspace_id required", 400)
@@ -625,7 +637,8 @@ def _decision_payload_hash(action: str, reason: str, expected_digest: str | None
 
 
 @router.post("/v2/jobs/{job_id}/decision")
-async def decide_job(request: Request, job_id: str):
+@db_route
+def decide_job(request: Request, job_id: str):
     """AI7-T04: human approve/reject/request_changes on a `kind=approval`
     job (`job_id` is that approval job's OWN id -- L-031, never
     `proposal_job_id`). Distinct from the job-EXECUTION `/approve` route
@@ -643,7 +656,7 @@ async def decide_job(request: Request, job_id: str):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     if not isinstance(workspace_id, str) or not workspace_id:
         return _error("workspace_id required", 400)
@@ -724,8 +737,9 @@ async def decide_job(request: Request, job_id: str):
         if proposal_requester:
             require_distinct_approver(proposal_requester, authority["account_id"], require_distinct=distinct_required)
         if action == "approve":
-            from infra.v2_work_routes import open_change_requests, review_notes
-            blocked = open_change_requests(review_notes(store, authority["tenant_id"], workspace_id, (job.get("payload") or {}).get("proposal_job_id") or ""))
+            from infra.v2_work_routes import open_change_requests, review_digest
+            blocked = open_change_requests(review_digest(store, authority["tenant_id"], workspace_id, (job.get("payload") or {}).get("proposal_job_id") or "",
+                                                         newest=0)["latest"])            # AH-02: effective verdict per reviewer from SQL (same result, bounded work)
             if blocked:
                 return _error("a reviewer asked for changes on this proposal (" + ", ".join(blocked) + "); it cannot be approved until they mark it ready "
                               "or the requester sends a revised proposal", 409)
@@ -796,13 +810,14 @@ def decision_history(request: Request, job_id: str, workspace_id: str):
 
 
 @router.post("/v2/jobs/{job_id}/publish")
-async def publish_job(request: Request, job_id: str):
+@db_route
+def publish_job(request: Request, job_id: str):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     if not isinstance(workspace_id, str) or not workspace_id:
         return _error("workspace_id required", 400)
@@ -838,7 +853,8 @@ async def publish_job(request: Request, job_id: str):
 
 
 @router.post("/v2/jobs/{job_id}/cancel")
-async def cancel_job_route(request: Request, job_id: str):
+@db_route
+def cancel_job_route(request: Request, job_id: str):
     """REWORK round (task card, finding B: "Add cancel ... via authenticated,
     server-side permission/scope-checked routes; define exactly which states
     allow the operation, idempotency, and the error for an operation attempted
@@ -855,7 +871,7 @@ async def cancel_job_route(request: Request, job_id: str):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     reason = body.get("reason") if isinstance(body.get("reason"), str) else "cancelled_by_operator"
     if not isinstance(workspace_id, str) or not workspace_id:
@@ -882,7 +898,8 @@ async def cancel_job_route(request: Request, job_id: str):
 
 
 @router.post("/v2/jobs/{job_id}/retry")
-async def retry_job_route(request: Request, job_id: str):
+@db_route
+def retry_job_route(request: Request, job_id: str):
     """REWORK round (task card, finding B: "Add ... retry via authenticated,
     server-side permission/scope-checked routes ... Retry must be bounded
     with a durable reason/retryable flag"). Only a job whose worker execution
@@ -899,7 +916,7 @@ async def retry_job_route(request: Request, job_id: str):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     if not isinstance(workspace_id, str) or not workspace_id:
         return _error("workspace_id required", 400)
@@ -993,13 +1010,14 @@ def _self_approval_block(store: PostgresV2Store, tenant_id: str, workspace_id: s
 
 
 @router.post("/v2/knowledge/confirm")
-async def confirm_knowledge(request: Request):
+@db_route
+def confirm_knowledge(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     claim_id = body.get("claim_id")
     if not all(isinstance(x, str) and x for x in (workspace_id, claim_id)):
@@ -1096,7 +1114,8 @@ def _index_build(store: PostgresV2Store, tenant_id: str, workspace_id: str,
 
 
 @router.post("/v2/knowledge/accept")
-async def accept_knowledge(request: Request):
+@db_route
+def accept_knowledge(request: Request):
     """AI5-T04: the acceptance-gated publish route the task card calls
     'knowledge.confirm -> current permission/inputs + acceptance gate ->
     immutable KM/CAS publication -> projection/index build -> scoped
@@ -1118,7 +1137,7 @@ async def accept_knowledge(request: Request):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     knowledge_revision_id = body.get("knowledge_revision_id")
     source_revision_id = body.get("source_revision_id")
@@ -1305,7 +1324,8 @@ def knowledge_blockers(request: Request, workspace_id: str):
 
 
 @router.post("/v2/conflict/resolve")
-async def resolve_conflict(request: Request):
+@db_route
+def resolve_conflict(request: Request):
     """AI5-T02 D1: 'chon authority cua rule khong sua observations.' Picking
     an authority (e.g. SOP over code) writes a decision only -- never edits
     the underlying observation/candidate. Uses the same append-only ledger
@@ -1316,7 +1336,7 @@ async def resolve_conflict(request: Request):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     conflict_id = body.get("conflict_id") or body.get("target")
     authoritative_claim_id = body.get("authoritative_claim_id")
@@ -1384,7 +1404,8 @@ def _supersede_or_revoke(request_body: dict, *, action: str, store, authority):
 
 
 @router.post("/v2/decisions/supersede")
-async def supersede_decision(request: Request):
+@db_route
+def supersede_decision(request: Request):
     """AI5-T02 D1: 'Supersede/revoke decision bang event moi; khong sua/xoa
     lich su.' Adds a NEW decision row that references the prior one; the
     prior row's own columns are never touched, only its nullable
@@ -1394,7 +1415,7 @@ async def supersede_decision(request: Request):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     try:
         authority = _authority(identity, request, workspace_id)
@@ -1416,7 +1437,8 @@ async def supersede_decision(request: Request):
 
 
 @router.post("/v2/decisions/revoke")
-async def revoke_decision(request: Request):
+@db_route
+def revoke_decision(request: Request):
     """AI5-T02 D1: revoke is the same append-only-event pattern as supersede,
     with its own `action='revoke'`/`revoked_by` back-link so the two are
     distinguishable in the ledger read (AI5-T04)."""
@@ -1425,7 +1447,7 @@ async def revoke_decision(request: Request):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     try:
         authority = _authority(identity, request, workspace_id)
@@ -1447,7 +1469,8 @@ async def revoke_decision(request: Request):
 
 
 @router.post("/v2/gap/accepted_unknown")
-async def gap_accepted_unknown(request: Request):
+@db_route
+def gap_accepted_unknown(request: Request):
     """AI5-T02 D2: 'unknown chi duoc accepted_unknown theo policy, khong tao
     thong tin thieu. Chan no khi critical cho change.' Reuses the EXISTING,
     already-reviewed `core/change_intelligence/v2/lifecycle.py` `gap` machine
@@ -1476,7 +1499,7 @@ async def gap_accepted_unknown(request: Request):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     gap_id = body.get("gap_id")
     if not all(isinstance(x, str) and x for x in (workspace_id, gap_id)):
@@ -1561,7 +1584,8 @@ def hitl_queue(request: Request, workspace_id: str):
 
 
 @router.post("/v2/hitl/answer")
-async def hitl_answer(request: Request):
+@db_route
+def hitl_answer(request: Request):
     """AI5-T01: an answer draft for a pending question -- `knowledge.answer`
     only (already the "requester" role's permission, never granted to
     "knowledge_owner"). This NEVER itself closes the GAP/question or mints a
@@ -1576,7 +1600,7 @@ async def hitl_answer(request: Request):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     question_id = body.get("question_id")
     answer_text = body.get("answer")
@@ -1620,13 +1644,14 @@ def _feed_policy_changed(identity, authority, workspace_id) -> None:
 
 
 @router.post("/v2/membership/grant")
-async def grant_membership(request: Request):
+@db_route
+def grant_membership(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity = _identity_store()
     if identity is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     account_id = body.get("account_id")
     roles = body.get("roles")
@@ -1653,13 +1678,14 @@ async def grant_membership(request: Request):
 
 
 @router.post("/v2/membership/revoke")
-async def revoke_membership(request: Request):
+@db_route
+def revoke_membership(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity = _identity_store()
     if identity is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     account_id = body.get("account_id")
     if not all(isinstance(x, str) and x for x in (workspace_id, account_id)):
@@ -1683,7 +1709,8 @@ async def revoke_membership(request: Request):
 
 
 @router.post("/v2/intent/parse")
-async def parse_intent(request: Request):
+@db_route
+def parse_intent(request: Request):
     """AI6-T01 `intent.parse`: consume the current accepted KM/source/
     decision tuple (pinned fresh via `store.head` inside `store.parse_intent`
     itself) + a grounded rule/alias `target_hint` (a real `RuleCandidate.
@@ -1695,7 +1722,7 @@ async def parse_intent(request: Request):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     raw_request = body.get("raw_request")
     structured_form = body.get("structured_form")
@@ -1729,7 +1756,8 @@ async def parse_intent(request: Request):
 
 
 @router.post("/v2/intent/confirm")
-async def confirm_intent(request: Request):
+@db_route
+def confirm_intent(request: Request):
     """AI6-T01 `intent.confirm`: rechecks current authority/versions (the
     workspace's CURRENT decision_epoch/knowledge_revision_id/
     source_revision_id, independently -- L-007) at confirm time, never just
@@ -1743,7 +1771,7 @@ async def confirm_intent(request: Request):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     intent_id = body.get("intent_id")
     idempotency_key = body.get("idempotency_key")

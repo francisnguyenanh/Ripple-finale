@@ -30,12 +30,19 @@ def confirm_change_intent(store, tenant_id, workspace_id, *, actor_id, job_id, p
         raise BusinessKnowledgeRefused("preview_stale", "what you are confirming is not what was shown")
     pin = result["pin"]
     payload_hash = canonical_hash({"job": job_id, "preview": preview_hash, "actor": actor_id})
+    # the requester confirms with `intent.confirm_own`; a person who may confirm knowledge (`knowledge.confirm`) confirms any change, their own included: the route
+    # admits either, so the re-check under the lock accepts either too (live run SUR03-V2-A10: an admin's own change was refused "no longer holds" at publish)
+    from infra.adapters.v2_business import current_permissions
+    own = actor_id == rec.get("requested_by") and "intent.confirm_own" in current_permissions(store, tenant_id, workspace_id, actor_id)
     with store._tx() as cur:
+        prior = store._replay(cur, tenant_id, workspace_id, OPERATION, f"intent-{job_id}", payload_hash)
+        if prior is not None:
+            return {"intent_id": job_id, "snapshot_id": pin["snapshot_id"], "operations": len(result["operations"]), "replayed": True}
+        store._recheck_actor_authority(cur, tenant_id, workspace_id, actor_id, "intent.confirm_own" if own else "knowledge.confirm")   # AH-03: before the head lock
         head = store._lock_head(cur, tenant_id, workspace_id)
         prior = store._replay(cur, tenant_id, workspace_id, OPERATION, f"intent-{job_id}", payload_hash)
         if prior is not None:
             return {"intent_id": job_id, "snapshot_id": pin["snapshot_id"], "operations": len(result["operations"]), "replayed": True}
-        store._recheck_actor_authority(cur, tenant_id, workspace_id, actor_id, "intent.confirm_own" if actor_id == rec.get("requested_by") else "knowledge.confirm")
         cur.execute("SELECT accepted_snapshot_id, business_revision FROM v2_business_heads WHERE tenant_id=%s AND workspace_id=%s", (tenant_id, workspace_id))
         row = cur.fetchone() or (None, 0)
         if (row[0] != pin["snapshot_id"] or row[1] != pin["business_revision"] or head.source_revision_id != pin["source_revision_id"]
@@ -92,7 +99,7 @@ def impact_for_intent(store, tenant_id, workspace_id, intent_id):
     intent, snap, artifacts, pin = got
     rules = {r["rule_id"]: r for r in snap["rules"]}
     report = business_impact.build_report(intent["operations"], rules, snap["relations"], pin=pin, known_artifacts=artifacts)
-    return {"intent": intent, "report": report, "titles": {rid: r["title"] for rid, r in rules.items()}}
+    return {"intent": intent, "report": report, "titles": {rid: r["title"] for rid, r in rules.items()}, "rules": rules}
 
 
 def draft_for_intent(store, tenant_id, workspace_id, intent_id, *, proposed_dependencies=None, dependency_state=None):

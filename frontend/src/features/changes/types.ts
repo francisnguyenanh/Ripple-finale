@@ -168,7 +168,7 @@ export interface Contract {
 }
 
 /** Reviewer notes of the proposal (open requests block approval). */
-export interface ReviewNotesState { open_change_requests: string[]; notes: { actor_id: string; verdict: string; text: string }[] }
+export interface ReviewNotesState { open_change_requests: string[]; notes: { actor_id: string; verdict: string; text: string }[]; total?: number; has_more?: boolean; next_before?: string | null }
 
 export interface FlowData {
   chat: Chat | null;

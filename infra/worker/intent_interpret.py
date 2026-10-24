@@ -29,7 +29,7 @@ from infra.worker.execution_types import (
     is_timeout_exception,
 )
 from infra.worker.gap_answer import _model_object, load_frozen_config as _gap_config
-from infra.worker.live_analysis import _client_for_model, _field, _token_count
+from infra.worker.live_analysis import generate_and_close, _client_for_model, _field, _token_count
 
 EXECUTOR_ID = "intent.interpret.v1"
 ROLE = "intent.interpret"
@@ -256,7 +256,7 @@ class IntentInterpretExecutor:
         calls.consume()
         try:
             client = _client_for_model(model_id)
-            response = client.models.generate_content(model=model_id, contents=request.prompt, config=call_config)
+            response = generate_and_close(client, model=model_id, contents=request.prompt, config=call_config)
         except Exception as exc:
             code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
             if callable(code):

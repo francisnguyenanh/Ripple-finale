@@ -94,7 +94,9 @@ def diagnostics(response, *, model_id: str | None = None, requested_cap: int | N
            "response_id": (_get(response, "response_id") if isinstance(_get(response, "response_id"), str) else None),
            "model_version": (_get(response, "model_version") if isinstance(_get(response, "model_version"), str) else None),
            "pinned_model": model_id, "requested_output_cap": requested_cap, "text_chars": text_len}
-    return {k: v for k, v in out.items() if v not in (None, [], {})} | {"finish_reason": out["finish_reason"]}
+    from infra.worker.safe_diagnostics import safe_diagnostics
+    kept = safe_diagnostics({k: v for k, v in out.items() if v not in (None, [], {})})     # AH-05: finish_message is model / provider text: safe form or length only
+    return kept | {"finish_reason": kept.get("finish_reason")}
 
 
 def _attach(exc: BaseException, response, model_id, requested_cap, stage) -> BaseException:

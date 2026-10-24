@@ -90,8 +90,15 @@ def commit_snapshot(store, tenant_id, workspace_id, *, snapshot_id, actor_id, li
     content_hash = canonical_hash({"rules": rules, "relations": relations, "gaps": gaps})
 
     with store._tx() as cur:
-        head = store._lock_head(cur, tenant_id, workspace_id)
+        # AH-03 lock order (account, membership, then workspace head: the order `revoke_membership` takes, membership then workspace): the authority recheck comes
+        # BEFORE the head lock; the reverse order deadlocked against a concurrent revocation (two-connection test). An idempotent replay is still answered first.
         prior = store._replay(cur, tenant_id, workspace_id, OPERATION, idempotency_key, payload_hash)
+        if prior is not None:
+            return prior
+        if lifecycle_state == "ACCEPTED" or recheck_authority:
+            store._recheck_actor_authority(cur, tenant_id, workspace_id, actor_id, CONFIRM_PERMISSION)
+        head = store._lock_head(cur, tenant_id, workspace_id)
+        prior = store._replay(cur, tenant_id, workspace_id, OPERATION, idempotency_key, payload_hash)     # a commit that won the race while this one waited
         if prior is not None:
             return prior
         if head.version != expected_version:
@@ -99,8 +106,6 @@ def commit_snapshot(store, tenant_id, workspace_id, *, snapshot_id, actor_id, li
         if (head.source_revision_id != source_revision_id or head.knowledge_revision_id != km_revision_id
                 or head.decision_epoch != decision_epoch):
             raise StaleVersion("stale_snapshot_pin: the source, knowledge or decision head moved")
-        if lifecycle_state == "ACCEPTED" or recheck_authority:
-            store._recheck_actor_authority(cur, tenant_id, workspace_id, actor_id, CONFIRM_PERMISSION)
         cur.execute("""INSERT INTO v2_business_heads (tenant_id, workspace_id) VALUES (%s,%s) ON CONFLICT DO NOTHING""", (tenant_id, workspace_id))
         cur.execute("""SELECT business_revision, accepted_snapshot_id FROM v2_business_heads
             WHERE tenant_id=%s AND workspace_id=%s FOR UPDATE""", (tenant_id, workspace_id))

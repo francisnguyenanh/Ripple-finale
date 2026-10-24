@@ -7,6 +7,8 @@ Nothing here changes the knowledge; raising a hypothesis as a question goes thro
 """
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -56,8 +58,9 @@ def _shell(request, workspace_id, action, *, mutating=True, needs_ai=False):
 
 
 @router.post("/v2/business/mining")
-async def request_mining(request: Request):
-    body = await _json_body(request)
+@db_route
+def request_mining(request: Request):
+    body = _json_body_sync(request)
     attempt = _attempt(body.get("attempt", 1))
     if attempt is None:
         return _error("attempt (1-3) required", 400)
@@ -79,8 +82,9 @@ def read_mining(request: Request, workspace_id: str, snapshot_id: str | None = N
 
 
 @router.post("/v2/business/mining/hypotheses/{hypothesis_id}/dismiss")
-async def dismiss_hypothesis(request: Request, hypothesis_id: str):
-    body = await _json_body(request)
+@db_route
+def dismiss_hypothesis(request: Request, hypothesis_id: str):
+    body = _json_body_sync(request)
     attempt = _attempt(body.get("attempt", 1))
     if attempt is None:
         return _error("attempt (1-3) required", 400)

@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from psycopg2.extras import Json
@@ -24,6 +26,7 @@ _NO_STORE = {"Cache-Control": "no-store"}
 NOTE_EVENT = "CHANGE_REVIEW_NOTE"
 VERDICTS = ("comment", "request_changes", "ready")
 MAX_NOTE_CHARS = 1000
+REVIEW_PAGE, REVIEW_PAGE_MAX = 100, 200          # AH-02: the review history is read as keyset pages, newest first (the effective verdicts never depend on the page)
 INBOX_LIMIT = 40
 REVIEWABLE = ("NEEDS_CHECK", "RUN_REVIEW", "REVIEW_RUNNING", "PREPARE_APPROVAL", "APPROVAL_PREPARING", "AWAITING_DECISION")   # a finished proposal that no decision has closed
 APPROVER_STEPS = ("change.approve", "verification.contract.set")
@@ -45,6 +48,53 @@ def review_notes(store, tenant: str, ws: str, proposal_job_id: str) -> list[dict
     return out
 
 
+def review_digest(store, tenant: str, ws: str, proposal_job_id: str, *, newest: int, before: tuple | None = None) -> dict:
+    """AH-02: what readers of a proposal's review need, with bounded work whatever the history length:
+    `notes` = the `newest` notes (stable order: created_at, then id; returned oldest-first like `review_notes`), `total` = every note, `latest` = one synthetic note
+    per reviewer carrying that reviewer's EFFECTIVE verdict (their latest `request_changes` / `ready`, else `comment`) so `open_change_requests(latest)` equals
+    `open_change_requests(review_notes(...))` and an old unresolved request is never lost behind newer comments. All of it is computed in SQL.
+    `before` = (created_at, id) of the oldest note already shown: the page is then the `newest` notes strictly older than it (keyset; a note written meanwhile is
+    newer than every cursor, so paging back never repeats or skips one). `has_more` says whether older notes exist below the page."""
+    args = (tenant, ws, NOTE_EVENT, proposal_job_id)
+    where = "tenant_id=%s AND workspace_id=%s AND event_type=%s AND payload->>'proposal_job_id'=%s"
+    with store._tx() as cur:
+        cur.execute(f"SELECT count(*) FROM v2_audit WHERE {where}", args)
+        total = cur.fetchone()[0]
+        page_where, page_args = (where + " AND (created_at, id) < (%s, %s)", args + tuple(before)) if before else (where, args)
+        cur.execute(f"""SELECT id, actor_id, payload, created_at FROM v2_audit WHERE {page_where} ORDER BY created_at DESC, id DESC LIMIT %s""",
+                    page_args + (int(newest) + 1,))
+        rows = cur.fetchall()
+        has_more, rows = len(rows) > int(newest), rows[:int(newest)]
+        cur.execute(f"""SELECT DISTINCT ON (actor_id) actor_id, payload->>'verdict' FROM v2_audit WHERE {where} AND payload->>'verdict' IN ('request_changes', 'ready')
+                        ORDER BY actor_id, id DESC""", args)
+        effective = dict(cur.fetchall())
+        cur.execute(f"SELECT DISTINCT actor_id FROM v2_audit WHERE {where}", args)
+        reviewers = sorted(r[0] for r in cur.fetchall())
+    notes = []
+    for rid, actor, payload, at in reversed(rows):
+        p = payload if isinstance(payload, dict) else {}
+        notes.append({"note_id": rid, "reviewer": actor, "verdict": p.get("verdict"), "text": p.get("text") or "",
+                      "source_revision_id": p.get("source_revision_id"), "created_at": at.isoformat()})
+    latest = [{"reviewer": r, "verdict": effective.get(r, "comment")} for r in reviewers]
+    next_before = f"{rows[-1][3].isoformat()}|{rows[-1][0]}" if has_more and rows else None
+    return {"notes": notes, "total": total, "latest": latest, "has_more": has_more, "next_before": next_before}
+
+
+def _cursor(raw) -> tuple | None:
+    """`next_before` back into (created_at, id); anything else is refused by the caller (400)."""
+    import datetime as _dt
+    if raw is None or raw == "":
+        return None
+    at, _, rid = str(raw).rpartition("|")
+    return (_dt.datetime.fromisoformat(at), int(rid))
+
+
+def _notes_body(store, tenant, ws, pid, *, limit=REVIEW_PAGE, before=None) -> dict:
+    d = review_digest(store, tenant, ws, pid, newest=limit, before=before)
+    return {"proposal_job_id": pid, "notes": d["notes"], "open_change_requests": open_change_requests(d["latest"]), "total": d["total"],
+            "has_more": d["has_more"], "next_before": d["next_before"]}
+
+
 def open_change_requests(notes: list[dict]) -> list[str]:
     """Reviewers whose LATEST note on this proposal is 'request changes' (a later 'ready' or comment-free 'ready' from them clears it)."""
     latest: dict[str, str] = {}
@@ -55,16 +105,19 @@ def open_change_requests(notes: list[dict]) -> list[str]:
 
 
 @router.get("/v2/changes/{proposal_job_id}/review-notes")
-def get_review_notes(request: Request, proposal_job_id: str, workspace_id: str):
+def get_review_notes(request: Request, proposal_job_id: str, workspace_id: str, limit: int = REVIEW_PAGE, before: str | None = None):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
     try:
         authority = _authority(identity, request, workspace_id)
         require(authority, "project.read")
-        notes = review_notes(store, authority["tenant_id"], workspace_id, proposal_job_id)
-        return JSONResponse({"proposal_job_id": proposal_job_id, "notes": notes, "open_change_requests": open_change_requests(notes),
-                             "you_can_review": "change.review" in permissions_for(authority.get("roles"))}, headers=_NO_STORE)
+        try:
+            cursor = _cursor(before)
+        except ValueError:
+            return _error("before must be a next_before value from this route", 400)
+        body = _notes_body(store, authority["tenant_id"], workspace_id, proposal_job_id, limit=max(1, min(int(limit), REVIEW_PAGE_MAX)), before=cursor)
+        return JSONResponse({**body, "you_can_review": "change.review" in permissions_for(authority.get("roles"))}, headers=_NO_STORE)
     except IdentityDenied as exc:
         status = _identity_denied_status(exc)
         return _error("sign in required" if status == 401 else "permission denied", status)
@@ -73,13 +126,14 @@ def get_review_notes(request: Request, proposal_job_id: str, workspace_id: str):
 
 
 @router.post("/v2/changes/review-note")
-async def post_review_note(request: Request):
+@db_route
+def post_review_note(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     ws, pid, verdict, text = body.get("workspace_id"), body.get("proposal_job_id"), body.get("verdict"), body.get("text")
     try:
         authority = _authority(identity, request, ws if isinstance(ws, str) else "")      # sign-in and rights BEFORE the body is looked at
@@ -98,18 +152,19 @@ async def post_review_note(request: Request):
             return _error("a review note needs a finished proposal", 409)
         if job.get("requested_by") == authority["account_id"]:
             raise PermissionDenied("a proposal cannot be reviewed by the person who made it")
-        notes = review_notes(store, tenant, ws, pid)
-        mine = [n for n in notes if n["reviewer"] == authority["account_id"]]
-        if mine and mine[-1]["verdict"] == verdict and mine[-1]["text"] == text:
-            return JSONResponse({"proposal_job_id": pid, "notes": notes, "open_change_requests": open_change_requests(notes), "replayed": True},
-                                headers=_NO_STORE)       # a double click or retry records nothing twice
+        with store._tx() as cur:                                                    # this reviewer's last note only (bounded), for the replay check
+            cur.execute("""SELECT payload->>'verdict', COALESCE(payload->>'text', '') FROM v2_audit WHERE tenant_id=%s AND workspace_id=%s AND event_type=%s
+                           AND payload->>'proposal_job_id'=%s AND actor_id=%s ORDER BY created_at DESC, id DESC LIMIT 1""",
+                        (tenant, ws, NOTE_EVENT, pid, authority["account_id"]))
+            last = cur.fetchone()
+        if last is not None and last[0] == verdict and last[1] == text:
+            return JSONResponse({**_notes_body(store, tenant, ws, pid), "replayed": True}, headers=_NO_STORE)   # a double click or retry records nothing twice
         head = store.head(tenant, ws)
         with store._tx() as cur:
             cur.execute("""INSERT INTO v2_audit (tenant_id, workspace_id, event_type, actor_id, payload) VALUES (%s,%s,%s,%s,%s)""",
                         (tenant, ws, NOTE_EVENT, authority["account_id"],
                          Json({"proposal_job_id": pid, "verdict": verdict, "text": text, "source_revision_id": head.source_revision_id})))
-        notes = review_notes(store, tenant, ws, pid)
-        return JSONResponse({"proposal_job_id": pid, "notes": notes, "open_change_requests": open_change_requests(notes)}, headers=_NO_STORE)
+        return JSONResponse(_notes_body(store, tenant, ws, pid), headers=_NO_STORE)
     except IdentityDenied as exc:
         status = _identity_denied_status(exc)
         return _error("sign in required" if status == 401 else "permission denied", status)
@@ -322,7 +377,7 @@ def work_inbox(request: Request, workspace_id: str):
                 continue                                             # the projection reads the newest proposal of an intent
             seen_intents.add(intent_id)
             c = _chain(store, tenant, workspace_id, prop, by_kind)
-            notes = review_notes(store, tenant, workspace_id, prop["job_id"])
+            digest = review_digest(store, tenant, workspace_id, prop["job_id"], newest=0)      # AH-02: count and effective verdicts, no history read
             try:
                 title = (store.get_intent(tenant, workspace_id, intent_id).get("raw_request") or "")[:140] or None
             except Exception:
@@ -333,7 +388,7 @@ def work_inbox(request: Request, workspace_id: str):
                                         "apply": (c["apply"] or {}).get("job_id")}.items() if v}
             mine = prop.get("requested_by") == me
             place("intent_flow", intent_id, {"proposal_job_id": prop["job_id"], "title": title or prop["job_id"], "requested_by": prop.get("requested_by"), "page": "changes",
-                                             "params": params, "mine": mine, "reviewer_notes": len(notes), "open_change_requests": open_change_requests(notes)}, mine)
+                                             "params": params, "mine": mine, "reviewer_notes": digest["total"], "open_change_requests": open_change_requests(digest["latest"])}, mine)
         if "intent.create" in perms:                                     # the caller's own requests that have not reached a proposal yet
             drafts = [store.job_record(tenant, workspace_id, j) for j in _jobs(store, tenant, workspace_id, "change.draft")[:INBOX_LIMIT]]
             for item in _own_requests(store, tenant, workspace_id, me, seen_intents, drafts):

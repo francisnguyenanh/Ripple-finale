@@ -174,3 +174,37 @@ def test_the_asking_sentence_stays_whole_wherever_it_stands_replay_of_the_v7p_qu
     shown3, _, _ = bp._question_text(no_question, limit)
     assert shown3.endswith("b" * 200 + ".") and len(shown3) <= limit                                 # nothing asks: the last sentence is kept whole
 
+
+
+def test_contract_3_other_quantities_pair_inside_a_concept_only_and_the_contract_names_the_kinds():
+    """CORE-V5-S2 P-07: two return windows in days (store vs web) were never offered; money pairs keep their rule; non-money pairs need a shared concept."""
+    store = dict(rule("rule-ret-store", {"field": "return.store_days", "op": "lte", "value": 30, "unit": "days"}, "role-store", "Store returns within 30 days"), concept_ids=["concept-returns"])
+    web = dict(rule("rule-ret-web", {"field": "return.web_days", "op": "lte", "value": 14, "unit": "days"}, "role-store", "Web returns within 14 days"), concept_ids=["concept-returns"])
+    leave = dict(rule("rule-leave", {"field": "leave.notice_days", "op": "lte", "value": 7, "unit": "days"}, "role-hr", "Leave notice"), concept_ids=["concept-leave"])
+    pairs = bp.candidate_pairs([store, web, leave])
+    assert [p["rule_ids"] for p in pairs] == [["rule-ret-store", "rule-ret-web"]] and pairs[0]["measure"] == "days"
+    assert bp.candidate_pairs([dict(store, concept_ids=[]), dict(web, concept_ids=[])]) == []                       # no shared concept: no pair
+    props = FROZEN["output_schema"]["properties"]
+    assert FROZEN["version"] == 3 and props["gaps"]["items"]["properties"]["kind"]["enum"] == ["missing_exception", "conflicting_facts"]
+    assert props["relations"]["items"]["properties"]["relation"]["enum"] == ["depends_on", "exception_to", "implements"]
+
+
+def test_a_missing_exception_may_cite_the_shown_rule_that_is_its_unstated_exception_but_must_cite_its_own_rule():
+    """Live run PROPOSALS-V9-S3 (2026-10-24): the model asked whether the parent-consent rule needs an exception and cited both that rule and the shown adult-pupil rule
+    that is in fact the exception (contract section 20 names this case); the server refused it because the second reference was not the named rule's. A missing
+    exception may now cite any shown rule's reference as long as one reference is its own; a reference of no shown rule, or only another rule's, is still refused."""
+    _, frozen = _rules_and_frozen()
+    consent = dict(HIGH_RISK, rule_id="rule-consent", source_bindings=[{"artifact_id": "a1", "revision_id": "1", "evidence_ref": "trips.md#rule-consent"}])
+    adult = dict(POLICY_MANAGER, rule_id="rule-adult", source_bindings=[{"artifact_id": "a2", "revision_id": "1", "evidence_ref": "sixth_form.md#rule-adult"}])
+    rules = {"rule-consent": consent, "rule-adult": adult}
+
+    def run(refs, rids=("rule-consent",), kind="missing_exception"):
+        g = {"kind": kind, "rule_ids": list(rids), "question": "Does the consent rule need an exception for adult pupils?", "evidence_refs": refs}
+        return bp.resolve_proposals({"status": "OK", "gaps": [g], "relations": [], "notes": []}, rules, [], [], limits=frozen["limits"], can_read_evidence=True)
+
+    kept = run(["trips.md#rule-consent", "sixth_form.md#rule-adult"])
+    assert kept["rejected"] == [] and kept["gaps"][0]["affected_rule_ids"] == ["rule-consent"]
+    assert [r["reason"] for r in run(["sixth_form.md#rule-adult"])["rejected"]] == ["evidence_ref_not_in_the_named_rules"]                       # its own rule is not cited
+    assert [r["reason"] for r in run(["trips.md#rule-consent", "other.md#x"])["rejected"]] == ["evidence_ref_not_in_the_named_rules"]           # not a shown rule
+    pair = run(["trips.md#rule-consent", "sixth_form.md#rule-adult", "other.md#x"], rids=("rule-consent", "rule-adult"), kind="conflicting_facts")
+    assert [r["reason"] for r in pair["rejected"]] == ["evidence_ref_not_in_the_named_rules"]                                                    # a pair still cites only its two rules

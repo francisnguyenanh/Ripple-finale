@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Callout, HowItWorks, Muted, Tech, usePlain } from "@/components/bits";
 import { basename, humanize, newId, ruleTitle } from "@/lib/fmt";
 import { useSession } from "@/session";
+import { aiWhy } from "@/lib/aiKinds";
 import { useNotify } from "@/lib/notify";
 import { draftResult } from "./DraftStage";
 import { useFlow } from "./flow";
@@ -290,7 +291,7 @@ export function AnalysisStage() {
           <Muted>The AI reads up to <strong>3 files</strong> that still hold UNKNOWN rules, one call each, one after the other, and says whether each file depends on this change, with a quote the server re-checks. Its answer is shown apart ("AI judgement, re-checked by the server"): it is never a proven dependency, and a rule it does not flag stays UNKNOWN. Running this repeats the impact analysis, so do it before the simulation.</Muted>
           {inv && <Callout tone="wait" testid="investigate-running" role="status"><span>Looking at file {inv.step} of {inv.total}: <strong>{inv.label}</strong> (waiting for the AI)...</span></Callout>}
           {invNote && <Muted testid="investigate-note">{invNote}</Muted>}
-          <div><Button data-testid="action-investigate-unknown" title={s.aiOff ? "AI actions are switched off on this server" : undefined} disabled={pending || s.aiOff || !!inv} onClick={() => void investigate()}>Ask the AI to look at up to 3 files (uses the paid model)</Button></div>
+          <div><Button data-testid="action-investigate-unknown" title={aiWhy(s, "impact.judge")} disabled={pending || !s.aiKind("impact.judge") || !!inv} onClick={() => void investigate()}>Ask the AI to look at up to 3 files (uses the paid model)</Button></div>
           {((((d.impact!.execution_result ?? {}) as Rec).coverage?.model_judgments?.requested ?? 0) > 0) ? <Muted testid="investigate-intake">Last investigation: {JSON.stringify(((d.impact!.execution_result ?? {}) as Rec).coverage?.model_judgments)}</Muted> : null}
         </div>
       )}

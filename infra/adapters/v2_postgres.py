@@ -27,8 +27,20 @@ from core.change_intelligence.v2.serialize import canonical_hash
 from core.change_intelligence.v2.store_ports import (
     ImmutableBlobPort, OutboxClaim, PublishResult, WorkspaceHead,
 )
+from infra.worker.safe_diagnostics import safe_diagnostics, sanitize_reason
 from infra.adapters.v2_policy import permissions_for
 
+
+
+def _safe_attempt(attempt: Mapping[str, object]) -> dict:
+    """AH-05: an attempt row's reason and provider diagnostics in their typed, bounded form (no raw exception / provider text)."""
+    a = dict(attempt)
+    if "reason" in a:
+        a["reason"] = sanitize_reason(a.get("reason"))
+    rc = a.get("request_context")
+    if isinstance(rc, Mapping) and "provider_diagnostics" in rc:
+        a["request_context"] = dict(rc, provider_diagnostics=safe_diagnostics(rc.get("provider_diagnostics")))
+    return a
 
 class StoreConflict(ValueError):
     """An idempotency key was reused for a different payload."""
@@ -267,6 +279,8 @@ class PostgresV2Store:
         sql += "\n" + (migrations_dir / "ext_t09_code_pr_published.sql").read_text(encoding="utf-8")
         sql += "\n" + (migrations_dir / "ext_t10_request_assistant.sql").read_text(encoding="utf-8")   # RQA-02 private assistant threads
         sql += "\n" + (migrations_dir / "ext_t11_preparation_runs.sql").read_text(encoding="utf-8")    # EUI-08 guided preparation runs (feature off by default)
+        sql += "\n" + (migrations_dir / "ah05_job_correlation.sql").read_text(encoding="utf-8")      # AH-05 HTTP -> job correlation (additive)
+        sql += "\n" + (migrations_dir / "ah02_review_note_index.sql").read_text(encoding="utf-8")    # AH-02 measured partial index for review-note lookups
         with self._tx() as cur:
             cur.execute(sql)
 
@@ -322,6 +336,35 @@ class PostgresV2Store:
         if row is None:
             raise TenantScopeError("workspace not found")
         return WorkspaceHead(tenant_id, workspace_id, *row)
+
+    @staticmethod
+    def _link_job(cur, tenant_id: str, workspace_id: str, job_id: str, *, created: bool) -> None:
+        """AH-05: record which HTTP request (or parent job) created or replayed this job, in the same transaction. Metadata only: nothing here changes the job's
+        identity, idempotency or authorization. Without a request or a parent (a tool or test outside both) nothing is written."""
+        from infra.correlation import current
+        request_id, parent = current()
+        if not request_id and not parent:
+            return
+        cur.execute("""INSERT INTO v2_job_correlation (tenant_id, workspace_id, job_id, request_id, parent_job_id, created) VALUES (%s,%s,%s,%s,%s,%s)""",
+                    (tenant_id, workspace_id, job_id, request_id, parent, created))
+
+    def link_job_request(self, tenant_id: str, workspace_id: str, job_id: str) -> None:
+        """AH-05: an idempotent replay answered without touching the job (the caller found the existing logical job) still records the request that replayed it."""
+        with self._tx() as cur:
+            self._link_job(cur, tenant_id, workspace_id, job_id, created=False)
+
+    def job_correlation(self, tenant_id: str, workspace_id: str, job_id: str) -> list[dict]:
+        with self._tx() as cur:
+            cur.execute("""SELECT request_id, parent_job_id, created, recorded_at FROM v2_job_correlation WHERE tenant_id=%s AND workspace_id=%s AND job_id=%s
+                           ORDER BY recorded_at, id""", (tenant_id, workspace_id, job_id))
+            return [{"request_id": r[0], "parent_job_id": r[1], "created": r[2], "recorded_at": r[3].isoformat()} for r in cur.fetchall()]
+
+    def jobs_for_request(self, request_id: str) -> list[dict]:
+        """Operator lookup by a request ID a person quoted (operator tools only; the ID is random and server-generated)."""
+        with self._tx() as cur:
+            cur.execute("""SELECT tenant_id, workspace_id, job_id, created, recorded_at FROM v2_job_correlation WHERE request_id=%s ORDER BY recorded_at, id LIMIT 50""",
+                        (request_id,))
+            return [{"tenant_id": r[0], "workspace_id": r[1], "job_id": r[2], "created": r[3], "recorded_at": r[4].isoformat()} for r in cur.fetchall()]
 
     def _replay(self, cur, tenant_id: str, workspace_id: str, operation: str,
                 key: str, payload_hash: str) -> PublishResult | None:
@@ -923,6 +966,7 @@ class PostgresV2Store:
                 VALUES (%s,%s,%s,'source_ingest','NOT_REQUIRED','QUEUED',%s,NULL,%s,%s,%s)""",
                 (tenant_id, workspace_id, job_id, revision_id, head.decision_epoch,
                  Json(job_payload), actor_id))
+            self._link_job(cur, tenant_id, workspace_id, job_id, created=True)
             result = {"import_id": import_id, "source_revision_id": revision_id,
                       "version": version, "manifest_hash": manifest_hash,
                       "ingest_job_id": job_id,
@@ -1236,6 +1280,7 @@ class PostgresV2Store:
                 (tenant_id, workspace_id, job_id, revision_id, head.decision_epoch,
                  Json({"refresh_id": refresh_id, "source_revision_id": revision_id,
                        "manifest_hash": manifest_hash}), actor_id))
+            self._link_job(cur, tenant_id, workspace_id, job_id, created=True)
             result = {"refresh_id": refresh_id, "noop": False, "source_revision_id": revision_id,
                       "version": version, "manifest_hash": manifest_hash,
                       "ingest_job_id": job_id, "provenance": provenance,
@@ -1503,7 +1548,7 @@ class PostgresV2Store:
                 FROM v2_jobs WHERE tenant_id=%s AND workspace_id=%s AND job_id LIKE %s
                 ORDER BY job_id""", (tenant_id, workspace_id, like))
             return [{"job_id": r[0], "kind": r[1], "execution_status": r[2],
-                     "execution_reason": r[3], "execution_result": _as_object(r[4])}
+                     "execution_reason": sanitize_reason(r[3]), "execution_result": _as_object(r[4])}
                     for r in cur.fetchall()]
 
     def approval_jobs_pinned_to(self, tenant_id: str, workspace_id: str,
@@ -2467,6 +2512,7 @@ class PostgresV2Store:
         if prior is not None:
             if requested_by is not None:
                 raise TenantScopeError("job not found or already attributed")
+            self._link_job(cur, tenant_id, workspace_id, job_id, created=False)       # AH-05: this request replayed the same logical job
             return prior
         if head.version != expected_version or head.source_revision_id is None:
             raise StaleVersion("job input head is stale or absent")
@@ -2549,6 +2595,7 @@ class PostgresV2Store:
                             "JOB_QUEUED", {"job_id": job_id, "kind": kind,
                                            "source_revision_id": head.source_revision_id,
                                            "decision_epoch": head.decision_epoch})
+        self._link_job(cur, tenant_id, workspace_id, job_id, created=True)
         return result
 
     def job_status(self, tenant_id: str, workspace_id: str, job_id: str) -> dict:
@@ -2566,7 +2613,7 @@ class PostgresV2Store:
                 "pinned_knowledge_revision_id": row[3],
                 "pinned_decision_epoch": row[4], "payload": _as_object(row[5]),
                 "execution_status": row[6], "execution_result": _as_object(row[7]),
-                "execution_reason": row[8]}
+                "execution_reason": sanitize_reason(row[8])}
 
     def find_finding_by_id(self, tenant_id: str, workspace_id: str,
                           finding_id: str) -> dict | None:
@@ -2613,7 +2660,7 @@ class PostgresV2Store:
         return {"job_id": job_id, "kind": row[0], "status": row[1], "requested_by": row[2],
                 "approved_by": row[3], "approved_with_roles": row[4],
                 "payload": _as_object(row[5]), "execution_status": row[6],
-                "execution_result": _as_object(row[7]), "execution_reason": row[8],
+                "execution_result": _as_object(row[7]), "execution_reason": sanitize_reason(row[8]),
                 # isoformat: this dict is returned verbatim by GET /v2/jobs/{id}
                 # (JSONResponse cannot serialize a datetime).
                 "cancel_requested_at": row[9].isoformat() if row[9] is not None else None,
@@ -3370,6 +3417,7 @@ class PostgresV2Store:
     @staticmethod
     def _insert_attempt(cur, tenant_id: str, workspace_id: str, job_id: str,
                         attempt: Mapping[str, object]) -> None:
+        attempt = _safe_attempt(attempt)
         cur.execute("""INSERT INTO v2_job_attempts
                 (tenant_id, workspace_id, job_id, attempt_key, outcome, reason, retryable,
                  executor_id, model_id, prompt_hash, schema_hash, request_context,
@@ -3554,7 +3602,8 @@ class PostgresV2Store:
         """
         if terminal not in ("COMPLETED", "FAILED", "CANCELLED"):
             raise ValueError("terminal must be COMPLETED, FAILED or CANCELLED")
-        attempt = dict(attempt) if attempt is not None else None
+        attempt = _safe_attempt(attempt) if attempt is not None else None
+        reason = sanitize_reason(reason)                                    # AH-05: typed, bounded reason; no raw exception text on the job row
         with self._tx() as cur:
             cur.execute("""SELECT execution_status, cancel_requested_at FROM v2_jobs
                 WHERE tenant_id=%s AND workspace_id=%s AND job_id=%s FOR UPDATE""",
@@ -3623,7 +3672,7 @@ class PostgresV2Store:
                     "model_id", "prompt_hash", "schema_hash", "request_context",
                     "request_excerpt", "provider_calls", "input_tokens", "output_tokens",
                     "cost_estimate_usd", "cost_usd", "duration_ms")
-            return [dict(zip(cols, r)) for r in cur.fetchall()]
+            return [_safe_attempt(dict(zip(cols, r))) for r in cur.fetchall()]       # rows written before AH-05 are reduced on read too
 
     def release_outbox(self, tenant_id: str, workspace_id: str, event_id: int,
                        worker_id: str, token: int) -> None:

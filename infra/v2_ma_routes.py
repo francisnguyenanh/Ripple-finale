@@ -11,6 +11,8 @@ Nothing here approves, commits or applies; the report is read by a person in the
 """
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -62,8 +64,9 @@ def _visible_run(store, tenant, workspace_id, run_id, authority):
 
 
 @router.post("/v2/ma/runs")
-async def start_run(request: Request):
-    body = await _json_body(request)
+@db_route
+def start_run(request: Request):
+    body = _json_body_sync(request)
     change_id, workflow = body.get("change_id"), body.get("workflow", "review_board")
     if not isinstance(change_id, str) or not change_id.startswith("chg-") or not isinstance(workflow, str):
         return _error("change_id (chg-…) and workflow required", 400)
@@ -92,8 +95,9 @@ def read_run(request: Request, run_id: str, workspace_id: str):
 
 
 @router.post("/v2/ma/runs/{run_id}/advance")
-async def advance_run(request: Request, run_id: str):
-    body = await _json_body(request)
+@db_route
+def advance_run(request: Request, run_id: str):
+    body = _json_body_sync(request)
 
     def action(store, tenant, authority):
         _visible_run(store, tenant, body["workspace_id"], run_id, authority)
@@ -102,8 +106,9 @@ async def advance_run(request: Request, run_id: str):
 
 
 @router.post("/v2/ma/runs/{run_id}/cancel")
-async def cancel_run(request: Request, run_id: str):
-    body = await _json_body(request)
+@db_route
+def cancel_run(request: Request, run_id: str):
+    body = _json_body_sync(request)
     reason = body.get("reason")
     if not isinstance(reason, str) or not reason.strip():
         return _error("reason required", 400)
@@ -123,9 +128,10 @@ def _finished_board(run):
 
 
 @router.post("/v2/ma/runs/{run_id}/synthesis-memo")
-async def request_synthesis_memo(request: Request, run_id: str):
+@db_route
+def request_synthesis_memo(request: Request, run_id: str):
     """SUR-08: a model's synthesis memo over a finished review-board report; every minority / unresolved finding stays listed by the server. Changes no verdict."""
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     attempt = body.get("attempt", 1)
     if isinstance(attempt, bool) or not isinstance(attempt, int) or not 1 <= attempt <= 3:
         return _error("attempt (1-3) required", 400)

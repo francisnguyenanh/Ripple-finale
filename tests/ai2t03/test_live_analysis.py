@@ -21,6 +21,7 @@ def _config(**overrides):
         default_model_id="gemini-priced", fail_closed_on_missing_usage=True,
         latency_slo_p50_seconds=10.0, latency_slo_p95_seconds=30.0,
     )
+    values.setdefault("enabled_roles", "all")  # role allowlist: explicit (absent = no AI kind may run)
     values.update(overrides)
     return BudgetConfig(**values)
 
@@ -94,6 +95,8 @@ def test_live_client_factory_uses_configured_ai_module_account(monkeypatch, back
 
     monkeypatch.setattr(genai, "Client", make_client)
     assert live_analysis._client_for_model("gemini-priced") is fake_client
+    opts = captured[0].pop("http_options")                                   # AH-04: the SDK's own retry is pinned to one attempt
+    assert opts.retry_options is not None and opts.retry_options.attempts == 1
     if backend == "vertex":
         assert captured == [{"vertexai": True, "project": "configured-project",
                              "location": "us-central1"}]

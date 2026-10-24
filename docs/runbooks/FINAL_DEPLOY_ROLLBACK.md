@@ -13,16 +13,20 @@ target platform, project and access model are the owner's decision. Recovery of 
 - The worker runs the same image with `python -m infra.worker.service` (`RIPPLE_V2_DSN`, `RIPPLE_WORKER_TENANT_ID` / `RIPPLE_WORKER_WORKSPACE_ID` or `RIPPLE_WORKER_WORKSPACES`, `RIPPLE_WORKER_POLL_SECONDS`; `GET /healthz` for the liveness probe); jobs are leased with fencing (see the recovery runbook).
 - Configuration by environment variable only; secrets from the platform's secret store, never in env files or the image:
   - database DSN and session secret (secrets);
-  - `RIPPLE_JUDGE_ORIGIN` (the exact public origin), `RIPPLE_SESSION_LIFETIME_SECONDS`, `RIPPLE_DB_POOL_MAX` / `RIPPLE_DB_POOL_WAIT`;
+  - `RIPPLE_JUDGE_ORIGIN` (the exact public origin), `RIPPLE_SESSION_LIFETIME_SECONDS`, `RIPPLE_DB_POOL_MAX` / `RIPPLE_DB_POOL_WAIT` / `RIPPLE_DB_WORK_SLOTS` (sized by the connection envelope in `FINAL_PRODUCTION_WINDOWS.md` section 1a);
   - AI: `RIPPLE_BUDGET_CONFIG_PATH` — a **production** budget configuration with its own cap, the roles to enable and their pinned model (the evaluation configuration and
     ledger of the development runs must not be reused); `RIPPLE_PROVIDER_MODE` and the provider switch decide whether real models are called at all (off = labelled simulated
     or deterministic fallback, never a silent success);
+  - the production budget configuration lists `enabled_roles` explicitly (the AI features this deployment offers; `all` is for development and evaluation only;
+    absent = no AI feature runs); see `docs/contracts/AI_CLOSED_LOOP_BUDGETS.md` section 6a;
   - optional features stay off unless decided: `RIPPLE_SEMANTIC_RETRIEVAL`, `RIPPLE_REQUEST_ASSISTANT`, `RIPPLE_FIREBASE_MODE`, `RIPPLE_PROJECTION_SINK`, `RIPPLE_NOTIFICATION_TRANSPORT`.
 - Prompt / schema pins: the pinned roles in `docs/evaluation/FINAL_AI_QUALITY_PLAN.md` are checked by `tests/contract/test_final_prompt_pins.py`; a changed pin invalidates its
   evidence.
 
 ## 3. Database
-- **Back up first** (a full logical dump of the target database, checksum recorded) — the only rollback for data.
+- **Stop writes, then back up** (a full logical dump of the target database, checksum recorded) — the only rollback for data. Writes stop before the dump (workers scaled
+  to zero, provider switch off, a maintenance notice, traffic held on the old revision) and stay stopped until the migrate step and the smoke pass; otherwise rows written
+  between the dump and a restore are lost.
 - Apply the schema as a **one-shot step before the new revision takes traffic** (the stores do not migrate at web start-up): `python -m tools.db_migrate` shows the target
   (host / port / database only), `python -m tools.db_migrate --apply` applies the v2 store and identity store migrations (exit 0 done, 2 DSN missing, 3 a statement failed).
   The SQL is forward-only, additive and idempotent; the upgrade of a populated database is verified by `tests/final_loop/test_rel02_upgrade_chain.py` (rows byte-identical,
@@ -31,17 +35,20 @@ target platform, project and access model are the owner's decision. Recovery of 
 
 ## 4. Deploy and verify (staged)
 1. Deploy the new revision **without traffic** (or to a separate instance).
-2. Smoke on that revision, authenticated: health; sign-in of a test account; workspace create; one knowledge read; one queued job executed by the worker with the provider switch
+2. Smoke on that revision, authenticated: health; readiness (`/ready` reports `"database": "ok"`); sign-in of a test account; workspace create; one knowledge read; one queued job executed by the worker with the provider switch
    **off** (deterministic / simulated path); the cost ledger shows no unexpected entry; logs carry no secret or request body.
 3. If live AI is enabled: one job per enabled role within the production cap, reserved before the call and settled after it.
 4. Move traffic to the new revision; keep the previous revision deployable.
 
 ## 5. Roll back
 - **Application:** route traffic back to the previous revision / previous image digest (workers likewise).
-- **Data:** migrations are additive, so the previous image normally runs on the migrated schema; this has **not** been verified for the Final build. If the previous image
-  refuses the schema, restore the pre-deploy dump (step 3) — history written since the deploy is lost and must be reconciled from the audit records.
+- **Data:** migrations are additive, so the previous image runs on the migrated schema; this was rehearsed **locally** (an earlier Final commit's database suites passed on a
+  database migrated and written by the candidate, then the candidate passed again on the same database). Prefer rolling back the application only. Restore the pre-deploy
+  dump (section 3) only if the previous image cannot run on the schema or data are corrupted. **A restore is not a lossless rollback:** every row written after the dump is
+  lost (the local rehearsal showed the restored database equal to the dump table by table and without the rows written afterwards); those writes must be re-entered or
+  reconciled from the audit records, and the restore goes to a separate database first, is checked (row counts, triggers, one read-only smoke), then swapped in.
 - **Spend stop:** turn the provider switch off (no real model call; queued AI jobs stay queued by design), scale workers to zero.
 
 ## 6. Not verified for the Final build
-No deployment on any cloud; no staging; no load, latency or availability measurement; no previous-image-on-new-schema check; no production budget configuration; no human
-acceptance of AI quality. A deploy decision weighs these explicitly.
+No deployment on any cloud; no staging; no load, latency or availability measurement; previous image on the new schema and restore checked only locally on one PostgreSQL 16
+container (no point-in-time recovery); no production budget configuration; no human acceptance of AI quality. A deploy decision weighs these explicitly.

@@ -4,6 +4,8 @@ Business documents need `project.read`, Technical ones `evidence.read` (contract
 (snapshot, mode, scope, locale, template, redaction) and never a model call; reading never generates. Nothing here touches a source or the knowledge."""
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
@@ -40,7 +42,8 @@ def _blob_store():
 
 
 @router.post("/v2/business/documents")
-async def request_business_documents(request: Request):
+@db_route
+def request_business_documents(request: Request):
     """Ask for the document(s) of one accepted snapshot: `modes` (one or both; both use the SAME snapshot), optional `snapshot_id` (default: the accepted head), `scope`, `locale`,
     `template_version`. Returns one state per mode; a document already generated is returned as is (no new job, no bytes written)."""
     if not _origin_ok(request):
@@ -48,7 +51,7 @@ async def request_business_documents(request: Request):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     if not (isinstance(workspace_id, str) and workspace_id.strip()):
         return _error("workspace_id required", 400)
@@ -197,7 +200,8 @@ def download_business_document(request: Request, artifact_id: str, workspace_id:
 
 
 @router.post("/v2/business/documents/export")
-async def export_business_documents(request: Request):
+@db_route
+def export_business_documents(request: Request):
     """A zip bundle of the requested modes of ONE snapshot (`snapshot_id` explicit: the version being viewed; omitted: the accepted head), with MANIFEST.json. Documents not
     generated yet are requested through the same lazy path and the call answers 409 `generating` with their states until they exist (no bytes, no model). Repeated
     exports of the same version are cache hits: no job, no generation."""
@@ -206,7 +210,7 @@ async def export_business_documents(request: Request):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     if not (isinstance(workspace_id, str) and workspace_id.strip()):
         return _error("workspace_id required", 400)

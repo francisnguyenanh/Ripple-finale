@@ -33,7 +33,7 @@ from starlette.responses import JSONResponse
 _COOKIE = "ripple_v2"
 _log = logging.getLogger("ripple.http")
 # The id of the request being served (set by the request-id middleware; empty outside a request). Server-generated, random, never derived from the client.
-REQUEST_ID: contextvars.ContextVar[str] = contextvars.ContextVar("ripple_request_id", default="")
+from infra.correlation import REQUEST_ID                                      # noqa: E402  (AH-05: the one context variable the stores read for correlation)
 
 
 def current_request_id() -> str:

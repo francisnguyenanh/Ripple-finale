@@ -94,6 +94,8 @@ def canonical_ref(raw, by_ref: Mapping) -> str | None:
         r = r[4:].strip()
         if r in by_ref:
             return r
+    if r[:4].lower() == "ref:" and r[4:].strip() in by_ref:            # the prompt's "ref:" label copied with the value (observed live, SUR06-V2-20261023 items 05 / 06)
+        return r[4:].strip()
     if not r or r.isdigit() or ":" in r:
         return None
     hits = [k for k in by_ref if k.split(":", 1)[-1] == r]

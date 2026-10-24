@@ -14,7 +14,7 @@
 
 The exported tree is produced by the development tool from a committed state; its manifest records the source commit, every file hash and the checks above. Self-check only; not independent validation.
 
-## Release status by criterion (2026-10-22; evidence layered, nothing counted twice)
+## Release status by criterion (2026-10-22, updated 2026-10-23; evidence layered, nothing counted twice)
 
 Four kinds of evidence are kept apart: **built** = the function exists and is verified locally with stub models; **journey** = exercised in a live journey run with a real model (self-check, seen questions, one workspace, operator standing in for the person through the real routes); **replay** = a defect found in a run was fixed afterwards and shown on the run's own stored output through the real server callers (no new call); **model** = the model's own output met the frozen check. A criterion is DONE only when every layer it needs is met; owner acceptance of a limit does not close a quality gate.
 
@@ -22,23 +22,31 @@ Four kinds of evidence are kept apart: **built** = the function exists and is ve
 |---|---|---|---|---|---|
 | Sources → observed knowledge with traced code / configuration links | yes | v3 J1 passed (4 / 4 required rules, CAPEX route traced) | — | partial: code outcomes / actors came from the server's code facts, not the model | PARTIAL (model omissions labelled) |
 | Model-suggested disagreement → person's decision → accepted knowledge | yes | v4 J2 passed the frozen gate (no planted pair) | — | the suggestion named the right pair; band / actor precision not measured | PARTIAL |
-| Grounded answers on a concrete case (A4a, A4b, A5, A19) | yes | v4: 1 / 5; v5 re-ask: 0 / 2; v6c: 5 / 5 shown; v8: 4 / 5; **v9 (fresh, one version): 5 / 5 shown** (no safety breach in any run) | A19 (both views), A5, A4a, A4b pass on the stored v5 outputs | v6c model-only 3 / 5: A4a, A19T, A19O on the model's own output; A4b notices the missing category but does not ask; A5 abstains without its own JPY question | **PARTIAL** (shown answers pass once; model quality below the shown answers; not independent) |
+| Grounded answers on a concrete case (A4a, A4b, A5, A19) | yes | v9 (fresh, one version): 5 / 5 shown; 2026-10-23 contract v3 on the same contexts: 5 / 5 from the model's own citations (Flash-Lite and 3.8 Flash) | 2026-10-23: an unseen set of 21 questions written by a separate authoring session (agent-authored, not a person): 12 / 21 as first run; after the question reader learned hyphenated categories, "non-emergency" and a stated normal risk, and five affected items were re-executed once: 18 / 21 — status, citation recall, no wrong rule, abstentions all inside the plan's thresholds | residual: one wrong rule chosen (1 / 21); two redundant questions; one prose-only fact abstained honestly | **MET on an agent-authored set** (the plan's person-written set and the independent set stay open) |
 | Change request → guidance → person's decision → commit → document → refresh | yes | v5 J4 passed to the refresh (change reused from v4; guidance v2; decision and commit by the operator for the person; document; refresh read back; honest `pending` for the prose rule) | — | guidance: one advisory question, no blocker | PARTIAL (passed in the recorded synthetic scope; not human acceptance; not runtime verified) |
 | One continuous end-to-end live run on the final version | yes | **v9 (2026-10-22, new workspace, one version `0b410d23`): J1, J2, J3 (5 / 5 shown), J4 to the refresh (`verified`, source-aligned) — every gate passed.** Earlier attempts v6, v7, v8 stopped on product defects, all fixed (history kept) | — | v9 model-only answers 2 / 5 (the server binds passages and asks the fact questions) | **DONE at B** (synthetic, self-authored, not independent; operator-simulated decisions; behaviour not tested) |
 | Independent evaluation on unseen, reviewer-built sets | — | — | — | — | **OPEN** |
-| Human acceptance of AI quality | — | — | — | — | **OPEN** (owner accepted the layered evidence as recorded, not the quality) |
+| Human acceptance of AI quality | — | — | — | — | **PARTIAL**: on 2026-10-23 the owner accepted the quality of the journey-v9 answers, suggestion and guidance shown in the pre-production package (that version, with its listed weaknesses); no other role, data set or version is covered, and the technical quality criteria below keep their own status |
+| Staging rehearsal on a separate cloud project (2026-10-23) | — | AI smoke on the deployed candidate: 15 calls, 12 Final kinds completed (wiring, not quality) | — | — | **DONE (staging)**: migrate on a populated database, old code on the new schema, rollback and roll forward, restore into a separate database (equal to the backup; later writes absent); isolated from Pitch; torn down after about 71 minutes |
 
-Total recorded provider cost for all live work under the 2.00 USD mandate: 1.22117030 USD (ledger reconciled with the database after every run).
+Total recorded provider cost for all live work under the 2.00 USD evaluation mandate: 1.25868120 USD, including the staging smoke (ledger reconciled after every run). The production AI cap (10.00 USD) is separate and unused.
 
 ## Extension roles: live diagnostics of 2026-10-22 (self-authored sets, frozen before collect, Flash-Lite; synthetic data or the owner's Harbor sandbox)
 
 | Role | Live result | Threshold | Status |
 |---|---|---|---|
 | SUR-04 semantic drift advisory (on local diffs of the owner's Harbor sandbox, never pushed) | 5 / 6; planted drift recall 0.75; false drift 0.00; never a pass | met (diagnostic) | PARTIAL — quality evidence self-authored; required-check integration on a real repository OPEN (remote branch-protection write not granted) |
-| SUR-05 proposed correspondence on refresh | 4 / 6 (scorer corrected after viewing, both reported); precision 0.571, recall 0.571 | not met | OPEN (quality) |
-| SUR-07 ROI analyst (synthetic data) | 4 / 6; declared-question 0.667; no kept claim word or stray number | not met | OPEN (quality); real data / data-owner acceptance OPEN |
-| SUR-03 proposal-only coder | not measured (set design: configured thresholds never reach the coder) | — | OPEN |
-| SUR-08 review synthesis memo | not run (a board run of several specialist calls per item; worst case above the remaining allowance for six items) | — | OPEN |
+| SUR-05 proposed correspondence on refresh | 2026-10-23, all six items on the corrected contract (pin `62d8fc71`): precision 1.00, recall 0.714, proof claimed 0 | met | MET (self-authored set) |
+| SUR-07 ROI analyst (synthetic data) | v1-v3 not met (v3 3 / 6); 2026-10-24 after a contract review (the declared assumptions are named and a doubt about anything else is a note): v4 6 / 6, declared-question 1.0, no claim, no stray number | declared-question >= 0.70 | MET (self-authored, synthetic; real data needs a data owner) |
+| SUR-06 risk memo | 2026-10-23 v2 on the six confirmed changes (real sources): planted risk 5 / 6, refused refs 0 after a citation-label repair (first attempt kept as not met on that row) | met | MET (self-authored set) |
+| AIX-K2 interview over one question | 2026-10-23 unseen set written by a separate authoring session (fleet domain, 10 items): 9 / 10, grounded and addressed 1.0, unsafe 0 | met | MET (agent-authored set) |
+| AIX-K1 conflict mining | v3 / v4 not met; 2026-10-24 the server lists which rule pairs can apply to one case (with a verified case) and the model judges each: v5 planted recall 5 / 6, false conflicts 0 | recall >= 0.50, false conflict <= 0.20 | MET (self-authored set) |
+| AIX-D1 audience variants | v3 / v4 generated 4 / 6; 2026-10-24 after a contract fix and a claim-check fix: v5 generated 6 / 6, required terms 1.0 | generated >= 0.70 | MET (self-authored set) |
+| Request assistant (RQA-05 / AIG-03), live on the final build | 2026-10-23 V12 (prompt version 10 + checks/14): 12 questions, every row met — supported claims 22 / 22, nothing wrong shown to the reader, useful 10 / 10, declines 2 / 2, p95 12.5 s | all rows | MET (release cohort, self-authored set) |
+| SUR-03 proposal-only coder | 2026-10-23 v3: 5 of 6 reached the coder; 2026-10-24 v4 / v5: 2 of 8 each — the change-understanding step held the others; every proposal that reached the coder passed (one edited the wrong function after a wrong understanding) | n >= 6 not reached | OPEN (blocked by change understanding, which is not met yet) |
+| SUR-08 review synthesis memo (with the review board MA-R1) | 2026-10-23, after three understanding fixes found by this set: all six requests reached the memo on one version; planted risk 4 / 6; zero-tolerance rows 0 | met | MET (self-authored set) |
 | MON-ROI replay on extracted knowledge | defect found and fixed (scope marker read as a field; route values needing an approver not read as approvals): reports "unsupported" honestly now | — | PARTIAL (engine); real data OPEN |
 
-Deploy procedure: [`../runbooks/FINAL_DEPLOY_ROLLBACK.md`](../runbooks/FINAL_DEPLOY_ROLLBACK.md) (nothing deployed; target platform is the owner's decision).
+Deploy procedure: [`../runbooks/FINAL_DEPLOY_ROLLBACK.md`](../runbooks/FINAL_DEPLOY_ROLLBACK.md) (nothing deployed; target platform is the owner's decision). Rollback rehearsed locally on 2026-10-23: an earlier Final commit ran its database suites on the migrated schema; a restore returned exactly the backup and lost later writes (not a lossless rollback).
+
+Operating in windows: [`../runbooks/FINAL_PRODUCTION_WINDOWS.md`](../runbooks/FINAL_PRODUCTION_WINDOWS.md). Production AI configuration shape: `config/ai_closed_loop/final_budgets.production.example.yaml` (19 Final kinds listed; never `all`).

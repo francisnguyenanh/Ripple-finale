@@ -8,6 +8,8 @@ Reading never generates; the same variant key never makes a second model call.
 """
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
@@ -55,8 +57,9 @@ def _shell(request, workspace_id, action, *, mutating=False, store=None):
 
 
 @router.post("/v2/business/documents/{artifact_id}/variants")
-async def request_variant(request: Request, artifact_id: str):
-    body = await _json_body(request)
+@db_route
+def request_variant(request: Request, artifact_id: str):
+    body = _json_body_sync(request)
     audience = body.get("audience")
     if audience not in variants.dv.AUDIENCES:
         return _error(f"audience must be one of {', '.join(variants.dv.AUDIENCES)}", 400)

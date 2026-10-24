@@ -304,7 +304,8 @@ def _validate_desired(kind: str, desired: Any) -> None:
     if kind == "set_value":
         if isinstance(desired, Mapping):
             _scalar(desired.get("value"), "desired.value", numeric=True)
-            _need_text(desired.get("unit"), "desired.unit")
+            if "unit" in desired:                                      # a count or an age has no unit (2026-10-24: "more than 2 pets" was refused)
+                _need_text(desired.get("unit"), "desired.unit")
         else:
             _scalar(desired, "desired", numeric=False)
     elif kind == "set_actor":

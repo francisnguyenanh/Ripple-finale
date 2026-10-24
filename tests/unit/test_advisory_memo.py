@@ -107,3 +107,11 @@ def test_a_bare_id_naming_two_offered_refs_is_ambiguous_and_refused():
     out = am.check(model, pack, LIMITS)
     assert out["kept"] == [] and out["rejected"][0]["reason"] == "ref_not_offered"
     assert am.canonical_ref("r-man", {p["ref"]: p for p in pack}) is None and am.canonical_ref("r-man", {p["ref"]: p for p in PACK}) == "rule:r-man"
+
+
+def test_a_ref_written_with_the_prompt_label_ref_colon_is_repaired():
+    """SUR06-V2-20261023 items 05 / 06: every citation was written as `ref:rule:<id>` / `ref:op:op-1` and refused as not offered."""
+    from core.change_intelligence.v2.advisory_memo import canonical_ref
+    offered = {"rule:rule-a": {}, "op:op-1": {}}
+    assert canonical_ref("ref:rule:rule-a", offered) == "rule:rule-a" and canonical_ref("ref:op:op-1", offered) == "op:op-1"
+    assert canonical_ref("ref:rule:rule-z", offered) is None and canonical_ref("rule:rule-a", offered) == "rule:rule-a"

@@ -14,6 +14,8 @@ no ALLOW). An external agent must re-check the pin when it acts: the response is
 """
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 import json
 
 from fastapi import APIRouter, Request
@@ -34,13 +36,14 @@ AUDIT_EVENT = "POLICY_DECISION"
 
 
 @router.post("/v2/business/policy/decide")
-async def policy_decide(request: Request):
+@db_route
+def policy_decide(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, facts = body.get("workspace_id"), body.get("facts")
     if not (isinstance(workspace_id, str) and workspace_id.strip()):
         return _error("workspace_id required", 400)
@@ -85,13 +88,14 @@ async def policy_decide(request: Request):
 
 
 @router.post("/v2/business/audit/export")
-async def audit_export(request: Request):
+@db_route
+def audit_export(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, change_id = body.get("workspace_id"), body.get("change_id")
     if not (isinstance(workspace_id, str) and workspace_id.strip()):
         return _error("workspace_id required", 400)
@@ -122,7 +126,8 @@ MAX_REPLAY_RECORDS = 10_000
 
 
 @router.post("/v2/business/roi/replay")
-async def roi_replay_route(request: Request):
+@db_route
+def roi_replay_route(request: Request):
     """MON-ROI, one scoped compare request: the caller supplies the records (sanitised, authorised by them), names two ACCEPTED business revisions and the declared assumptions;
     the server replays the same cohort through both versions with the deterministic evaluator and returns the report. Nothing is stored except one audit row (hashes and
     denominators, never the records). Engineering path only: a real sample, its data-quality review and the data owner's acceptance are the package's completion gate."""
@@ -131,7 +136,7 @@ async def roi_replay_route(request: Request):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     if not (isinstance(workspace_id, str) and workspace_id.strip()):
         return _error("workspace_id required", 400)
@@ -188,7 +193,8 @@ def _resolve_commit(repo_path: str, ref) -> str | None:
 
 
 @router.post("/v2/business/ci/semantic-drift")
-async def request_semantic_drift(request: Request):
+@db_route
+def request_semantic_drift(request: Request):
     """SUR-04: ask a model for a semantic drift ADVISORY over a declared repository's diff (base..head resolved to SHAs now) against the ACCEPTED knowledge; the exact MON-CI
     scalar check runs in the same job and is stored unchanged. Human actor, `ai.use` and `evidence.read` (the diff is evidence); the repository must be visible to the
     caller. One job per repository, SHAs, accepted snapshot, attempt and frozen config + pinned model. Never a PASS; nothing is written to the repository."""
@@ -197,7 +203,7 @@ async def request_semantic_drift(request: Request):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, repo_id, attempt = body.get("workspace_id"), body.get("repo_id"), body.get("attempt", 1)
     if not (isinstance(workspace_id, str) and workspace_id.strip()) or not isinstance(repo_id, str) or isinstance(attempt, bool) or not isinstance(attempt, int) or not 1 <= attempt <= 3:
         return _error("workspace_id, repo_id and attempt (1-3) required", 400)
@@ -269,7 +275,8 @@ def read_semantic_drift(request: Request, job_id: str, workspace_id: str):
 # ---- SUR-07: ROI analyst memo over a SYNTHETIC replay dataset ------------------------------------------------------------------------------------------------------------
 
 @router.post("/v2/business/roi/analyst")
-async def request_roi_analyst(request: Request):
+@db_route
+def request_roi_analyst(request: Request):
     """SUR-07: an analyst memo (statements citing metric keys, assumption questions, sensitivity values the engine computes) over a replay of a dataset marked SYNTHETIC.
     Real data is refused (`real_data_not_granted`) until a data owner grants it. Human actor, `project.read` + `ai.use`. The records are kept in the job only to recompute
     the replay; they are never echoed."""
@@ -278,7 +285,7 @@ async def request_roi_analyst(request: Request):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     records, assumptions, attempt, label = body.get("records"), body.get("assumptions"), body.get("attempt", 1), body.get("label")
     revisions = body.get("baseline_revision"), body.get("target_revision")

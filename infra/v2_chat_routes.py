@@ -12,6 +12,8 @@ What this layer guarantees (see also infra/worker/intent_interpret.py):
 
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 import hashlib
 
 from fastapi import APIRouter, Request
@@ -152,8 +154,8 @@ def _policy_allowance(store, tenant, ws, cid, authority) -> bool:
 def _start_ai(store, tenant, ws, cid, authority) -> str | None:
     """Send the last unanswered person turn to the AI under the member's standing permission. None = nothing was sent (held or refused)."""
     from infra import provider_gate
-    if provider_gate.is_disarmed() or not _policy_allowance(store, tenant, ws, cid, authority):
-        return None
+    if not provider_gate.ai_available(KIND) or not _policy_allowance(store, tenant, ws, cid, authority):
+        return None                                           # disarmed, window over, or the role is not enabled: the conversation is kept, nothing is sent
     return _dispatch(store, tenant, ws, cid, ai_admission.POLICY_APPROVER, ai_admission.POLICY_ROLES)
 
 
@@ -288,8 +290,9 @@ def _text_ok(body, key="text"):
 
 
 @router.post("/v2/chat/start")
-async def chat_start(request: Request):
-    body = await _json_body(request)
+@db_route
+def chat_start(request: Request):
+    body = _json_body_sync(request)
     ws = body.get("workspace_id")
     identity, store, err = _guard(request, ws)
     if err:
@@ -367,8 +370,9 @@ def _mine(store, authority, ws, cid, *, need_open=True):
 
 
 @router.post("/v2/chat/{cid}/message")
-async def chat_message(request: Request, cid: str):
-    body = await _json_body(request)
+@db_route
+def chat_message(request: Request, cid: str):
+    body = _json_body_sync(request)
     ws = body.get("workspace_id")
     identity, store, err = _guard(request, ws)
     if err:
@@ -387,7 +391,7 @@ async def chat_message(request: Request, cid: str):
         if sum(len(t["text"]) for t in conv["turns"]) + len(text) > load_config()[0]["limits"]["max_conversation_chars"]:
             return _error("this conversation is too long; start a new request", 409)
         from infra import provider_gate
-        if not provider_gate.is_disarmed():
+        if provider_gate.ai_available(KIND):
             _policy_allowance(store, tenant, ws, cid, authority)   # standing `ai.use` permission: the quota is granted by policy, not per reply
         conv = chat.get(store, tenant, ws, cid)
         if _usable(conv):
@@ -408,8 +412,9 @@ def _approver_roles(store, tenant, ws, account):
 
 
 @router.post("/v2/chat/{cid}/allow")
-async def chat_allow(request: Request, cid: str):
-    body = await _json_body(request)
+@db_route
+def chat_allow(request: Request, cid: str):
+    body = _json_body_sync(request)
     ws = body.get("workspace_id")
     identity, store, err = _guard(request, ws)
     if err:
@@ -474,8 +479,9 @@ async def chat_allow(request: Request, cid: str):
 
 
 @router.post("/v2/chat/{cid}/edit")
-async def chat_edit(request: Request, cid: str):
-    body = await _json_body(request)
+@db_route
+def chat_edit(request: Request, cid: str):
+    body = _json_body_sync(request)
     ws = body.get("workspace_id")
     identity, store, err = _guard(request, ws)
     if err:
@@ -508,8 +514,9 @@ async def chat_edit(request: Request, cid: str):
 
 
 @router.post("/v2/chat/{cid}/confirm")
-async def chat_confirm(request: Request, cid: str):
-    body = await _json_body(request)
+@db_route
+def chat_confirm(request: Request, cid: str):
+    body = _json_body_sync(request)
     ws, version = body.get("workspace_id"), body.get("version")
     identity, store, err = _guard(request, ws)
     if err:
@@ -566,8 +573,9 @@ async def chat_confirm(request: Request, cid: str):
 
 
 @router.post("/v2/chat/{cid}/cancel")
-async def chat_cancel(request: Request, cid: str):
-    body = await _json_body(request)
+@db_route
+def chat_cancel(request: Request, cid: str):
+    body = _json_body_sync(request)
     ws = body.get("workspace_id")
     identity, store, err = _guard(request, ws)
     if err:
@@ -584,9 +592,10 @@ async def chat_cancel(request: Request, cid: str):
 
 
 @router.post("/v2/chat/{cid}/revoke")
-async def chat_revoke(request: Request, cid: str):
+@db_route
+def chat_revoke(request: Request, cid: str):
     """Withdraw the unused AI permission. The requester may stop their own conversation; a knowledge.confirm holder may stop any."""
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     ws = body.get("workspace_id")
     identity, store, err = _guard(request, ws)
     if err:
@@ -607,10 +616,11 @@ async def chat_revoke(request: Request, cid: str):
 
 
 @router.post("/v2/chat/{cid}/reopen")
-async def chat_reopen(request: Request, cid: str):
+@db_route
+def chat_reopen(request: Request, cid: str):
     """The requester wants to change a request they already confirmed. The saved request stays as it is; confirming again makes a NEW
     request, and everything done for the old one (draft, impact, simulation, ...) is out of date and is not reused."""
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     ws = body.get("workspace_id")
     identity, store, err = _guard(request, ws)
     if err:
@@ -666,10 +676,11 @@ def draft_lineage(request: Request, workspace_id: str, draft_job_id: str):
 
 
 @router.post("/v2/chat/{cid}/executed")
-async def chat_executed(request: Request, cid: str):
+@db_route
+def chat_executed(request: Request, cid: str):
     """The person pressed the existing guarded action that follows a CONFIRMED preview (an answer job, a comment, a what-if run).
     This only remembers that it was done, so a reload does not offer the same action again; it grants and executes nothing."""
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     ws, ref = body.get("workspace_id"), body.get("ref")
     identity, store, err = _guard(request, ws)
     if err:

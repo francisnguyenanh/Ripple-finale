@@ -44,3 +44,7 @@ max_concurrent_jobs_per_workspace: 2
 fail_closed_on_missing_usage: true
 latency_slo_p50_seconds: 30
 latency_slo_p95_seconds: 90
+# Role allowlist (infra/ai_kinds.py): without this key NO AI job kind runs (fail closed). "all" enables every kind and is meant for
+# development, tests and evaluation; a production configuration lists its kinds instead, e.g.
+#   enabled_roles: [extraction, knowledge.gap_proposals, knowledge.qa, change.understand, change.impact_deps, change.draft_guidance]
+enabled_roles: all

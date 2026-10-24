@@ -3,6 +3,7 @@ worker (so a tick with nothing to do costs one tiny web request and no worker ex
 audience is RIPPLE_WAKE_AUDIENCE; anything else gets 401 with no detail. It reads no source and calls no provider."""
 from __future__ import annotations
 
+from infra.db_offload import db_route
 import os
 
 from fastapi import APIRouter, Request
@@ -20,7 +21,8 @@ def _verify(token: str, audience: str) -> dict:
 
 
 @router.post("/internal/wake")
-async def internal_wake(request: Request):
+@db_route
+def internal_wake(request: Request):
     sa, aud = os.environ.get("RIPPLE_WAKE_SCHEDULER_SA"), os.environ.get("RIPPLE_WAKE_AUDIENCE")
     auth = request.headers.get("authorization", "")
     if not (sa and aud and auth.lower().startswith("bearer ")):

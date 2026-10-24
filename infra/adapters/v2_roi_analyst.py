@@ -38,7 +38,8 @@ def state_of(rec) -> dict:
     elif status == "done" and rec.get("execution_result"):
         res = rec["execution_result"]
         out.update({k: res[k] for k in ("model_status", "statements", "assumption_questions", "scenarios", "rejected", "metrics", "report_hash", "dataset",
-                                        "baseline_revision", "target_revision")}, model=res.get("model"), ai_outcome=res.get("ai_outcome"))
+                                        "baseline_revision", "target_revision")}, model=res.get("model"), ai_outcome=res.get("ai_outcome"),
+                   notes=res.get("notes") or [])                                                          # config v2: the model's doubts about the data (memos before v2 have none)
     else:
         out["reason"] = "The memo is being written."
     return out

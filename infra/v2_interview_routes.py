@@ -11,6 +11,8 @@ The interview writes no knowledge itself; the structured controls always remain 
 """
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -56,8 +58,9 @@ def _shell(request, workspace_id, action, *, mutating=True, needs_ai=False):
 
 
 @router.post("/v2/business/gaps/{gap_id}/interview")
-async def start_interview(request: Request, gap_id: str):
-    body = await _json_body(request)
+@db_route
+def start_interview(request: Request, gap_id: str):
+    body = _json_body_sync(request)
     return _shell(request, body.get("workspace_id"), lambda store, tenant, authority: v2_gap_interview.start(store, tenant, body["workspace_id"], gap_id, actor_id=authority["account_id"]), needs_ai=True)
 
 
@@ -72,24 +75,28 @@ def interview_vocabulary(request: Request, session_id: str, workspace_id: str):
 
 
 @router.post("/v2/business/interviews/{session_id}/answer")
-async def answer_interview(request: Request, session_id: str):
-    body = await _json_body(request)
+@db_route
+def answer_interview(request: Request, session_id: str):
+    body = _json_body_sync(request)
     return _shell(request, body.get("workspace_id"), lambda store, tenant, authority: v2_gap_interview.answer(store, tenant, body["workspace_id"], session_id, text=body.get("text"), authority=authority), needs_ai=True)
 
 
 @router.post("/v2/business/interviews/{session_id}/refresh")
-async def refresh_interview(request: Request, session_id: str):
-    body = await _json_body(request)
+@db_route
+def refresh_interview(request: Request, session_id: str):
+    body = _json_body_sync(request)
     return _shell(request, body.get("workspace_id"), lambda store, tenant, authority: v2_gap_interview.refresh(store, tenant, body["workspace_id"], session_id))
 
 
 @router.post("/v2/business/interviews/{session_id}/confirm")
-async def confirm_interview(request: Request, session_id: str):
-    body = await _json_body(request)
+@db_route
+def confirm_interview(request: Request, session_id: str):
+    body = _json_body_sync(request)
     return _shell(request, body.get("workspace_id"), lambda store, tenant, authority: v2_gap_interview.confirm(store, tenant, body["workspace_id"], session_id, authority=authority))
 
 
 @router.post("/v2/business/interviews/{session_id}/stop")
-async def stop_interview(request: Request, session_id: str):
-    body = await _json_body(request)
+@db_route
+def stop_interview(request: Request, session_id: str):
+    body = _json_body_sync(request)
     return _shell(request, body.get("workspace_id"), lambda store, tenant, authority: v2_gap_interview.stop(store, tenant, body["workspace_id"], session_id, authority=authority))

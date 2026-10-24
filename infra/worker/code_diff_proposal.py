@@ -91,7 +91,7 @@ class CodeDiffProposalExecutor:
         for item in rec["items"]:
             if item["status"] not in PROPOSABLE or not item.get("path"):
                 continue
-            path, why = code_patch.resolve_file(item["path"], tracked)
+            path, why = code_patch.resolve_file(item["path"], tracked, repo.get("source_root"))
             reason = why or (code_patch.path_allowed(path, repo["allowlist"], repo["protected"]) if path else None) or ("test_file" if path and cp.is_test_file(path) else None)
             if reason:
                 withheld.append({"ref": item["ref"], "path": item["path"], "reason": reason})
@@ -111,7 +111,7 @@ class CodeDiffProposalExecutor:
         recs = "\n".join(f"- ref={i['ref']} file={p} status={i['status']} rule={i['rule_id']}: {i.get('why') or ''} Desired: {(i.get('desired') or {}).get('text') or ''}"
                          f" Observed: {i.get('observed_logic') or ''}" for i, p in shown_items)
         files = "\n".join(f"=== file {p}\n{t}\n=== end {p}" for p, t in sorted(offered.items()))
-        ctx.request_context.update(cp_frozen=frozen, cp_sha=sha, cp_offered=offered, cp_refs=[i["ref"] for i, _p in shown_items], cp_repo=repo,
+        ctx.request_context.update(cp_frozen=frozen, cp_sha=sha, cp_offered=offered, cp_refs=[i["ref"] for i, _p in shown_items], cp_repo=repo, cp_named=change + "\n" + recs,
                                    cp_coverage={"offered_files": sorted(offered), "withheld": withheld, "items_offered": len(shown_items), "operations": sorted(ops)})
         if not offered:
             return ExecutionRequest(prompt=None, schema=None, provider_calls_planned=0, external=False)       # nothing may be offered: no call
@@ -137,7 +137,7 @@ class CodeDiffProposalExecutor:
                 raise NonRetryableExecutionError("schema_violation", str(exc)) from exc
             model_status = model["status"]
             out = cp.check(model, rc["cp_offered"], rc["cp_refs"], allowlist=rc["cp_repo"]["allowlist"], protected=rc["cp_repo"]["protected"],
-                           limits=rc["cp_frozen"]["limits"], yaml_reader=yaml.safe_load)
+                           limits=rc["cp_frozen"]["limits"], yaml_reader=yaml.safe_load, named=rc.get("cp_named", ""))
         result = {"schema": cp.SCHEMA, "executor_id": EXECUTOR_ID, "config_sha256": rc["cp_sha"], "change_id": p["change_id"], "repo_id": p["repo_id"], "base_sha": p["base_sha"],
                   "recommendation_hash": p["recommendation_hash"], "model_status": model_status, **out, "coverage": rc["cp_coverage"], "label": cp.LABEL,
                   "provider_calls": 0 if request.prompt is None else 1, "applies_nothing": True, "model": {"pinned": model_id, "served": actual}}

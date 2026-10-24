@@ -36,8 +36,9 @@ def _finish(response):
 
 def _unavailable(reason: str, detail: dict) -> ProviderUnavailable:
     """The adapter's reason word plus SAFE diagnostics (exception class, HTTP code, finish reason, sizes): no prompt, no response text."""
+    from infra.worker.safe_diagnostics import safe_diagnostics
     exc = ProviderUnavailable(reason)
-    exc.detail = {k: v for k, v in detail.items() if v is not None}
+    exc.detail = safe_diagnostics({k: v for k, v in detail.items() if v is not None})     # AH-05: typed / allowlisted; a raw SDK message is kept only in its safe form
     return exc
 
 
@@ -54,15 +55,13 @@ class VertexSemanticProvider(Provider):
         self._client_factory = client_factory
 
     def _client(self):
-        # The client object must stay referenced for the whole request: a temporary `genai.Client` is finalised (its HTTP client closed) before the request is
-        # sent ("Cannot send a request, as the client has been closed", live 2026-10-17). It is built once per provider instance and kept on it.
-        if getattr(self, "_held_client", None) is None:
-            if self._client_factory is not None:
-                self._held_client = self._client_factory(self.model_id)
-            else:
-                from infra.worker.live_analysis import _client_for_model
-                self._held_client = _client_for_model(self.model_id)
-        return self._held_client
+        # AH-04: one client per call, owned by that call and closed after it (`generate_and_close`); the local reference keeps it alive for the whole request (a
+        # temporary client was finalised before the request was sent, live 2026-10-17). No client outlives the call, so none can be reused under another account,
+        # project or configuration, and the process-wide adapter holds no transport.
+        if self._client_factory is not None:
+            return self._client_factory(self.model_id)
+        from infra.worker.live_analysis import _client_for_model
+        return _client_for_model(self.model_id)
 
     @staticmethod
     def prompt(layer: str, request) -> str:
@@ -74,10 +73,11 @@ class VertexSemanticProvider(Provider):
             raise ProviderUnavailable("unknown_layer")
         config = {"max_output_tokens": self.max_output_tokens, "response_mime_type": "application/json", "http_options": {"timeout": int(timeout * 1000)}}
         try:
+            from infra.worker.live_analysis import generate_and_close
             client = self._client()
-            response = client.models.generate_content(model=self.model_id, contents=self.prompt(layer, request), config=config)
+            response = generate_and_close(client, model=self.model_id, contents=self.prompt(layer, request), config=config)
         except Exception as exc:                                             # noqa: BLE001  every transport failure is "unavailable" to the adapter; it never raises past it
-            raise _unavailable("transport_error", {"exception": type(exc).__name__, "code": _code(exc), "message": str(exc)[:160]}) from exc
+            raise _unavailable("transport_error", {"exception": type(exc).__name__, "code": _code(exc), "message": str(exc)}) from exc
         try:
             text = getattr(response, "text", None)
         except (ValueError, IndexError, AttributeError) as exc:              # the SDK raises when no candidate carries text

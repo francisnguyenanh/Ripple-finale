@@ -328,6 +328,22 @@ def _find_observation(observations: list, locator: str):
     return None, None
 
 
+def binding_location(binding: Mapping, artifacts: Mapping[str, str]) -> tuple:
+    """-> (path, locator label or None) of a source binding. Two stored forms: "path#label" (config keys, document headings) and a JSON locator without a path
+    (code spans, line spans: extraction candidates store the locator object; live finding SUR03-V2-A10, 2026-10-23, where every code binding lost its file and
+    the coder was offered nothing). The JSON form takes its path from the bound artifact of the pinned revision and its label from the locator."""
+    ref = str(binding.get("evidence_ref") or "")
+    if ref.startswith("{"):
+        try:
+            loc = json.loads(ref)
+        except ValueError:
+            loc = None
+        if isinstance(loc, Mapping):
+            return str(artifacts.get(binding.get("artifact_id")) or ref), _locator_label(loc)
+    path, _, label = ref.partition("#")
+    return path, label or None
+
+
 def _resolve_artifact(artifact_id: str, path: str, artifacts: Mapping[str, str]):
     """-> (artifact_id in the pinned revision or None, rebound: bool)."""
     if artifact_id in artifacts:
@@ -408,8 +424,7 @@ def file_actions(report: Mapping, operations: Iterable[Mapping], rules: Mapping[
             continue
         role = "to_change" if rid in write else "check"
         for b in rule.get("source_bindings") or []:
-            path, _, loc = str(b["evidence_ref"]).partition("#")
-            loc = loc or None
+            path, loc = binding_location(b, artifacts)
             kind = classify_file(path)
             sheet = path.lower().endswith((".xlsx", ".xlsm", ".xls", ".csv"))            # a spreadsheet is a document for the impact inventory but is not prose: never a wording edit
             f = {"path": path, "kind": "other" if sheet else kind}
@@ -463,12 +478,220 @@ def unresolved_items(report: Mapping, rules: Mapping[str, Mapping], start: int) 
         elif g["kind"] == "stale_edge":
             text = "A stored relation points at knowledge that no longer exists; a person checks what it meant before the change is committed."
         elif g["kind"] == "graph_traversal_limited":
-            text = "The relation walk stopped at its limit; further related rules exist and were not checked. Review them before committing."
+            names = [rules[r]["title"] for r in g.get("rule_ids") or [] if r in rules][:5]
+            text = (f"The relation walk stopped at its limit; {g.get('count') or len(g.get('rule_ids') or [])} further connected rule(s) were not checked"
+                    + (" (for example “" + "”, “".join(names) + "”)" if names else "") + ". Review them before committing.")
         else:
             text = g["text"]
         out.append({"ref": f"U{n:03d}", "kind": g["kind"], "rule_id": g["ref"] if g["kind"] in ("no_source_mapping", "stale_edge") else None, "action": "UNRESOLVED", "reason": g["kind"],
                     "instruction": text, "gap_text": g["text"]})
     return out
+
+
+# ---- server holds: what the rules themselves show must be decided by a person ------------------------------------------------------------------------
+
+HOLD_KINDS = ("approval_order_inverted", "dependent_rule_loses_trigger", "conflicts_with_effective_rule")
+HOLD_BASES = ("rules", "accepted_relation", "rule_condition", "recorded_disagreement")      # a model-proposed dependency alone is never a basis: it is checked, then shown as a lead
+_DEPENDENT_TYPES = ("depends_on", "approves", "implements", "exception_to")
+DEPENDENCY_CHECKS = {"trigger_verified": "its own condition is the changed rule's act, so it loses its trigger for the cases the change drops (held above when cases are lost)",
+                     "independent_trigger": "it decides on its own threshold of the same field; this change does not touch what triggers it",
+                     "unverified": "not shown by the rules themselves; a person checks it",
+                     "other_side": "the changed rule is the one said to depend; what triggers the other rule is not touched by this change"}
+
+
+def _tokens(text) -> set:
+    return {t for t in re.split(r"[^a-z0-9]+", str(text or "").lower()) if t}
+
+
+def _state_leaves(rule: Mapping) -> list:
+    """The boolean leaves of a rule's condition whose field names a state another act sets ("cargo.master_approved", "interruption.customer_notice_issued"):
+    -> [(leaf, the words before the state word)]."""
+    out = []
+    for leaf in _hold_leaves(rule.get("condition")):
+        if isinstance(leaf.get("value"), bool):
+            words = [t for t in re.split(r"[^a-z0-9]+", str(leaf.get("field") or "").rsplit(".", 1)[-1].lower()) if t]
+            if len(words) >= 2:
+                out.append((leaf, set(words[:-1])))
+    return out
+
+
+def _triggered_by(dependent: Mapping, rule: Mapping) -> Optional[str]:
+    """Is `dependent` triggered by the act of `rule`? Proven from the dependent's own condition as read from its source: a boolean state leaf named after the
+    changed rule's actor or outcome ("cargo the Ship Master has approved", "when a customer notice is issued"). -> that leaf's field, or None."""
+    names = _tokens(_role_words(rule.get("actor_ref"))) | _tokens((rule.get("outcome") or {}).get("kind"))
+    for leaf, subject in _state_leaves(dependent):
+        if subject and subject <= names:
+            return leaf["field"]
+    return None
+
+
+def dependency_checks(changes: Iterable[Mapping], rules: Mapping[str, Mapping], proposed_dependencies: Iterable[Mapping]) -> dict:
+    """What the server can say about each model-proposed dependency on a changed rule, from the rules themselves: `trigger_verified` (the proposed dependent's
+    own condition is the changed rule's act), `independent_trigger` (it decides on its own threshold of the measured field), `unverified` (neither; a person
+    checks). -> {dep_id: {"check", "text"}}. A proposal is a lead, never a hold on its own."""
+    out = {}
+    live = {rid: r for rid, r in rules.items() if r.get("status") not in ("REJECTED", "SUPERSEDED")}
+    for c in changes:
+        rid, before = c["rule_id"], c["before"]
+        base = rid[:-len("-target")] if rid.endswith("-target") else rid
+        measured = {l["field"] for l in _hold_leaves(before.get("condition")) if _hold_is_num(l.get("value"))}
+        for d in proposed_dependencies or []:
+            if d.get("status") != "PROPOSED" or not d.get("dep_id") or base not in (d.get("from_rule_id"), d.get("to_rule_id")):
+                continue
+            if d.get("to_rule_id") != base or d.get("from_rule_id") not in live:
+                out.setdefault(d["dep_id"], {"check": "other_side", "text": DEPENDENCY_CHECKS["other_side"]})
+                continue
+            dep = live[d["from_rule_id"]]
+            if _triggered_by(dep, before):
+                check = "trigger_verified"
+            elif measured and any(l.get("field") in measured and _hold_is_num(l.get("value")) for l in _hold_leaves(dep.get("condition"))):
+                check = "independent_trigger"
+            else:
+                check = "unverified"
+            out[d["dep_id"]] = {"check": check, "text": DEPENDENCY_CHECKS[check]}
+    return out
+
+
+def _hold_single_numeric(rule: Mapping):
+    leaves = [l for l in _hold_leaves(rule.get("condition")) if _hold_is_num(l.get("value"))]
+    return leaves[0] if len(leaves) == 1 else None
+
+
+def _hold_leaves(cond) -> list:
+    if not isinstance(cond, Mapping):
+        return []
+    if "field" in cond:
+        return [cond]
+    return [leaf for key in ("all", "any") for c in cond.get(key, []) for leaf in _hold_leaves(c)] + (_hold_leaves(cond["not"]) if "not" in cond else [])
+
+
+def _hold_is_num(v) -> bool:
+    if isinstance(v, bool):
+        return False
+    try:
+        float(str(v).replace(",", ""))
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def _hold_num(v) -> float:
+    return float(str(v).replace(",", ""))
+
+
+def _narrows(before: Mapping, after: Mapping) -> Optional[str]:
+    """Does the rule apply to fewer cases after the change? A raised lower bound, a lowered upper bound, a narrower scope or an added conjunct. -> a short
+    statement of the cases that drop out, or None."""
+    b, a = _hold_single_numeric(before), _hold_single_numeric(after)
+    if b and a and b["field"] == a["field"] and b["op"] == a["op"]:
+        x, y = _hold_num(b["value"]), _hold_num(a["value"])
+        if b["op"] in ("gte", "gt") and y > x:
+            return f"cases between {_value_words(b['value'])} and {_value_words(a['value'])} {b.get('unit') or ''}".rstrip()
+        if b["op"] in ("lte", "lt") and y < x:
+            return f"cases between {_value_words(a['value'])} and {_value_words(b['value'])} {b.get('unit') or ''}".rstrip()
+    bs, as_ = before.get("scope") or {}, after.get("scope") or {}
+    for key, vals in bs.items():
+        bv = set(vals if isinstance(vals, list) else [vals])
+        av = set(as_.get(key, []) if isinstance(as_.get(key, []), list) else [as_.get(key)])
+        if key in as_ and av < bv:
+            return f"the {key} values {', '.join(sorted(str(v) for v in bv - av))}"
+    bl, al = _hold_leaves(before.get("condition")), _hold_leaves(after.get("condition"))
+    if isinstance(after.get("condition"), Mapping) and "all" in after["condition"] and len(al) > len(bl) and all(l in al for l in bl):
+        return "the cases that do not meet the added condition"
+    return None
+
+
+def server_holds(changes: Iterable[Mapping], rules: Mapping[str, Mapping], relations: Iterable[Mapping], proposed_dependencies: Iterable[Mapping],
+                 counterevidence_rule_ids: Iterable[str], start: int = 0) -> list:
+    """Holds the server raises from the rules themselves, each with a proven basis: `rules` (two tiers of the same decision — the same outcome kind — whose
+    order the changed number inverts), `accepted_relation` (a confirmed relation of the knowledge), `rule_condition` (the dependent rule's own condition is the
+    changed rule's act, as its source wrote it), `recorded_disagreement`. Two thresholds that merely differ, two actors with different titles, or a dependency a
+    model proposed are no basis (the proposal is checked and shown as a lead: `dependency_checks`). A hold is an unresolved item (ref H00n) a person clarifies;
+    until then it blocks the knowledge decision and downgrades the automatic edits of the held rule. Nothing here names a rule id or a number in advance: every
+    figure comes from the pinned knowledge."""
+    out = []
+    n = start
+    withdrawn = ("REJECTED", "SUPERSEDED")
+    live = {rid: r for rid, r in rules.items() if r.get("status") not in withdrawn}
+    rels = [e for e in relations if e.get("status") == "CONFIRMED" and e.get("type") in _DEPENDENT_TYPES]       # only a confirmed relation is a basis
+    linked = {frozenset((e.get("from"), e.get("to"))) for e in rels}
+    for c in changes:
+        rid, before, after = c["rule_id"], c["before"], c["after"]
+        base = rid[:-len("-target")] if rid.endswith("-target") else rid
+        b, a = _hold_single_numeric(before), _hold_single_numeric(after)
+        if b and a and b["field"] == a["field"] and _hold_num(b["value"]) != _hold_num(a["value"]):
+            x, y = _hold_num(b["value"]), _hold_num(a["value"])
+            kind = (before.get("outcome") or {}).get("kind")
+            for oid, other in sorted(live.items()):
+                obase = oid[:-len("-target")] if oid.endswith("-target") else oid
+                if obase == base or not other.get("actor_ref") or other.get("actor_ref") == before.get("actor_ref"):
+                    continue
+                if not ((kind and (other.get("outcome") or {}).get("kind") == kind) or frozenset((base, obase)) in linked):
+                    continue                                            # a different duty on the same number (a notice beside an approval) has no order to invert
+                o = next((l for l in _hold_leaves(other.get("condition")) if l.get("field") == b["field"] and _hold_is_num(l.get("value"))), None)
+                if o is None or (o["op"] in ("gte", "gt")) != (b["op"] in ("gte", "gt")):
+                    continue
+                s = _hold_num(o["value"])
+                order = lambda v: (v > s) - (v < s)                       # noqa: E731
+                if order(x) != order(y):
+                    n += 1
+                    out.append({"ref": f"H{n:03d}", "kind": "server_hold", "hold": "approval_order_inverted", "rule_id": rid, "other_rule_id": oid, "basis": "rules",
+                                "evidence": {"field": b["field"], "before": b["value"], "after": a["value"], "other_value": o["value"], "actor": before.get("actor_ref"), "other_actor": other.get("actor_ref"),
+                                             "outcome": kind, "relation": "confirmed" if frozenset((base, obase)) in linked else None},
+                                "action": "UNRESOLVED", "reason": "approval_order_inverted",
+                                "instruction": (f"“{before.get('title')}” ({_role_words(before.get('actor_ref'))}) moves from {_value_words(b['value'])} to {_value_words(a['value'])} "
+                                                f"{b.get('unit') or ''}, which puts it on the other side of “{other.get('title')}” ({_role_words(other.get('actor_ref'))}, "
+                                                f"{_value_words(o['value'])} {o.get('unit') or ''}), a tier of the same decision: the order of the two tiers would be inverted. "
+                                                "A person decides how the two rules fit together before this change is made.").replace("  ", " "),
+                                "gap_text": "approval order inverted"})
+        lost = _narrows(before, after)
+        if lost:
+            dependents = []
+            for e in rels:
+                if base in (e.get("from"), e.get("to")):
+                    other = e["to"] if e["from"] == base else e["from"]
+                    if e.get("type") == "approves" and e.get("to") == base:
+                        continue                                        # a role approving this rule is not a rule that depends on it
+                    if other in live and other != base and e.get("from") == other:
+                        dependents.append((other, "accepted_relation", e.get("type")))
+            for did, dep in sorted(live.items()):                       # the dependent's own condition is this rule's act: proven from the rule as its source wrote it
+                dbase = did[:-len("-target")] if did.endswith("-target") else did
+                field = None if dbase == base else _triggered_by(dep, before)
+                if field:
+                    dependents.append((did, "rule_condition", field))
+            seen = set()
+            for did, basis, rel in dependents:
+                if did in seen:
+                    continue
+                seen.add(did)
+                n += 1
+                label = f"a confirmed {rel} relation of the knowledge" if basis == "accepted_relation" else f"its own condition “{rel}” is what this rule decides"
+                out.append({"ref": f"H{n:03d}", "kind": "server_hold", "hold": "dependent_rule_loses_trigger", "rule_id": rid, "other_rule_id": did, "basis": basis,
+                            "evidence": {"relation": rel, "cases_lost": lost}, "action": "UNRESOLVED", "reason": "dependent_rule_loses_trigger",
+                            "instruction": (f"“{live[did].get('title')}” follows from “{before.get('title')}” ({label}); after this change {lost} no longer reach "
+                                            f"“{before.get('title')}”, so “{live[did].get('title')}” would no longer be triggered for them. A person decides whether that is meant."),
+                            "gap_text": "dependent rule loses its trigger"})
+        for oid in sorted(set(counterevidence_rule_ids)):
+            if oid in live and oid != base:
+                n += 1
+                out.append({"ref": f"H{n:03d}", "kind": "server_hold", "hold": "conflicts_with_effective_rule", "rule_id": rid, "other_rule_id": oid, "basis": "recorded_disagreement",
+                            "evidence": {}, "action": "UNRESOLVED", "reason": "conflicts_with_effective_rule",
+                            "instruction": (f"“{before.get('title')}” disagrees with the effective rule “{live[oid].get('title')}” (a recorded disagreement). Changing one side "
+                                            "does not settle it: a person decides which rule stands before this change is made."),
+                            "gap_text": "conflicts with an effective rule"})
+    return out
+
+
+def dependency_requirement(report: Mapping, rules: Mapping[str, Mapping]) -> dict:
+    """Whether a model dependency check is required before guidance: not applicable, with grounds, only when every live rule of the knowledge is already in the
+    impact report (changed, affected or counter-evidence) — there is nothing left for a check to find. Otherwise required."""
+    withdrawn = ("REJECTED", "SUPERSEDED")
+    live = {rid for rid, r in rules.items() if r.get("status") not in withdrawn}
+    covered = set(report.get("write_scope") or []) | {i["rule_id"] for i in report.get("affected_rules") or []} | set(report.get("counterevidence_rule_ids") or [])
+    outside = sorted(live - covered)
+    if not outside:
+        return {"required": False, "reason": "every live rule is already in the impact report; nothing is left for a dependency check", "rules_outside": 0}
+    return {"required": True, "reason": f"{len(outside)} live rule(s) lie outside the impact report", "rules_outside": len(outside)}
 
 
 # ---- the draft -------------------------------------------------------------------------------------------------------------------------------------
@@ -497,13 +720,20 @@ def build_draft(intent: Mapping, report: Mapping, rules: Mapping[str, Mapping], 
     by_rule = {c["rule_id"]: c for c in changes}
     items = file_actions(report, ops, rules, artifacts, observations)
     unresolved = unresolved_items(report, rules, 0)
+    holds = server_holds(changes, rules, relations, proposed_dependencies or [], report.get("counterevidence_rule_ids") or [])
+    held_rules = {h["rule_id"] for h in holds}
+    for it in items:                                                      # the automatic edits of a held rule wait for the person's decision
+        if it["action"] == "AI_EDIT_SUPPORTED" and set(it.get("rule_ids") or []) & held_rules:
+            it.update(server_action="AI_EDIT_SUPPORTED", action="MANUAL", reason="server_hold", held_edit=it["proposal_edit"], proposal_edit=None)
+    unresolved = unresolved + holds
     outcomes = [_op_outcome(o, by_rule[o["rule_id"]], items, unresolved, rules) for o in ops]
     for oc in outcomes:
         oc["simulation"] = next((s for s in report["simulation"] if s["op_id"] == oc["op_id"]), None)
     rel = relation_updates(relations, ops, rules)
     counter = [{"rule_id": rid, "title": rules[rid]["title"] if rid in rules else rid, "label": "disagrees with a changed rule; kept as read-only evidence; not changed by this draft"}
                for rid in report["counterevidence_rule_ids"]]
-    deps = [dict(d, label=PROPOSED_LABEL) for d in (proposed_dependencies or []) if d.get("status") == "PROPOSED"]
+    checks = dependency_checks(changes, rules, proposed_dependencies or [])
+    deps = [dict(d, label=PROPOSED_LABEL, **(checks.get(d.get("dep_id")) or {"check": None, "text": None})) for d in (proposed_dependencies or []) if d.get("status") == "PROPOSED"]
     open_items = [i for i in items if i["action"] in ("UNRESOLVED", "MANUAL")] + unresolved
     invalid = [c for c in changes if not c["valid"]]
     guidance_state = "not_requested"
@@ -511,7 +741,7 @@ def build_draft(intent: Mapping, report: Mapping, rules: Mapping[str, Mapping], 
     coverage.update({"file_actions": {a: sum(1 for i in items if i["action"] == a) for a in ACTIONS}, "unresolved_items": len(unresolved) + sum(1 for i in items if i["action"] == "UNRESOLVED"),
                      "operations": len(ops), "operations_with_complete_file_coverage": sum(1 for o in outcomes if o["file_coverage"] == "complete"),
                      "deterministic_complete": bool(report["coverage"]["complete"]), "dependencies_complete": bool((dependency_state or {}).get("complete")),
-                     "guidance": guidance_state})
+                     "server_holds": len(holds), "guidance": guidance_state})
     coverage["complete"] = bool(coverage["deterministic_complete"] and coverage["dependencies_complete"] and not open_items and not invalid and all(o["file_coverage"] == "complete" for o in outcomes))
     status = "INVALID" if invalid else ("READY_FOR_REVIEW" if not open_items else "PARTIAL")
     semantic = {"pin": dict(pin), "operations": ops, "rule_changes": [{"rule_id": c["rule_id"], "before": c["before"], "after": c["after"]} for c in changes], "relation_updates": rel}
@@ -623,12 +853,20 @@ def merge_guidance(draft: Mapping, guidance: Mapping, *, state: Mapping) -> dict
 def build_guidance_prompt(frozen: Mapping, draft: Mapping, *, can_read_evidence: bool, max_chars: int) -> str:
     changes = [f"- {o['op_id']} ({o['kind']}): {o['what']} | outcome: rule {o['rule_change']}, files complete={o['file_coverage']}" for o in draft["operations"]]
     rules = [f"- {c['title']}\n  before: {c['before_text']}\n  after:  {c['after_text']}" + ("" if c["valid"] else f"\n  REFUSED: {c['error']}") for c in draft["rule_changes"]]
+    for d in draft.get("proposed_dependencies") or []:                  # the completed dependency step: what a model suggested depends on a changed rule (not confirmed)
+        rules.append(f"- related (suggested by a model, not confirmed): {d.get('from_title') or d.get('from_rule_id')} {d.get('relation')} {d.get('to_title') or d.get('to_rule_id')}"
+                     + (f" | server check: {d['text']}" if d.get("text") else ""))
+    st = draft.get("dependency_state") or {}
+    if st.get("status") and st["status"] != "completed":
+        rules.append(f"- dependency check: {st['status']} ({st.get('reason') or 'not run'})")
     lines, used = [], 0
     for it in list(draft["file_actions"]) + list(draft["unresolved"]):
         if it["ref"].startswith("F"):
             line = f"- ref={it['ref']} kind={it['kind']} role={it['role']} action={it['action']} reason={it['reason']}"
             if can_read_evidence:
                 line += f"\n  file: {it['path']}" + (f" at {it['locator']}" if it.get("locator") else "") + (f"\n  stored: {it['stored_text'][:160]}" if it.get("stored_text") else "")
+        elif it["kind"] == "server_hold":                              # business-level: rule titles and values, no file or location; a person must decide
+            line = f"- ref={it['ref']} action=UNRESOLVED HOLD (a person decides) reason={it['reason']} basis={it.get('basis')}: {it['instruction']}"
         else:
             line = f"- ref={it['ref']} action=UNRESOLVED reason={it['reason']}: {it['gap_text'] if can_read_evidence else it['reason']}"
         if used + len(line) > max_chars:
@@ -720,6 +958,8 @@ def semantic_blockers(draft: Mapping, *, acknowledged_flags: bool) -> list:
     for u in draft["unresolved"]:
         if u["kind"] == "no_source_mapping" and u.get("rule_id") in draft["write_scope"] and not u.get("clarification"):
             out.append({"code": "unmapped_changed_rule", "ref": u["ref"], "text": u["instruction"]})
+        if u["kind"] == "server_hold" and not u.get("clarification"):
+            out.append({"code": "server_hold", "ref": u["ref"], "about": u.get("hold"), "text": u["instruction"]})
     return out
 
 
@@ -761,7 +1001,9 @@ def render(draft: Mapping, *, mode: str, can_read_evidence: bool, guidance_writt
     unresolved = []
     for u in draft["unresolved"]:
         row = {"ref": u["ref"], "kind": u["kind"], "action": "UNRESOLVED", "clarification": _clarification_view(u.get("clarification"), can_read_evidence)}
-        if can_read_evidence or u["kind"] in ("graph_traversal_limited",):
+        if u["kind"] == "server_hold":
+            row.update(hold=u.get("hold"), basis=u.get("basis"), other_rule=u.get("other_rule_id"))
+        if can_read_evidence or u["kind"] in ("graph_traversal_limited", "server_hold"):
             row["instruction"] = u["instruction"]
         else:
             row["instruction"] = "A location or relation is unknown; details need evidence rights."
@@ -778,7 +1020,8 @@ def render(draft: Mapping, *, mode: str, can_read_evidence: bool, guidance_writt
                              "flags": [f["text"] for f in c["flags"]]} for c in draft["rule_changes"]],
            "relation_updates": [{"type": r["type"], "action": r["action"], "text": r["text"], "status": r["status"]} for r in draft["relation_updates"]],
            "counterevidence": [{"title": c["title"], "label": c["label"]} for c in draft["counterevidence"]], "excluded": [e["text"] for e in draft["excluded"]],
-           "proposed_dependencies": [{"from": d.get("from_title", d.get("from_rule_id")), "to": d.get("to_title", d.get("to_rule_id")), "relation": d["relation"], "status": "PROPOSED", "label": d["label"]} for d in draft["proposed_dependencies"]],
+           "proposed_dependencies": [{"from": d.get("from_title", d.get("from_rule_id")), "to": d.get("to_title", d.get("to_rule_id")), "relation": d["relation"], "status": "PROPOSED", "label": d["label"],
+                                      "check": d.get("check"), "check_text": d.get("text")} for d in draft["proposed_dependencies"]],
            "dependency_state": {"status": draft["dependency_state"].get("status"), "reason": draft["dependency_state"].get("reason")},
            "files": files if can_read_evidence else [], "files_withheld": 0 if can_read_evidence else len(files), "file_action_counts": draft["coverage"]["file_actions"],
            "unresolved": unresolved, "measured": draft["measured"], "coverage": draft["coverage"], "guidance": guidance,
@@ -792,7 +1035,7 @@ def render(draft: Mapping, *, mode: str, can_read_evidence: bool, guidance_writt
                             "operations": [{k: o[k] for k in ("op_id", "kind", "rule_id", "rule_change", "file_refs", "file_coverage", "error")} for o in draft["operations"]],
                             "rule_changes": [{"rule_id": c["rule_id"], "diff": c["diff"], "invariants": c["invariants"], "valid": c["valid"], "error": c["error"], "op_ids": c["op_ids"]} for c in draft["rule_changes"]],
                             "relation_updates": draft["relation_updates"], "counterevidence_rule_ids": [c["rule_id"] for c in draft["counterevidence"]],
-                            "proposed_dependencies": [{k: d.get(k) for k in ("dep_id", "from_rule_id", "to_rule_id", "relation", "status", "provenance", "changes_write_scope")} for d in draft["proposed_dependencies"]],
+                            "proposed_dependencies": [{k: d.get(k) for k in ("dep_id", "from_rule_id", "to_rule_id", "relation", "status", "provenance", "changes_write_scope", "check")} for d in draft["proposed_dependencies"]],
                             "guidance": {k: g.get(k) for k in ("job_id", "attempt", "result_hash", "integrity", "rejected", "not_addressed") if k in g}}
         if can_read_evidence:
             out["technical"]["file_actions"] = draft["file_actions"] if not hide_guidance else [{k: v for k, v in i.items() if not k.startswith("model_")} for i in draft["file_actions"]]

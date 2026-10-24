@@ -46,6 +46,33 @@ def _token_count(value, name: str) -> int | None:
     return count
 
 
+def close_client(client) -> None:
+    """AH-04: close a provider client the caller owns (success, timeout, malformed answer or exception). A client without `close` (a test fake) is left alone;
+    a failing close never replaces the call's own outcome."""
+    close = getattr(client, "close", None)
+    if callable(close):
+        try:
+            close()
+        except Exception:                      # noqa: BLE001 - cleanup must not mask the primary result
+            pass
+
+
+def generate_and_close(client, **kwargs):
+    """ONE non-streaming `generate_content` on a client owned by this attempt, then close it. The response is fully materialised when the call returns, so
+    closing afterwards is safe; the local reference keeps the client alive for the whole request (a temporary client was finalised mid-request, live
+    2026-10-17). No retry happens here: the client is built with `attempts=1` and the worker's admitted retry policy is the only retry."""
+    try:
+        return client.models.generate_content(**kwargs)
+    finally:
+        close_client(client)
+
+
+def _no_sdk_retry():
+    """The SDK's own retry is pinned off explicitly (its default today is 'never retry'; an SDK upgrade must not add hidden paid attempts)."""
+    from google.genai import types
+    return types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=1))
+
+
 def _client_for_model(model_id: str):
     """Resolve the configured ai_module account without enabling model fallback."""
     from ai_module.router import AIRouter
@@ -61,7 +88,7 @@ def _client_for_model(model_id: str):
         api_key = resolve_aistudio_api_key(get_account(account_id))
         if not api_key:
             raise ValueError("AI Studio account is not configured")
-        return genai.Client(api_key=api_key)
+        return genai.Client(api_key=api_key, http_options=_no_sdk_retry())
     if backend == "vertex":
         from ai_module.accounts import (get_account, resolve_project_id,
                                         resolve_service_account_path)
@@ -79,7 +106,7 @@ def _client_for_model(model_id: str):
                 from google.oauth2 import service_account
                 options["credentials"] = service_account.Credentials.from_service_account_file(
                     key_file, scopes=["https://www.googleapis.com/auth/cloud-platform"])
-        return genai.Client(**options)
+        return genai.Client(**options, http_options=_no_sdk_retry())
     raise ValueError("unsupported live analysis backend")
 
 
@@ -135,7 +162,7 @@ class LiveAnalysisExecutor:
         calls.consume()  # The only network dispatch follows this budget check.
         try:
             client = _client_for_model(model_id)
-            response = client.models.generate_content(
+            response = generate_and_close(client,
                 model=model_id, contents=request.prompt,
                 config={"max_output_tokens": ctx.max_output_tokens,
                         "temperature": 0.2, "response_mime_type": "application/json"},

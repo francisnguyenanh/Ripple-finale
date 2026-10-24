@@ -10,6 +10,8 @@ and stored as that job's result, so reading it is a plain database read:
 """
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 import hashlib
 import json
 import os
@@ -224,13 +226,14 @@ def explanation(request: Request, workspace_id: str, subject: str, subject_id: s
 
 
 @router.post("/v2/explanations")
-async def request_explanation(request: Request):
+@db_route
+def request_explanation(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     ws, subject, subject_id = body.get("workspace_id"), body.get("subject"), body.get("subject_id")
     try:
         authority = _authority(identity, request, ws if isinstance(ws, str) else "")      # sign-in and rights BEFORE the body is looked at

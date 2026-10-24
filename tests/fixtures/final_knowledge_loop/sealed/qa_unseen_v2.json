@@ -1,0 +1,640 @@
+{
+ "note": "SEALED unseen Q-set v2 (agent-authored 2026-10-23 by an independent authoring session with no access to the implementation prompts, earlier runs or the v1 set; never used for tuning; NOT human-authored, NOT an enterprise-user evaluation)",
+ "questions": [
+  {
+   "id": "W01",
+   "group": "paraphrase",
+   "text": "At what spend level does a routine purchase request stop being cleared by the system on its own and need a department head to look at it first?",
+   "expected": {
+    "status_any_of": [
+     "ANSWERED",
+     "PARTIAL"
+    ],
+    "must_cite_rule_ids": [
+     "rule-standard-manager-review"
+    ],
+    "must_not_cite_rule_ids": [
+     "rule-high-risk-director"
+    ],
+    "answer_contains_any": [
+     "1,000,000",
+     "1000000",
+     "1 million",
+     "one million"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "procurement-policy.md 2.1: requests of JPY 1,000,000 or more need the department manager's approval, below that the system approves automatically; approval.yaml routing_rules.standard_manager_threshold_jpy = 1000000; manager-guide.md 'one million yen or more'. Only rule-standard-manager-review is needed; the high-risk director rule is unrelated to the threshold question."
+   }
+  },
+  {
+   "id": "W02",
+   "group": "paraphrase",
+   "text": "When a department wants to buy a large fixed asset rather than day-to-day supplies, which function other than the requester's own manager gets pulled into the approval?",
+   "expected": {
+    "status_any_of": [
+     "ANSWERED",
+     "PARTIAL"
+    ],
+    "must_cite_rule_ids": [],
+    "must_not_cite_rule_ids": [
+     "rule-high-risk-director"
+    ],
+    "answer_contains_any": [
+     "Finance",
+     "finance"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "procurement-policy.md 2.2 refers capital expenditure of JPY 5,000,000 or more to the Finance Controller; approval.yaml capex_finance_threshold_jpy = 2000000 and routing.py route CAPEX >= 2,000,000 to NEEDS_FINANCE. Either CAPEX Finance rule (rule-capex-finance-config or rule-capex-finance-policy) answers the role question, so no single id is mandatory; the sources disagree on the threshold so PARTIAL is acceptable. The high-risk supplier rule is about supplier risk, not asset category, so citing it as applying would be wrong."
+   }
+  },
+  {
+   "id": "W03",
+   "group": "paraphrase",
+   "text": "Does a vendor that Supplier Management has flagged as risky change who signs off an order, even when the ticket is tiny?",
+   "expected": {
+    "status_any_of": [
+     "ANSWERED",
+     "PARTIAL"
+    ],
+    "must_cite_rule_ids": [
+     "rule-high-risk-director"
+    ],
+    "must_not_cite_rule_ids": [],
+    "answer_contains_any": [
+     "Director",
+     "director"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "procurement-policy.md 2.3: any purchase from a supplier on the high-risk register is referred to the Operations Director regardless of amount; manager-guide.md table row 'Supplier on the high-risk register -> Operations Director'; routing.py/emergency.py route SupplierRisk.HIGH to config.high_risk_route = NEEDS_DIRECTOR. rule-high-risk-director (condition supplier.risk == HIGH, no amount condition) is the rule that answers this."
+   }
+  },
+  {
+   "id": "W04",
+   "group": "paraphrase",
+   "text": "Is there a price point under which a request goes through without any person having to approve it?",
+   "expected": {
+    "status_any_of": [
+     "ANSWERED",
+     "PARTIAL"
+    ],
+    "must_cite_rule_ids": [
+     "rule-standard-manager-review"
+    ],
+    "must_not_cite_rule_ids": [
+     "rule-high-risk-director",
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy"
+    ],
+    "answer_contains_any": [
+     "1,000,000",
+     "1000000",
+     "1 million",
+     "one million",
+     "auto",
+     "Auto",
+     "system"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "procurement-policy.md 2.1: 'Requests below this amount are approved automatically by the procurement system and require no human sign-off' (this amount = JPY 1,000,000); manager-guide.md 'Anything smaller is handled by the system'; routing.py returns AUTO below standard_manager_threshold_jpy. The automatic band is defined by rule-standard-manager-review's threshold. The CAPEX and high-risk rules have no bearing on the general auto band (high risk applies regardless of amount, so citing it as the price point would be wrong)."
+   }
+  },
+  {
+   "id": "W05",
+   "group": "paraphrase",
+   "text": "How long may an approver leave a request untouched before it moves up to the next level on its own?",
+   "expected": {
+    "status_any_of": [
+     "ANSWERED",
+     "PARTIAL",
+     "NEEDS_CLARIFICATION"
+    ],
+    "must_cite_rule_ids": [],
+    "must_not_cite_rule_ids": [
+     "rule-high-risk-director",
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy"
+    ],
+    "answer_contains_any": [
+     "two working days",
+     "2 working days",
+     "two days",
+     "2 days",
+     "working days"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "manager-guide.md 'Turnaround': 'Please action requests within two working days. After that they escalate to your own manager automatically'. This is a passage, not one of the structured gates, so the answer may rest on the passage (PARTIAL) or be ANSWERED; NEEDS_CLARIFICATION is tolerated if the product asks which approver is meant. None of the CAPEX or high-risk rules concern turnaround."
+   }
+  },
+  {
+   "id": "W06",
+   "group": "multi_hop",
+   "text": "A buyer raises an ordinary (non-emergency) operating-expense request for 1,200,000 JPY with Harbor Partner 17 Ltd, which is on the high-risk register. Which approvals does this request need?",
+   "expected": {
+    "status_any_of": [
+     "ANSWERED",
+     "PARTIAL"
+    ],
+    "must_cite_rule_ids": [
+     "rule-standard-manager-review",
+     "rule-high-risk-director"
+    ],
+    "must_not_cite_rule_ids": [
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy"
+    ],
+    "answer_contains_any": [
+     "Director",
+     "director"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "Two gates apply together: rule-standard-manager-review (STANDARD scope, 1,200,000 >= 1,000,000 per procurement-policy.md 2.1 / approval.yaml standard_manager_threshold_jpy) and rule-high-risk-director (supplier.risk == HIGH per procurement-policy.md 2.3; suppliers.csv lists SUP-017 as HIGH). The category is OPEX, so neither CAPEX Finance rule (both require category == CAPEX) applies and citing them as applying is wrong."
+   }
+  },
+  {
+   "id": "W07",
+   "group": "multi_hop",
+   "text": "A standard-process capital purchase of 2,500,000 JPY is raised with a normal-risk, active supplier. Who has to approve it?",
+   "expected": {
+    "status_any_of": [
+     "ANSWERED",
+     "PARTIAL"
+    ],
+    "must_cite_rule_ids": [
+     "rule-standard-manager-review",
+     "rule-capex-finance-config"
+    ],
+    "must_not_cite_rule_ids": [
+     "rule-high-risk-director"
+    ],
+    "answer_contains_any": [
+     "Finance",
+     "finance"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "rule-standard-manager-review applies (STANDARD, 2,500,000 >= 1,000,000; procurement-policy.md 2.1). rule-capex-finance-config applies (CAPEX and 2,500,000 >= 2,000,000; approval.yaml capex_finance_threshold_jpy = 2000000, routing.py CAPEX_HIGH_VALUE). rule-capex-finance-policy (5,000,000; procurement-policy.md 2.2) does not reach 2,500,000, but the product may disclose the disagreement, so it is not forbidden. The supplier is normal risk, so rule-high-risk-director does not apply."
+   }
+  },
+  {
+   "id": "W08",
+   "group": "multi_hop",
+   "text": "Under the standard process, a 7,500,000 JPY capital-equipment request is submitted with a supplier of normal risk. List every approval it triggers.",
+   "expected": {
+    "status_any_of": [
+     "ANSWERED",
+     "PARTIAL"
+    ],
+    "must_cite_rule_ids": [
+     "rule-standard-manager-review",
+     "rule-capex-finance-config"
+    ],
+    "must_not_cite_rule_ids": [
+     "rule-high-risk-director"
+    ],
+    "answer_contains_any": [
+     "Finance",
+     "finance"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "rule-standard-manager-review: 7,500,000 >= 1,000,000 (procurement-policy.md 2.1). rule-capex-finance-config: CAPEX and 7,500,000 >= 2,000,000 (approval.yaml, routing.py). rule-capex-finance-policy also matches (7,500,000 >= 5,000,000, procurement-policy.md 2.2) and may be cited, but the config/code rule is the one required because it is the one settled in code and configuration. Normal-risk supplier: rule-high-risk-director does not apply."
+   }
+  },
+  {
+   "id": "W09",
+   "group": "exception_scope",
+   "text": "When a request is raised on the urgent track because a production line is about to stop, who approves it?",
+   "expected": {
+    "status_any_of": [
+     "PARTIAL",
+     "NEEDS_CLARIFICATION",
+     "ABSTAINED"
+    ],
+    "must_cite_rule_ids": [],
+    "must_not_cite_rule_ids": [],
+    "answer_contains_any": [
+     "emergency",
+     "Emergency",
+     "urgent",
+     "not",
+     "unclear",
+     "open",
+     "differ",
+     "conflict",
+     "disagree",
+     "pending",
+     "question"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "The sources do not agree: manager-guide.md says emergency purchases are 'Fast-tracked automatically'; procurement-policy.md 3 only points to SOP-PROC-002 section 6 (not among the sources); emergency.py still routes >= 1,000,000 JPY to NEEDS_MANAGER and CAPEX >= 2,000,000 to NEEDS_FINANCE. rule-emergency-routing has no actor, condition or outcome (PENDING_HUMAN). A fair answer discloses the open question and does not present a single approver as settled, so ANSWERED is not accepted."
+   }
+  },
+  {
+   "id": "W10",
+   "group": "exception_scope",
+   "text": "Does the one-million-yen manager sign-off also govern requests that use the emergency procedure, or is it limited to the normal route?",
+   "expected": {
+    "status_any_of": [
+     "ANSWERED",
+     "PARTIAL",
+     "NEEDS_CLARIFICATION"
+    ],
+    "must_cite_rule_ids": [
+     "rule-standard-manager-review"
+    ],
+    "must_not_cite_rule_ids": [],
+    "answer_contains_any": [
+     "standard",
+     "Standard",
+     "normal",
+     "ordinary",
+     "only",
+     "not apply",
+     "does not apply",
+     "emergency",
+     "Emergency"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "rule-standard-manager-review has scope process = [STANDARD] (procurement-policy.md 2.1 'Standard purchases'; routing.py route_request). Emergency routing in emergency.py uses a separate hard-coded 1,000,000 line, which the knowledge model keeps as rule-emergency-routing (unresolved), not as the standard rule (expected_knowledge forbids merging the two). The answer must cite the manager rule and say its scope is the standard process; it may disclose the emergency uncertainty."
+   }
+  },
+  {
+   "id": "W11",
+   "group": "exception_scope",
+   "text": "Can the Osaka plant still buy tooling spares through the emergency process under its registered exception?",
+   "expected": {
+    "status_any_of": [
+     "ANSWERED",
+     "PARTIAL",
+     "NEEDS_CLARIFICATION"
+    ],
+    "must_cite_rule_ids": [],
+    "must_not_cite_rule_ids": [
+     "rule-high-risk-director",
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy",
+     "rule-standard-manager-review"
+    ],
+    "answer_contains_any": [
+     "expired",
+     "Expired",
+     "2020",
+     "no longer",
+     "not",
+     "ended",
+     "lapsed"
+    ],
+    "answer_must_not_contain": [
+     "still valid",
+     "still active",
+     "still in force",
+     "remains valid"
+    ],
+    "rationale": "exception-handling.md register: EXC-2019-004 'Osaka plant may use emergency process for tooling spares', Ops Director, 2019-08-01 to 2020-08-01, Status Expired. The exception ended on 2020-08-01, so a correct answer says it is expired and cannot be relied on. No approval-gate rule is needed for this; the forbidden phrases would assert the opposite of the register."
+   }
+  },
+  {
+   "id": "W12",
+   "group": "exception_scope",
+   "text": "The approval configuration and the written procurement policy give different capital-expenditure cut-offs for involving Finance. Which figure is currently in force?",
+   "expected": {
+    "status_any_of": [
+     "PARTIAL",
+     "ANSWERED",
+     "NEEDS_CLARIFICATION"
+    ],
+    "must_cite_rule_ids": [
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy"
+    ],
+    "must_not_cite_rule_ids": [
+     "rule-high-risk-director"
+    ],
+    "answer_contains_any": [
+     "2,000,000",
+     "2000000",
+     "2 million",
+     "5,000,000",
+     "5000000",
+     "5 million"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "approval.yaml capex_finance_threshold_jpy = 2000000 and routing.py (rule-capex-finance-config) versus procurement-policy.md 2.2 'JPY 5,000,000 or more' and manager-guide.md 'Capital expenditure over 5,000,000' (rule-capex-finance-policy). Both sides must be cited. While the disagreement is open the answer stays PARTIAL; if a person has decided (target rule), ANSWERED with the decided figure is acceptable. The high-risk rule is unrelated."
+   }
+  },
+  {
+   "id": "W13",
+   "group": "concrete_case",
+   "text": "A standard operating-expense request for 3,000,000 JPY is placed with Harbor Partner 05 Ltd, an active supplier with normal risk. Who must approve it?",
+   "expected": {
+    "status_any_of": [
+     "ANSWERED",
+     "PARTIAL"
+    ],
+    "must_cite_rule_ids": [
+     "rule-standard-manager-review"
+    ],
+    "must_not_cite_rule_ids": [
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy",
+     "rule-high-risk-director"
+    ],
+    "answer_contains_any": [
+     "manager",
+     "Manager"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "rule-standard-manager-review applies: STANDARD and 3,000,000 >= 1,000,000 (procurement-policy.md 2.1; approval.yaml). The question states OPEX, so both CAPEX Finance rules (condition category == CAPEX) do NOT apply even though the amount exceeds 2,000,000; citing them as applying is wrong. SUP-005 is ACTIVE/NORMAL in suppliers.csv, so rule-high-risk-director does not apply."
+   }
+  },
+  {
+   "id": "W14",
+   "group": "concrete_case",
+   "text": "A 400,000 JPY operating-expense order on the standard route is placed with Harbor Partner 18 Ltd, which sits on the high-risk register. Does anyone have to approve it, and who?",
+   "expected": {
+    "status_any_of": [
+     "ANSWERED",
+     "PARTIAL"
+    ],
+    "must_cite_rule_ids": [
+     "rule-high-risk-director"
+    ],
+    "must_not_cite_rule_ids": [
+     "rule-standard-manager-review",
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy"
+    ],
+    "answer_contains_any": [
+     "Director",
+     "director"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "rule-high-risk-director applies regardless of amount (procurement-policy.md 2.3; suppliers.csv SUP-018 risk HIGH; routing.py SUPPLIER_HIGH_RISK -> NEEDS_DIRECTOR). 400,000 < 1,000,000, so rule-standard-manager-review does not apply; OPEX and below 2,000,000, so neither CAPEX rule applies."
+   }
+  },
+  {
+   "id": "W15",
+   "group": "concrete_case",
+   "text": "A capital-expenditure request of 1,500,000 JPY under the standard process with a normal-risk supplier: which approvals apply?",
+   "expected": {
+    "status_any_of": [
+     "ANSWERED",
+     "PARTIAL"
+    ],
+    "must_cite_rule_ids": [
+     "rule-standard-manager-review"
+    ],
+    "must_not_cite_rule_ids": [
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy",
+     "rule-high-risk-director"
+    ],
+    "answer_contains_any": [
+     "manager",
+     "Manager"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "rule-standard-manager-review: 1,500,000 >= 1,000,000 (procurement-policy.md 2.1). Although the category is CAPEX, 1,500,000 is below both Finance thresholds (2,000,000 in approval.yaml/routing.py; 5,000,000 in procurement-policy.md 2.2), so neither CAPEX Finance rule applies and citing one as applying is wrong. Normal risk: no director referral."
+   }
+  },
+  {
+   "id": "W16",
+   "group": "concrete_case",
+   "text": "A buyer submits a standard operating-expense request for 950,000 JPY with Harbor Partner 09 Ltd (active, normal risk). Is any human approval required?",
+   "expected": {
+    "status_any_of": [
+     "ANSWERED",
+     "PARTIAL",
+     "NEEDS_CLARIFICATION"
+    ],
+    "must_cite_rule_ids": [],
+    "must_not_cite_rule_ids": [
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy",
+     "rule-high-risk-director"
+    ],
+    "answer_contains_any": [
+     "auto",
+     "Auto",
+     "no approval",
+     "no human",
+     "without",
+     "not require",
+     "does not require",
+     "system",
+     "no sign-off",
+     "none"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "950,000 < 1,000,000, so rule-standard-manager-review's condition is not met; procurement-policy.md 2.1 says requests below that amount are approved automatically with no human sign-off, and routing.py returns AUTO / AUTO_APPROVED. OPEX below 2,000,000: no CAPEX rule; SUP-009 NORMAL: no director. The manager rule may be cited to explain the threshold, so it is not forbidden; the three other gates must not be cited as applying."
+   }
+  },
+  {
+   "id": "W17",
+   "group": "currency",
+   "text": "A standard operating-expense request is raised for USD 25,000 with a normal-risk supplier. Which approval does it need?",
+   "expected": {
+    "status_any_of": [
+     "NEEDS_CLARIFICATION",
+     "PARTIAL"
+    ],
+    "must_cite_rule_ids": [],
+    "must_not_cite_rule_ids": [
+     "rule-high-risk-director"
+    ],
+    "answer_contains_any": [
+     "JPY",
+     "yen",
+     "currency",
+     "convert",
+     "Japanese"
+    ],
+    "answer_must_not_contain": [
+     "USD 25,000 is above",
+     "USD 25,000 exceeds",
+     "equivalent to",
+     "exchange rate of"
+    ],
+    "rationale": "approval.yaml currency: JPY; routing.py rejects any requisition whose currency != 'JPY' (UNSUPPORTED_CURRENCY); every threshold is stated in JPY. The product must not convert the amount, so no amount-based gate can be evaluated and the answer should ask for the JPY amount or state that only JPY is supported. The supplier is normal risk so the director rule does not apply. Forbidden phrases would mean the product converted or compared the USD figure."
+   }
+  },
+  {
+   "id": "W18",
+   "group": "abstain",
+   "text": "What is the maximum number of purchase requests a single buyer may submit in one month?",
+   "expected": {
+    "status_any_of": [
+     "ABSTAINED",
+     "NEEDS_CLARIFICATION"
+    ],
+    "must_cite_rule_ids": [],
+    "must_not_cite_rule_ids": [
+     "rule-standard-manager-review",
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy",
+     "rule-high-risk-director",
+     "rule-emergency-routing"
+    ],
+    "answer_contains_any": [
+     "no rule",
+     "not covered",
+     "does not answer",
+     "not answer",
+     "missing",
+     "cannot",
+     "unknown",
+     "no information",
+     "not addressed",
+     "not found",
+     "no evidence",
+     "do not cover",
+     "does not cover",
+     "not specify",
+     "not state",
+     "outside",
+     "clarify",
+     "specify",
+     "not contain",
+     "nothing in",
+     "no source",
+     "not documented"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "None of procurement-policy.md, manager-guide.md, exception-handling.md, approval.yaml, routing.py, emergency.py or approval.py mentions any per-buyer volume or monthly cap. The correct behaviour is to abstain and cite nothing."
+   }
+  },
+  {
+   "id": "W19",
+   "group": "abstain",
+   "text": "What early-payment discount does Harbor take when it settles a supplier invoice ahead of the due date?",
+   "expected": {
+    "status_any_of": [
+     "ABSTAINED",
+     "NEEDS_CLARIFICATION"
+    ],
+    "must_cite_rule_ids": [],
+    "must_not_cite_rule_ids": [
+     "rule-standard-manager-review",
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy",
+     "rule-high-risk-director",
+     "rule-emergency-routing"
+    ],
+    "answer_contains_any": [
+     "no rule",
+     "not covered",
+     "does not answer",
+     "not answer",
+     "missing",
+     "cannot",
+     "unknown",
+     "no information",
+     "not addressed",
+     "not found",
+     "no evidence",
+     "do not cover",
+     "does not cover",
+     "not specify",
+     "not state",
+     "outside",
+     "clarify",
+     "specify",
+     "not contain",
+     "nothing in",
+     "no source",
+     "not documented"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "The sources define a 30-day payment term (approval.yaml payment_term_days, calculations.py due date) but no discount for early settlement. Nothing supports an answer; the product should abstain and cite no approval rule."
+   }
+  },
+  {
+   "id": "W20",
+   "group": "abstain",
+   "text": "Who signs off the annual supplier performance scorecard before it is sent to the supplier?",
+   "expected": {
+    "status_any_of": [
+     "ABSTAINED",
+     "NEEDS_CLARIFICATION"
+    ],
+    "must_cite_rule_ids": [],
+    "must_not_cite_rule_ids": [
+     "rule-standard-manager-review",
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy",
+     "rule-high-risk-director",
+     "rule-emergency-routing"
+    ],
+    "answer_contains_any": [
+     "no rule",
+     "not covered",
+     "does not answer",
+     "not answer",
+     "missing",
+     "cannot",
+     "unknown",
+     "no information",
+     "not addressed",
+     "not found",
+     "no evidence",
+     "do not cover",
+     "does not cover",
+     "not specify",
+     "not state",
+     "outside",
+     "clarify",
+     "specify",
+     "not contain",
+     "nothing in",
+     "no source",
+     "not documented"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "No source describes supplier performance scorecards or their sign-off; procurement-policy.md 2.3 only mentions that the high-risk register is reviewed quarterly by Supplier Management, which is a different matter. The product should abstain and cite nothing."
+   }
+  },
+  {
+   "id": "W21",
+   "group": "abstain",
+   "text": "What per-diem rate applies to a buyer travelling to inspect a supplier's factory?",
+   "expected": {
+    "status_any_of": [
+     "ABSTAINED",
+     "NEEDS_CLARIFICATION"
+    ],
+    "must_cite_rule_ids": [],
+    "must_not_cite_rule_ids": [
+     "rule-standard-manager-review",
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy",
+     "rule-high-risk-director",
+     "rule-emergency-routing"
+    ],
+    "answer_contains_any": [
+     "no rule",
+     "not covered",
+     "does not answer",
+     "not answer",
+     "missing",
+     "cannot",
+     "unknown",
+     "no information",
+     "not addressed",
+     "not found",
+     "no evidence",
+     "do not cover",
+     "does not cover",
+     "not specify",
+     "not state",
+     "outside",
+     "clarify",
+     "specify",
+     "not contain",
+     "nothing in",
+     "no source",
+     "not documented"
+    ],
+    "answer_must_not_contain": [],
+    "rationale": "Travel and per-diem rates are outside all seven sources (approval policy, manager guide, exception handling, config and routing/approval code). Abstention with no citation is the only correct result."
+   }
+  }
+ ]
+}

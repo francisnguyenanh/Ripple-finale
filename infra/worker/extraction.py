@@ -31,7 +31,8 @@ from infra.worker.execution_types import (is_timeout_exception,
     NonRetryableExecutionError, ProviderCallBudget, ProviderExecutionError,
     ProviderInvalidResponseError, ProviderRateLimitError, ProviderTimeoutError,
 )
-from infra.worker.live_analysis import (
+from infra.worker.safe_diagnostics import safe_reason
+from infra.worker.live_analysis import (generate_and_close,
     _client_for_model, _escape_source_delimiters, _field, _token_count,
 )
 
@@ -583,7 +584,7 @@ class ExtractRulesExecutor:
         calls.consume()
         try:
             client = _client_for_model(model_id)
-            response = client.models.generate_content(
+            response = generate_and_close(client,
                 model=model_id, contents=request.prompt, config=call_config)
         except Exception as exc:
             code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
@@ -713,7 +714,7 @@ class ExtractRulesExecutor:
                     bucket["rationales"].append(rationale)
                 bucket["merged_count"] += 1
             except ValidationError as exc:
-                rejected_report.append({"index": index, "reason": f"schema_invalid: {exc}"})
+                rejected_report.append({"index": index, "reason": safe_reason(NonRetryableExecutionError("schema_invalid", str(exc)))})   # AH-05: typed, bounded
                 continue
 
         built: list[dict] = []
@@ -731,7 +732,7 @@ class ExtractRulesExecutor:
                                     if bucket["rationales"] else {}),
                     actor=bucket["actor"], model_run_id=model_run_id)
             except ValidationError as exc:
-                rejected_report.append({"reason": f"schema_invalid: {exc}"})
+                rejected_report.append({"reason": safe_reason(NonRetryableExecutionError("schema_invalid", str(exc)))})
                 continue
             built.append({
                 "candidate_id": candidate.candidate_id, "subject": candidate.subject,

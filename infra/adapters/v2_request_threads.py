@@ -177,6 +177,7 @@ def ask(store, tenant, ws, tid, authority, *, question, idempotency_key, after_s
     if prior is not None:
         if prior["payload_hash"] != payload_hash:
             raise AssistantRefused("idempotency_conflict", "the same key was used for a different question")
+        store.link_job_request(tenant, ws, prior["job_id"])                                    # AH-05: the retrying request is linked to the same job
         return {**read_thread(store, tenant, ws, tid, authority), "replayed": True, "message_id": prior["message_id"]}
     if pack.get("overflow"):                                                                  # refused before any job or provider call; nothing is trimmed to fit
         raise AssistantRefused("context_overflow", "this request has more required facts than one question can carry; use the request's own pages", 409)
@@ -203,6 +204,7 @@ def ask(store, tenant, ws, tid, authority, *, question, idempotency_key, after_s
     except psycopg2.IntegrityError:                                                           # a concurrent click of the SAME question won the race: replay it, never a second job
         won = next((m for m in _messages(store, tenant, ws, tid) if m["idempotency_key"] == idempotency_key), None)
         if won is not None and won["payload_hash"] == payload_hash:
+            store.link_job_request(tenant, ws, won["job_id"])
             return {**read_thread(store, tenant, ws, tid, authority), "replayed": True, "message_id": won["message_id"]}
         raise AssistantRefused("sequence_conflict", "the conversation changed in another window; reload it before asking")
     try:
@@ -219,6 +221,7 @@ def ask(store, tenant, ws, tid, authority, *, question, idempotency_key, after_s
 
 
 SOURCE_FACT_KINDS = ("impact", "rule_change")
+CITATION_PAGE = 10                                                                    # AH-02: bindings resolved per citation request (the page shown)
 
 
 def _rules_for_fact(store, tenant, ws, family, rid, authority, fact) -> list:
@@ -286,22 +289,49 @@ def citation_source(store, tenant, ws, tid, mid, fact_ref, authority) -> dict:
     if "evidence.read" not in permissions_for(authority.get("roles")):
         return {**out, "reason": "needs_evidence_rights"}                                 # no path, no excerpt
     rules = _rules_for_fact(store, tenant, ws, t["family"], t["request_id"], authority, fact)
-    head = store.head(tenant, ws)
-    sources = []
+    # AH-02: select the bounded, de-duplicated set of bindings FIRST (rule order, then binding order, first occurrence kept), then do the per-binding work for
+    # that page only, with bulk reads: before, every binding cost a head read, two revision reads and a blob read, and all of it was done before `[:10]`.
+    seen, bindings = set(), []
     for r in rules:
         for b in r.get("source_bindings") or []:
-            path, _, loc = str(b["evidence_ref"]).partition("#")
-            now = store.artifact_head_hash(tenant, ws, b["artifact_id"])
-            with store._tx() as cur:
-                cur.execute("SELECT blob_hash FROM v2_artifact_revisions WHERE tenant_id=%s AND workspace_id=%s AND source_revision_id=%s AND artifact_id=%s",
-                            (tenant, ws, b["revision_id"], b["artifact_id"]))
-                row = cur.fetchone()
-            state = "absent_now" if now is None else ("current" if b["revision_id"] == head.source_revision_id or (row and row[0] == now) else "changed_since")
-            sources.append({"logical_path": path, "locator": loc or None, "revision_id": b["revision_id"], "state": state,
-                            "excerpt": _yaml_excerpt(store, tenant, ws, b["revision_id"], b["artifact_id"], path, loc or None) if row else None})
-    if not sources:
+            key = (b.get("artifact_id"), b.get("revision_id"), str(b.get("evidence_ref")))
+            if key not in seen:
+                seen.add(key)
+                bindings.append(b)
+    if not bindings:
         return {**out, "reason": "no_source_binding"}
-    return {**out, "available": True, "sources": sources[:10], "sources_total": len(sources)}
+    page = bindings[:CITATION_PAGE]
+    head = store.head(tenant, ws)
+    ids = sorted({b["artifact_id"] for b in page})
+    pairs = sorted({(b["revision_id"], b["artifact_id"]) for b in page})
+    with store._tx() as cur:
+        now = {}
+        if head.source_revision_id is not None:
+            cur.execute("""SELECT artifact_id, blob_hash FROM v2_artifact_revisions WHERE tenant_id=%s AND workspace_id=%s AND source_revision_id=%s
+                           AND artifact_id = ANY(%s)""", (tenant, ws, head.source_revision_id, ids))
+            now = dict(cur.fetchall())
+        cur.execute("""SELECT r.source_revision_id, r.artifact_id, r.blob_hash FROM v2_artifact_revisions r
+                       JOIN unnest(%s::text[], %s::text[]) AS w(rev, art) ON r.source_revision_id = w.rev AND r.artifact_id = w.art
+                       WHERE r.tenant_id=%s AND r.workspace_id=%s""", ([x[0] for x in pairs], [x[1] for x in pairs], tenant, ws))
+        then = {(row[0], row[1]): row[2] for row in cur.fetchall()}
+    from core.change_intelligence.v2.business_draft import binding_location
+    paths: dict = {}                                                                      # revision -> {artifact_id: logical_path}, read once per revision on the page
+    sources = []
+    for b in page:
+        rev, art = b["revision_id"], b["artifact_id"]
+        if rev not in paths:
+            try:
+                view = store.source_revision_view(tenant, ws, rev)
+                paths[rev] = {a["artifact_id"]: a.get("logical_path") or a["artifact_id"] for a in view["artifacts"]}
+            except Exception:                                                             # noqa: BLE001 - a missing revision gives no path, never a guess
+                paths[rev] = {}
+        path, loc = binding_location(b, paths[rev])                                       # JSON code / line locators keep their file (same rule as the draft)
+        row = then.get((rev, art))
+        current = now.get(art)
+        state = "absent_now" if current is None else ("current" if rev == head.source_revision_id or (row is not None and row == current) else "changed_since")
+        sources.append({"logical_path": path, "locator": loc, "revision_id": rev, "state": state,
+                        "excerpt": _yaml_excerpt(store, tenant, ws, rev, art, path, loc) if row is not None else None})
+    return {**out, "available": True, "sources": sources, "sources_total": len(bindings), "has_more": len(bindings) > len(page)}
 
 
 def first_thread_id(tenant: str, ws: str, account: str, ref: dict, idempotency_key: str) -> str:

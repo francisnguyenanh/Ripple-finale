@@ -12,6 +12,8 @@ the existing `apply` job (`POST /v2/jobs`), never from here.
 
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 import os
 
 from fastapi import APIRouter, Request
@@ -116,13 +118,14 @@ def history_diff(request: Request, workspace_id: str):
 
 
 @router.post("/v2/restore/preview")
-async def restore_preview(request: Request):
+@db_route
+def restore_preview(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _services()
     if identity is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, target = body.get("workspace_id"), body.get("target_revision_id")
     if not _nonblank(workspace_id):
         return _error("workspace_id required", 400)
@@ -150,13 +153,14 @@ async def restore_preview(request: Request):
 
 
 @router.post("/v2/restore/approve")
-async def restore_approve(request: Request):
+@db_route
+def restore_approve(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _services()
     if identity is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, target = body.get("workspace_id"), body.get("target_revision_id")
     digest, reason = body.get("expected_preview_digest"), body.get("reason")
     key = body.get("idempotency_key")

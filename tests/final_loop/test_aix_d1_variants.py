@@ -379,3 +379,19 @@ def test_a_failed_variant_can_be_requested_again_as_a_new_attempt_and_the_first_
     assert vstate(q, q.admin, r.json()["variant_id"]).json()["status"] == "generated" and stub.calls == 1 and job_body(q.admin, q.env, first)["execution_status"] == "FAILED"
     assert q.admin.post(f"/v2/business/documents/{aid}/variants", json={"workspace_id": q.env.ws, "audience": "audit", "attempt": 4}).status_code == 400
     assert dv.variant_id_for("a", "sop", "en", SHA, "m") == dv.variant_id_for("a", "sop", "en", SHA, "m", attempt=1) != dv.variant_id_for("a", "sop", "en", SHA, "m", attempt=2)
+
+
+def test_a_narrative_summary_citing_its_rules_without_numbers_needs_no_claim_rows_and_every_other_paragraph_still_does():
+    """Contract version 3 asks a narrative paragraph that names roles to cite the rules it summarises (EV-VARIANT-V4: such summaries were refused for missing claim
+    rows, so the mandatory summary fell back). Claim rows restate thresholds; a summary stating none needs none. Role words stay checked against the cited facts;
+    a number, or a non-narrative section, keeps the claim check."""
+    pack, _ = pack_of([R1, R2])
+    cfg = FROZEN["audiences"]["executive"]
+    out = dv.check(model([("summary", [("Two controls govern purchases: the manager and the finance director approve.", ["rule-a", "rule-b"], []),
+                                       ("The manager approves from 1,000,000 JPY.", ["rule-a"], []),                 # a number without claim rows: refused
+                                       ("The finance director approves these purchases.", ["rule-a"], [])]),         # a role of a fact it does not cite: refused
+                          ("material_risks", [("Purchases need the manager.", ["rule-a"], [])])]), pack, cfg, FROZEN["fidelity"])   # not narrative: refused
+    assert [p["text"] for p in out["kept"]["summary"]] == ["Two controls govern purchases: the manager and the finance director approve."]
+    assert [r["reason"] for r in out["rejected"]] == ["claims_do_not_match_cited_rules", "actor_not_in_referenced_facts:finance director",
+                                                      "claims_do_not_match_cited_rules"]
+    assert out["missing_mandatory"] == ["material_risks"]

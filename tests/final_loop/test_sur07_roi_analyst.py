@@ -69,7 +69,8 @@ def roi_env(qa_env, monkeypatch, tmp_path):                  # noqa: F811
 def analyst(prompt):
     metrics = dict(re.findall(r"- (\S+) = (\S+)", prompt.split("<metrics>\n")[1].split("</metrics>")[0]))
     assert "SYNTHETIC" in prompt and "2026-03-01" not in prompt and "amount_jpy" not in prompt                          # the records themselves are never sent, only the metric table
-    return {"status": "memo", "notes": [],
+    assert "The declared assumptions are exactly these keys: minutes_per_approval, minutes_per_approval_range." in prompt and "hourly_cost" not in prompt   # v2
+    return {"status": "memo", "notes": ["The dataset is small and covers one month only.", "Only 12 records were valid."],
             "statements": [{"statement": f"{metrics['changes.count']} requests leave manager review in the target version.", "metric_keys": ["changes.count"]},
                            {"statement": "The company saves money every month.", "metric_keys": ["changes.count"]},
                            {"statement": "About 12 hours are handled differently.", "metric_keys": ["effort.delta_hours"]}],
@@ -95,7 +96,8 @@ def test_analyst_memo_cites_engine_metrics_and_scenarios_are_computed_by_the_eng
     assert got["status"] == "done", {k: rec.get(k) for k in ("status", "execution_status", "execution_reason", "attempts")}
     assert got["synthetic"] is True and got["label"].startswith("Analyst memo over a replay of a SYNTHETIC dataset") and "records" not in got
     assert [s["metric_keys"] for s in got["statements"]] == [["changes.count"]] and got["statements"][0]["values"] == {"changes.count": "2"}
-    assert sorted(x["reason"] for x in got["rejected"]) == ["assumption_not_declared", "figure_not_a_cited_metric:12", "roi_saving_or_forecast_claim"]
+    assert sorted(x["reason"] for x in got["rejected"]) == ["assumption_not_declared", "figure_not_a_cited_metric:12", "note_has_number", "roi_saving_or_forecast_claim"]
+    assert got["notes"] == [{"note": "The dataset is small and covers one month only.", "origin": "model"}]
     sc = got["scenarios"]
     assert len(sc) == 1 and sc[0]["value"] == "30" and sc[0]["engine"]["computed_by"] == "roi_replay engine"
     from infra.adapters.v2_business import business_view, read_snapshot, _accepted_by_revision

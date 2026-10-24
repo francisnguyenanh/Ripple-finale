@@ -99,6 +99,11 @@ def check(model: Mapping, old_sides: list, new_sides: list, limits: Mapping) -> 
             reason = "new_quote_not_in_excerpt"
         elif any(r not in {x["rule_id"] for x in o["rules"]} for r in rule_ids):
             reason = "rule_not_bound_to_old_artifact"
+        elif (p["relation"] == "moved_same_content" and n is not None and o["hash"] and n["hash"] and o["hash"] != n["hash"]
+              and not o.get("truncated") and not n.get("truncated") and norm(o["excerpt"]) != norm(n["excerpt"])):
+            # the label says the artifact's content is unchanged; the server sees complete texts that differ (an exact fact it owns): the claim is refused, not relabelled
+            # (live diagnostic SUR05-V1: a value change and a merge were both proposed as moved_same_content)
+            reason = "same_content_contradicted_by_text"
         else:
             allowed = numbers_in(oq) | numbers_in(nq) | {x for r in o["rules"] if r["rule_id"] in rule_ids for x in numbers_in(r["title"])}
             stray = sorted(numbers_in(rationale) - allowed)

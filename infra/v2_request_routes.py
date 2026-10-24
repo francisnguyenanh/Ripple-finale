@@ -27,9 +27,10 @@ def request_task_view(request: Request, family: str, request_id: str, workspace_
     try:
         authority = _authority(identity, request, workspace_id)
         require(authority, "project.read")
-        from infra import operator_flags
+        from infra import operator_flags, provider_gate
         out = v2_request_tasks.task_view(store, authority["tenant_id"], workspace_id, family, request_id, authority)
-        out["features"] = {"request_assistant": "on" if operator_flags.assistant_on() else "off"}            # the page hides the launcher; the routes refuse by themselves
+        on = operator_flags.assistant_on() and provider_gate.role_refusal("request.qa") is None                # the feature switch AND the role allowlist
+        out["features"] = {"request_assistant": "on" if on else "off"}            # the page hides the launcher; the routes refuse by themselves
         return JSONResponse(out, headers=_NO_STORE)
     except IdentityDenied as exc:
         status = _identity_denied_status(exc)

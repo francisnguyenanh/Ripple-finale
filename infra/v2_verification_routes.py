@@ -20,6 +20,8 @@ independence is the point (it is checked later by the review / verification stag
 
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -60,13 +62,14 @@ def _scalar(value) -> bool:
 
 
 @router.post("/v2/verification/contracts")
-async def set_contract(request: Request):
+@db_route
+def set_contract(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     if not isinstance(workspace_id, str) or not workspace_id:
         return _error("workspace_id required", 400)

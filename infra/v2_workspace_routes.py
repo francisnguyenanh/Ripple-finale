@@ -14,6 +14,8 @@ Everything here is additive and uses the reviewed identity store and role bundle
 
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 import hashlib
 import re
 
@@ -141,13 +143,14 @@ def create_options(request: Request):
 
 
 @router.post("/v2/workspaces")
-async def create_workspace(request: Request):
+@db_route
+def create_workspace(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     try:
         admin = _admin_projects(identity, request)          # authentication first: an anonymous caller never reaches validation
         project_id, name, desc, key = body.get("project_id"), body.get("name"), body.get("description") or "", body.get("idempotency_key")

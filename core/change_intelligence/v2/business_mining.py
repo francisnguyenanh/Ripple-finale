@@ -30,7 +30,9 @@ SCHEMA = "ripple-knowledge-mining/1"
 MODEL_KEYS = {"status", "hypotheses", "notes"}
 KINDS = ("potential_conflict", "exception_overlap", "ambiguity", "missing_context")
 ORIGIN = "model_hypothesis"
-_UNSAFE = re.compile(r"[<>`#*_\[\]|]|https?://|www\.|[\x00-\x08\x0b-\x1f\x7f]", re.I)
+# markup and links are refused; comparators ("> 400,000") and field names ("rental.cost_jpy") are plain business text (MINING-V4-20261024: a hypothesis naming
+# the planted pair was refused as unsafe for a ">" or an underscore)
+_UNSAFE = re.compile(r"</?[a-z][a-z0-9]*(?:\s[^<>]*)?/?>|\*\*|^#|\]\(|`|https?://|www\.|[\x00-\x08\x0b-\x1f\x7f]", re.I | re.M)
 _LIVE_OUT = ("SUPERSEDED", "REJECTED")
 
 
@@ -273,6 +275,56 @@ def coverage(plan: Mapping, group_states: Mapping) -> dict:
 
 # ---- prompt and validation ---------------------------------------------------------------------------------------------------------------------------
 
+def _leaves_of(cond) -> list:
+    if not isinstance(cond, Mapping):
+        return []
+    if "field" in cond:
+        return [cond]
+    return [leaf for key in ("all", "any") for c in cond.get(key) or [] for leaf in _leaves_of(c)] + (_leaves_of(cond["not"]) if "not" in cond else [])
+
+
+def _candidates(rules: Iterable[Mapping]) -> dict:
+    """field -> the few values worth trying for a shared case: every threshold and its neighbours, a value above the highest, every literal of an equality."""
+    out: dict = {}
+    for r in rules:
+        for leaf in _leaves_of(r.get("condition")):
+            vals = leaf["value"] if isinstance(leaf["value"], list) else [leaf["value"]]
+            for v in vals:
+                if _isnum(v):
+                    n = float(str(v).replace(",", ""))
+                    out.setdefault(leaf["field"], set()).update({n - 1, n, n + 1, n * 2})
+                else:
+                    out.setdefault(leaf["field"], set()).add(str(v))
+        for k, v in (r.get("scope") or {}).items():
+            out.setdefault(k, set()).update(str(x) for x in (v if isinstance(v, list) else [v]))
+    for vals in out.values():                                    # a text field also tries one value outside its literals, so a "not equal" condition can be met
+        if any(isinstance(x, str) for x in vals):
+            vals.add("OTHER_VALUE")
+    return {k: sorted(v, key=lambda x: (isinstance(x, str), x)) for k, v in out.items()}
+
+
+def overlaps(rules: Mapping[str, Mapping], *, max_fields: int = 3, max_cases: int = 4000) -> list:
+    """Exact part of mining (contract version 5): every pair of the group's rules that can apply to ONE case, with a witness case verified by the product's own
+    condition evaluator for both rules (never assumed). The model then judges what the overlap means; it no longer has to find it by arithmetic."""
+    import itertools
+    out = []
+    ids = sorted(rules)
+    for a, b in itertools.combinations(ids, 2):
+        cand = _candidates([rules[a], rules[b]])
+        fields = sorted(cand)[:max_fields]
+        if not fields:
+            continue
+        combos = itertools.product(*[cand[f] for f in fields])
+        for n, values in enumerate(combos):
+            if n >= max_cases:
+                break
+            case = {f: (int(v) if isinstance(v, float) and v.is_integer() else v) for f, v in zip(fields, values)}
+            if _applies(rules[a], case)[0] is True and _applies(rules[b], case)[0] is True:
+                out.append({"rule_ids": [a, b], "case": case})
+                break
+    return out
+
+
 def build_prompt(frozen: Mapping, rules: Iterable[Mapping], asked: Iterable[str], fields: Mapping) -> str:
     from core.change_intelligence.v2.business_index import condition_text
     lines = []
@@ -282,7 +334,12 @@ def build_prompt(frozen: Mapping, rules: Iterable[Mapping], asked: Iterable[str]
         lines.append(f"- id={r['rule_id']} | {r.get('title')} | who acts: {r.get('actor_ref') or 'not stated'} | when: {condition_text(r['condition']) if r.get('condition') is not None else 'not stated'} | "
                      f"what happens: {(r.get('outcome') or {}).get('kind', 'unknown')} | exceptions: {exc} | scope: {scope} | {r.get('authority')}/{r.get('status')}")
     field_lines = "\n".join(f"- {k}: {v}" for k, v in sorted(fields.items())) or "(none)"
-    prompt = frozen["prompt_template"].replace("{rules}", "\n".join(lines) or "(none)").replace("{asked}", "\n".join(asked) or "(none)").replace("{fields}", field_lines)
+    rules = list(rules)
+    found = overlaps({r["rule_id"]: r for r in rules})
+    overlap_lines = "\n".join(f"- {o['rule_ids'][0]} and {o['rule_ids'][1]} both apply to the case " + ", ".join(f"{k}={v}" for k, v in o["case"].items())
+                              for o in found) or "(none: no two rules of this group apply to the same case)"
+    parts = {"{rules}": "\n".join(lines) or "(none)", "{asked}": "\n".join(asked) or "(none)", "{fields}": field_lines, "{overlaps}": overlap_lines}
+    prompt = re.sub(r"\{rules\}|\{asked\}|\{fields\}|\{overlaps\}", lambda m: parts[m.group(0)], frozen["prompt_template"])     # one pass: data never expands a placeholder
     if len(prompt) > frozen["limits"]["max_prompt_chars"]:
         raise ValueError("context_too_large")
     return prompt

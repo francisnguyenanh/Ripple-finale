@@ -6,6 +6,7 @@ Those remain private operator calls; policy enforcement lives in `infra/v2_polic
 
 from __future__ import annotations
 
+from infra.db_offload import db_route, request_json
 import collections
 import os
 import threading
@@ -143,7 +144,8 @@ def _source(request: Request) -> str:
 
 
 @router.post("/v2/auth/login")
-async def login(request: Request):
+@db_route
+def login(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     store = _store()
@@ -151,7 +153,7 @@ async def login(request: Request):
         return _error("v2 auth unavailable", 503)
     source = _source(request)
     try:
-        body = await request.json()
+        body = request_json(request)
     except ValueError:
         body = None
     account = body.get("account_id") if isinstance(body, dict) else None
@@ -237,14 +239,15 @@ def workspaces(request: Request):
 
 
 @router.post("/v2/workspaces/select")
-async def select_workspace(request: Request):
+@db_route
+def select_workspace(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     store = _store()
     if store is None:
         return _error("v2 auth unavailable", 503)
     try:
-        body = await request.json()
+        body = request_json(request)
         if not isinstance(body, dict) or not isinstance(body.get("workspace_id"), str):
             return _error("workspace_id required", 400)
         return JSONResponse(store.select_workspace(_token(request), body["workspace_id"]),

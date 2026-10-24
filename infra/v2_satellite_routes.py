@@ -15,6 +15,8 @@ a cloud fallback). A real Firestore database and an FCM adapter are the activati
 """
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 import os
 
 from fastapi import APIRouter, Request
@@ -109,8 +111,9 @@ def projection_feeds(request: Request, workspace_id: str):
 
 
 @router.post("/v2/projection/feed-token")
-async def projection_feed_token(request: Request):
-    body = await _json_body(request)
+@db_route
+def projection_feed_token(request: Request):
+    body = _json_body_sync(request)
     if set(body) - {"workspace_id"}:
         return _error("only workspace_id is accepted: feeds and claims are decided by the server", 400)
 
@@ -139,8 +142,9 @@ def projection_status(request: Request, workspace_id: str):
 
 
 @router.post("/v2/projection/run")
-async def projection_run(request: Request):
-    body = await _json_body(request)
+@db_route
+def projection_run(request: Request):
+    body = _json_body_sync(request)
 
     def action(store, tenant, authority):
         try:
@@ -159,14 +163,16 @@ async def projection_run(request: Request):
 
 
 @router.post("/v2/notifications/tokens")
-async def register_token(request: Request):
-    body = await _json_body(request)
+@db_route
+def register_token(request: Request):
+    body = _json_body_sync(request)
     return _shell(request, body.get("workspace_id"), lambda store, tenant, authority: v2_notifications.register_token(store, tenant, body["workspace_id"], account_id=authority["account_id"], token=body.get("token"), platform=body.get("platform")))
 
 
 @router.post("/v2/notifications/tokens/revoke")
-async def revoke_token(request: Request):
-    body = await _json_body(request)
+@db_route
+def revoke_token(request: Request):
+    body = _json_body_sync(request)
     return _shell(request, body.get("workspace_id"), lambda store, tenant, authority: v2_notifications.revoke_token(store, tenant, body["workspace_id"], account_id=authority["account_id"], token=body.get("token"), all_tokens=bool(body.get("all"))))
 
 
@@ -176,14 +182,16 @@ def read_inbox(request: Request, workspace_id: str):
 
 
 @router.post("/v2/notifications/inbox/{item_id}/read")
-async def mark_read(request: Request, item_id: str):
-    body = await _json_body(request)
+@db_route
+def mark_read(request: Request, item_id: str):
+    body = _json_body_sync(request)
     return _shell(request, body.get("workspace_id"), lambda store, tenant, authority: v2_notifications.mark_read(store, tenant, body["workspace_id"], account_id=authority["account_id"], item_id=item_id))
 
 
 @router.post("/v2/projection/conversations")
-async def projection_conversations(request: Request):
-    body = await _json_body(request)
+@db_route
+def projection_conversations(request: Request):
+    body = _json_body_sync(request)
     profile = body.get("profile", "redacted")
 
     def action(store, tenant, authority):
@@ -242,8 +250,9 @@ def offline_manifest(request: Request, artifact_id: str, workspace_id: str, cons
 
 
 @router.post("/v2/notifications/dispatch")
-async def dispatch(request: Request):
-    body = await _json_body(request)
+@db_route
+def dispatch(request: Request):
+    body = _json_body_sync(request)
 
     def action(store, tenant, authority):
         t = transport()

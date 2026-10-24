@@ -86,6 +86,7 @@ total_cap_usd: "50.00"
 fail_closed_on_missing_usage: true
 latency_slo_p50_seconds: 5
 latency_slo_p95_seconds: 20
+enabled_roles: all
 """.strip(), encoding="utf-8")
     monkeypatch.setenv("RIPPLE_BUDGET_CONFIG_PATH", str(config_path))
 

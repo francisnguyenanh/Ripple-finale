@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/bits";
 import { PageHeader } from "@/pages/Page";
 import { useSession } from "@/session";
+import { AI_KIND_WORDS } from "@/lib/aiKinds";
 import { ApplyStage, ChangeResult, LoopCard, QueryStage } from "./ApplyStage";
 import { AnalysisStage } from "./AnalysisStage";
 import { ApprovalStage } from "./ApprovalStage";
@@ -67,6 +68,7 @@ function Flow() {
           <WorkInbox ws={ws} />
         </div>
       )}
+      <LegacyAiNote />
       <SupersededCard />
       {reqId && <TaskFrame key={`${ws}|${reqId}`} ws={ws} family="intent_flow" id={reqId} refreshKey={data} shared={task} detail={task.tv ? <NextCard inline /> : undefined} />}
       <Journey />
@@ -108,3 +110,21 @@ export function ChangesPage() {
     </>
   );
 }
+
+
+/** The AI steps of this flow that the server does not offer (role allowlist or provider switch). The deterministic steps keep working; each button says why. */
+const FLOW_AI_KINDS = ["intent.interpret", "change.draft", "gap.answer", "impact.judge", "explain", "sim.analysis"];
+function LegacyAiNote() {
+  const s = useSession();
+  if (s.aiOff) return null;                                       // the shell already says that AI is switched off
+  const off = FLOW_AI_KINDS.filter((k) => !s.aiKind(k));
+  if (!off.length) return null;
+  return (
+    <Callout testid="flow-ai-not-enabled" role="status">
+      <strong>Some AI steps of this page are not enabled on this server.</strong>
+      <span>Not available here: {off.map((k) => AI_KIND_WORDS[k] ?? k).join(", ")}. The steps that need no AI still work, and nothing is sent to the AI for the others.
+        The business change path on the Questions page uses its own AI steps.</span>
+    </Callout>
+  );
+}
+

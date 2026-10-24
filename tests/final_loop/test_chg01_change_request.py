@@ -309,3 +309,75 @@ def test_editing_the_losing_policy_rule_offers_three_intents_and_only_an_explici
         assert ("follows the sources" in u2["refused"][0]["why"]) if intent == "fix_observed_record" else ("no file proposal" in u2["refused"][0]["why"])
     bad = q.req.post("/v2/business/changes", json={"workspace_id": q.env.ws, "request": POLICY_REQ, "decided_conflict_intent": {"rule_id": "rule-capex-finance-policy", "intent": "flip"}})
     assert bad.status_code == 400
+
+
+def test_a_person_who_may_confirm_knowledge_confirms_their_own_change(qa_env):
+    """The route admits `intent.confirm_own` or `knowledge.confirm`; the re-check under the lock now accepts either for the requester too (live run SUR03-V2-A10: an
+    admin's own change was refused at publish). A person without either permission is still refused."""
+    q = qa_env
+    got, _ = understand(q, NUM_REQ, model_obj(ops=[OP_VALUE]), client=q.admin)                       # a distinct job: the job id includes the requester
+    cid, h = got["change_id"], got["understanding"]["preview_hash"]
+    ok = q.admin.post(f"/v2/business/changes/{cid}/confirm", json={"workspace_id": q.env.ws, "preview_hash": h})
+    assert ok.status_code == 200, ok.text
+
+
+KEEP_REQ = "Raise the standard manager approval threshold from 1,000,000 to 1,500,000 JPY; amounts of 1,000,000 JPY stay under the old wording until then."
+DISGUISED_REQ = "Raise the standard manager approval threshold from 1,000,000 to 1,500,000 JPY; high-risk suppliers stay with Finance."
+
+
+def test_contract_2_a_verified_restatement_is_kept_as_is_and_a_disguised_change_is_still_asked(qa_env):
+    """Contract version 2 through the real job path (a model answer WITH the new key: the live run SUR03-V5 refused every such answer at the key check before this
+    test existed). A quote that restates the rule's current value is accepted and shown; one that names something else stays uncovered and the person is asked."""
+    q = qa_env
+    op_raise = op("set_value", "rule-standard-manager-review", {"value": 1500000, "unit": "JPY"}, "Raise the standard manager approval threshold from 1,000,000 to 1,500,000 JPY")
+    kept = dict(model_obj(ops=[op_raise]), kept_as_is=[{"quote": "amounts of 1,000,000 JPY stay under the old wording until then", "rule_id": "rule-standard-manager-review"}])
+    got, model = understand(q, KEEP_REQ, kept)
+    u = got["understanding"]
+    assert got["status"] == "done" and model.calls == 1 and u["status"] == "READY" and u["can_confirm"] is True and u["uncovered_parts"] == []
+    assert u["kept_as_is"] == [{"quote": "amounts of 1,000,000 JPY stay under the old wording until then", "rule": u["kept_as_is"][0]["rule"]}] and u["kept_as_is"][0]["rule"]
+    disguised = dict(model_obj(ops=[op_raise]), kept_as_is=[{"quote": "high-risk suppliers stay with Finance", "rule_id": "rule-standard-manager-review"}])
+    got, _ = understand(q, DISGUISED_REQ, disguised, client=q.admin)
+    d = got["understanding"]
+    assert d["status"] == "CLARIFY" and d["can_confirm"] is False and d["kept_as_is"] == [] and any("high-risk suppliers stay with Finance" in p for p in d["uncovered_parts"])
+
+
+def test_an_empty_unit_is_read_as_no_unit_and_a_value_the_contract_refuses_is_a_question_not_a_stuck_job(qa_env, monkeypatch):
+    """SUR03-V5B: a model answer with `"unit": ""` raised a contract error that escaped the executor and left the job RUNNING. Now the empty unit is dropped (a
+    condition needs no unit; a value takes the unit of the rule's current value) and an operation the contract still refuses becomes a refused operation with a
+    question; the job completes either way."""
+    q = qa_env
+    cond = op("add_or_change_condition", "rule-standard-manager-review", {"field": "request.net_amount_jpy", "op": "gte", "value": 1200000, "unit": ""},
+              "Manager approval should start at 1,200,000 JPY")
+    got, _ = understand(q, "Manager approval should start at 1,200,000 JPY.", model_obj(ops=[cond]), mode="technical")
+    assert got["status"] == "done" and got["understanding"]["status"] == "READY"
+    o = got["understanding"]["technical"]["operations"][0]                     # same field and comparator as the rule's threshold: the canonical set_value form
+    assert o["kind"] == "set_value" and o["desired"] == {"value": 1200000, "unit": "JPY"}
+    value = op("set_value", "rule-standard-manager-review", {"value": 1300000, "unit": ""}, "Make the manager threshold 1,300,000")
+    got, _ = understand(q, "Make the manager threshold 1,300,000.", model_obj(ops=[value]), client=q.admin, mode="technical")
+    assert got["status"] == "done" and got["understanding"]["status"] == "READY"
+    assert got["understanding"]["technical"]["operations"][0]["desired"] == {"value": 1300000, "unit": "JPY"}       # the unit of the rule's current value
+    from core.change_intelligence.v2 import business_knowledge as bk
+
+    def refuse(op_, **kw):
+        raise bk.ContractError("invalid_field", "desired refused by the contract")
+    monkeypatch.setattr(bk, "validate_change_operation", refuse)
+    got, _ = understand(q, "Make the manager threshold 1,400,000.", model_obj(ops=[op("set_value", "rule-standard-manager-review", {"value": 1400000, "unit": "JPY"},
+                                                                                     "Make the manager threshold 1,400,000")]), client=q.admin, mode="technical")
+    u = got["understanding"]
+    assert got["status"] == "done" and u["status"] == "CLARIFY" and u["can_confirm"] is False
+    assert any(r["reason"] == "operation_invalid:invalid_field" for r in u["technical"]["rejected"]) and any("say it again with the exact new value" in x for x in u["questions"])
+
+
+def test_contract_4_a_context_remark_is_read_as_context_and_a_disguised_change_is_still_asked(qa_env):
+    """Contract version 4 through the real job path: a heading the model labels `context` is covered and shown; a "context" quote that states a change is refused."""
+    q = qa_env
+    raise_op = op("set_value", "rule-standard-manager-review", {"value": 1500000, "unit": "yen"}, "Raise the standard manager approval threshold from 1,000,000 to 1,500,000 yen")
+    req = "One point on purchasing. Raise the standard manager approval threshold from 1,000,000 to 1,500,000 yen."
+    got, _ = understand(q, req, dict(model_obj(ops=[raise_op]), context=["One point on purchasing"]), mode="technical")
+    u = got["understanding"]
+    assert u["status"] == "READY" and u["context"] == ["One point on purchasing"] and u["uncovered_parts"] == []
+    assert u["technical"]["operations"][0]["desired"] == {"value": 1500000, "unit": "JPY"}                   # "yen" is the rule's JPY
+    req2 = "Raise the standard manager approval threshold from 1,000,000 to 1,500,000 yen. The Finance Controller decides high-risk suppliers instead."
+    got, _ = understand(q, req2, dict(model_obj(ops=[raise_op]), context=["The Finance Controller decides high-risk suppliers instead"]), client=q.admin)
+    d = got["understanding"]
+    assert d["status"] == "CLARIFY" and d["context"] == [] and any("Finance Controller decides" in p for p in d["uncovered_parts"])

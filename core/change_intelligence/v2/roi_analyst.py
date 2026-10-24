@@ -89,8 +89,21 @@ def validate_model_object(obj, limits: Mapping) -> dict:
     return obj
 
 
+def schema_for(base: Mapping, declared: Iterable[str]) -> dict:
+    """The output schema of ONE job: a question may name only a declared assumption key, a scenario only a declared engine assumption (config version 2: the
+    model is given the exact keys instead of guessing them from the data; a doubt about anything else is a note)."""
+    import copy
+    declared = sorted(set(declared))
+    schema = copy.deepcopy(dict(base))
+    props = schema["properties"]
+    props["assumption_questions"]["items"]["properties"]["assumption"]["enum"] = declared
+    props["scenarios"]["items"]["properties"]["assumption"]["enum"] = [k for k in ASSUMPTION_KEYS if k in declared]
+    return schema
+
+
 def check(model: Mapping, table: Mapping, declared: Iterable[str], limits: Mapping) -> dict:
-    """-> {kept, rejected, questions, scenarios}. Items are refused whole with their reason, never edited."""
+    """-> {kept, rejected, questions, scenarios, notes}. Items are refused whole with their reason, never edited. A note carries no metric citation, so it is kept
+    only without any number, claim wording or markup (it is the model's own doubt about the data, labelled as such)."""
     declared = set(declared)
     max_chars = int(limits["max_text_chars"])
     kept, rejected, questions, scenarios = [], [], [], []
@@ -134,4 +147,18 @@ def check(model: Mapping, table: Mapping, declared: Iterable[str], limits: Mappi
             rejected.append({"kind": "scenario", "index": i, "reason": reason})
             continue
         scenarios.append({"assumption": sc["assumption"], "value": value, "rationale": " ".join(sc["rationale"].split())[:max_chars], "origin": "model"})
-    return {"kept": kept, "rejected": rejected, "questions": questions, "scenarios": scenarios}
+    notes = []
+    for i, n in enumerate(model["notes"]):
+        text = " ".join(n.split())
+        reason = None
+        if len(notes) >= int(limits["max_notes"]):
+            reason = "over_note_cap"
+        elif not text or len(text) > max_chars or _NOT_PLAIN.search(text) or _CLAIM.search(text):
+            reason = "note_not_acceptable"
+        elif numbers_in(text):
+            reason = "note_has_number"
+        if reason:
+            rejected.append({"kind": "note", "index": i, "reason": reason})
+            continue
+        notes.append({"note": text, "origin": "model"})
+    return {"kept": kept, "rejected": rejected, "questions": questions, "scenarios": scenarios, "notes": notes}

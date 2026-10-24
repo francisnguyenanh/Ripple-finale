@@ -106,6 +106,9 @@ class BudgetConfig:
     #: (optional): role (job kind) -> thinking level sent to the provider for that role. Absent role = the request carries no thinking parameter (the model default
     #: applies). Only a configured level is ever sent, so a model that does not take the parameter is never sent one by accident.
     role_thinking_levels: dict = field(default_factory=dict)
+    #: The server's AI role allowlist (`infra/ai_kinds.py`): None = the key is absent and NO AI job kind may run (fail closed); the string
+    #: "all" = every kind (development / tests / evaluation); otherwise a frozenset of AI job kinds. Not overridable by environment.
+    enabled_roles: object = None
 
 
 THINKING_LEVELS = ("MINIMAL", "LOW", "MEDIUM", "HIGH")
@@ -430,6 +433,9 @@ def _validate(raw: dict) -> tuple[BudgetConfig | None, list]:
             f"per_job_cap_usd: must be <= total_cap_usd, got {per_job_cap} > {total_cap}"
         )
 
+    from infra import ai_kinds
+    enabled_roles = ai_kinds.validate(raw.get("enabled_roles"), errors)
+
     if errors:
         return None, errors
 
@@ -441,7 +447,7 @@ def _validate(raw: dict) -> tuple[BudgetConfig | None, list]:
         latency_slo_p50_seconds=p50, latency_slo_p95_seconds=p95,
         role_model_ids=role_model_ids, role_thinking_levels=role_thinking_levels, request_timeout_seconds=request_timeout,
         price_snapshot_date=snapshot_date, price_snapshot_max_age_days=snapshot_max_age,
-        generation_max_output_tokens=generation_cap,
+        generation_max_output_tokens=generation_cap, enabled_roles=enabled_roles,
     ), []
 
 

@@ -163,7 +163,8 @@ def _intent_view(store, tenant, ws, rid, authority) -> dict:
     approvals = _jobs_where(store, tenant, ws, "approval", "proposal_job_id", [pid])
     applies = _jobs_where(store, tenant, ws, "apply", "approval_job_id", [a["job_id"] for a in approvals])
     c = w._chain(store, tenant, ws, prop, {"review": reviews, "approval": approvals, "apply": applies})
-    notes = w.review_notes(store, tenant, ws, pid)
+    digest = w.review_digest(store, tenant, ws, pid, newest=0)                              # AH-02: effective verdicts and reviewers from SQL, no full history read
+    notes = digest["latest"]                                                             # one entry per reviewer with the effective verdict: same blockers / "reviewed by me"
     st = w._stage(prop, c, notes)
     inputs.append({"kind": "proposal", "ref": pid, "label": "The proposal"})
     order = [s[0] for s in INTENT_STEPS]
@@ -220,7 +221,7 @@ def _intent_view(store, tenant, ws, rid, authority) -> dict:
         deliverables.append({"code": "later", "label": "Later, by other steps: the change applied, verified, and a result decided by a person", "later": True})
     stage = {"code": st["stage"], "label": st["label"], "family_state": prop.get("execution_status")}
     return _dto("intent_flow", intent["intent_id"], r["canonical"], title, stage, obligations, waiting, blockers, actions, _steps(INTENT_STEPS, states), axes, inputs, deliverables,
-                coverage={"proposal_job_id": pid, "review_notes": len(notes)}, at=at)
+                coverage={"proposal_job_id": pid, "review_notes": digest["total"]}, at=at)
 
 
 # ---- business_change ------------------------------------------------------------------------------------------------------------------------------------------------

@@ -10,7 +10,7 @@ function Root() {
   const [mode, setMode] = React.useState<Mode>("business");
   const session: Session = {
     account: "catalog-user", workspaces: [], route: { ws: "ws-catalog", page: "catalog", sub: "", params: {} }, mode, setMode,
-    head: null, sandbox: null, notice: "", aiOff: false, can: () => false, roles: [], signOut: async () => undefined,
+    head: null, sandbox: null, notice: "", aiOff: false, aiKind: () => true, can: () => false, roles: [], signOut: async () => undefined,
     expire: () => undefined, refresh: async () => undefined, reloadWorkspaces: async () => undefined, reloadNonce: 0, reload: () => undefined,
   };
   return <SessionContext.Provider value={session}><Catalog /></SessionContext.Provider>;

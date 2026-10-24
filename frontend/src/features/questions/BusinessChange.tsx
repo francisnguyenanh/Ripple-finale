@@ -95,6 +95,8 @@ export function BusinessChange({ ws }: { ws: string }) {
           {((u.descriptions ?? []) as string[]).length > 0 && <div><p className="text-sm font-medium">What I understood:</p><ul className="list-disc pl-5" data-testid="chg-descriptions">{(u.descriptions as string[]).map((d, i) => <li key={i}>{d}</li>)}</ul></div>}
           {((u.refused ?? []) as Rec[]).map((r, i) => <Callout key={i} tone="warn" testid="chg-refused">“{r.quote as string}”: {r.why as string}</Callout>)}
           {((u.already_the_case ?? []) as string[]).length > 0 && <Muted testid="chg-noop">Already the case: {(u.already_the_case as string[]).join("; ")}</Muted>}
+          {((u.context ?? []) as string[]).length > 0 && <Muted testid="chg-context">Read as context, not a change: {((u.context as string[]).map((c) => `“${c}”`)).join("; ")}</Muted>}
+          {((u.kept_as_is ?? []) as Rec[]).length > 0 && <Muted testid="chg-kept">Kept as it is (you described what stays; nothing changes there): {((u.kept_as_is as Rec[]).map((k) => `“${String(k.quote)}” (${String(k.rule)})`)).join("; ")}</Muted>}
           {((u.questions ?? []) as string[]).length > 0 && <div data-testid="chg-questions"><p className="text-sm font-medium">To go on, please say:</p><ul className="list-disc pl-5 text-sm">{(u.questions as string[]).map((t, i) => <li key={i}>{t}</li>)}</ul></div>}
           {((u.decided_conflict_choices ?? []) as Rec[]).map((c) => (
             <div key={c.rule_id as string} data-testid="chg-intents" className="rounded-md border border-border p-3 grid gap-2">

@@ -63,7 +63,7 @@ def semantic_adapter() -> sr.SemanticAdapter:
             timeout = job_quota.load_worker_budget_config().request_timeout_seconds
             if timeout:
                 caps = {"timeout_seconds": float(timeout)}        # a paid provider's latency bound is the approved request timeout; 8 s discarded paid live answers
-        _ADAPTER = sr.SemanticAdapter(provider, caps=caps, gate=provider_gate.is_disarmed)
+        _ADAPTER = sr.SemanticAdapter(provider, caps=caps, gate=provider_gate.semantic_off)   # provider switch AND the role allowlist, read at each call
     return _ADAPTER
 
 
@@ -144,6 +144,22 @@ def _observation_pack(cur, tenant_id, workspace_id, source_revision_id, query, t
     return {"status": "READY", "source_revision_id": source_revision_id, **bundle}
 
 
+def _set_aside_unrelated(entries: list, snap: Mapping) -> tuple:
+    """Items the judge read and labelled `unrelated` leave the pack and are listed under `set_aside` (id, kind, title, label): a distractor the judge recognised no
+    longer reaches the answer (2026-10-24, live run QRY02B-V4: QV4-18 / QV4-19 kept such a distractor). `unknown` (the judge did not read it), `partial` and
+    `supports` stay. An item that is counter-evidence of a kept rule (a `conflicts_with` neighbour or the other side of a recorded disagreement) is never set aside."""
+    kept = [e for e in entries if e.get("relevance") != "unrelated"]
+    kept_ids = {v for v in _covered_ids([e for e in kept if e["kind"] == "rule"])}
+    protected = {c["rule_id"] for c in bi.counterevidence(kept_ids, snap["rules"], snap["relations"], snap["gaps"]) if c.get("rule_id")}
+    out, aside = [], []
+    for e in entries:
+        if e.get("relevance") == "unrelated" and not (set(_covered_ids([e])) & protected):
+            aside.append({"item_id": e["item_id"], "kind": e["kind"], "title": e.get("title"), "relevance": "unrelated"})
+        else:
+            out.append(e)
+    return out, aside
+
+
 def context_pack(store, tenant_id, workspace_id, query, *, view="target", can_read_evidence=False, top_k=bi.DEFAULT_TOP_K, max_chars=bi.DEFAULT_MAX_CHARS,
                  observation_top_k=10, semantic=False, expected_snapshot_id=None, semantic_budget=None, allow_external_semantic=False) -> dict:
     """The evidence and knowledge to answer `query`, pinned to ONE snapshot.
@@ -187,6 +203,7 @@ def context_pack(store, tenant_id, workspace_id, query, *, view="target", can_re
                     for entry in ranked["items"]:
                         label = next((sem["labels"][v] for v in _covered_ids([entry]) if v in sem["labels"]), None)
                         entry["relevance"] = label or "unknown"
+                    ranked["items"], pack["set_aside"] = _set_aside_unrelated(ranked["items"], snap)
                 else:
                     pack["notes"].append(f"Semantic retrieval was not applied ({sem['layers']['expand'].get('reason') or sem['status']}); the lexical method above was used.")
                 pack["sufficiency"] = sem["sufficiency"]

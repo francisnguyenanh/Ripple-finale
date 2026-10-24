@@ -120,7 +120,10 @@ def test_file_actions_yaml_scalar_edit_no_op_differing_value_document_code_and_m
     code = draft(op("set_value", "rule-capex-finance-config", {"value": 2000000, "unit": "JPY"}, {"value": 3000000, "unit": "JPY"}))
     py = next(i for i in code["file_actions"] if i["path"] == "routing.py")
     assert py["action"] == "MANUAL" and py["reason"] == "code_recommendation_only" and py["code_recommendation"] is True and py["proposal_edit"] is None and "Recommendation only" in py["instruction"]
-    assert next(i for i in code["file_actions"] if i["path"] == "approval.yaml" and i["op_ids"]) ["action"] == "AI_EDIT_SUPPORTED"
+    held = next(i for i in code["file_actions"] if i["path"] == "approval.yaml" and i["op_ids"])
+    # the CAPEX config rule is in a recorded disagreement with the policy rule: the server holds the change for a person and keeps the edit for the reviewer (2026-10-24)
+    assert held["action"] == "MANUAL" and held["reason"] == "server_hold" and held["server_action"] == "AI_EDIT_SUPPORTED" and held["held_edit"]["proposed"] == 3000000
+    assert [u["hold"] for u in code["unresolved"] if u["kind"] == "server_hold"] == ["conflicts_with_effective_rule"]
     gone = draft(VALUE, artifacts={"a-md": ARTS["a-md"]})
     missing = by_ref(gone)["F001"]
     assert missing["action"] == "UNRESOLVED" and missing["reason"] == "missing_file" and "has no such file" in missing["instruction"] and gone["operations"][0]["file_coverage"] == "partial"
@@ -291,15 +294,66 @@ def good(prompt):
                 questions=["Does the new threshold also apply to framework contracts?"])
 
 
-def prepared(q, fn=good, client=None):
-    cid, _ = confirmed(q, NUM_REQ, [OP_VALUE], client=client)
-    model = use(q, fn)
+def deps_first(q, client, cid, fn=None):
+    """Run the dependency step (a stub that finds nothing unless `fn` is given) and wait for it: guidance needs it completed on this pin (owner decision 2026-10-24)."""
+    from tests.final_loop.test_chg02_ai_dependencies import ask_deps, settle_deps
+    use(q, fn or (lambda p: {"status": "NONE_FOUND", "dependencies": [], "notes": []}))
+    r = ask_deps(q, client, cid)
+    assert r.status_code == 200, r.text
+    got = settle_deps(q, client, cid)
+    assert got["ai_dependencies"]["status"] == "completed", got["ai_dependencies"]
+    return got
+
+
+def prepared(q, fn=good, client=None, ops=(OP_VALUE,), text=NUM_REQ, deps=True):
+    cid, _ = confirmed(q, text, list(ops), client=client)
+    if deps:
+        deps_first(q, client or q.req, cid)
+    model = use(q, fn)                                                   # installed after the dependency step, so guidance calls are counted from here
     return cid, model
+
+
+def test_guidance_waits_for_the_dependency_step_and_never_runs_it_on_its_own(qa_env):
+    q = qa_env
+    cid, model = prepared(q, deps=False)
+    r = ask_guidance(q, q.admin, cid)
+    assert r.status_code == 409 and r.json()["code"] == "dependencies_incomplete" and r.json()["dependency_status"] == "not_requested" and "impact/dependencies" in r.json()["next_action"]
+    assert model.calls == 0 and get_draft(q, q.admin, cid).json()["guidance"]["status"] == "not_requested"
+    deps_first(q, q.req, cid)
+    model = use(q, good)
+    assert ask_guidance(q, q.admin, cid).status_code == 200
+    got = settle_guidance(q, q.admin, cid, "technical")
+    assert got["guidance"]["status"] == "completed" and model.calls == 1 and "dependency check" not in model.prompts[0]
+
+
+def test_a_threshold_moved_past_another_approvers_threshold_is_held_by_the_server_and_blocks_the_decision(qa_env):
+    q = qa_env
+    big = dict(OP_VALUE, desired={"value": 6000000, "unit": "JPY"}, user_quote="Raise the standard manager approval threshold from 1,000,000 to 6,000,000 JPY")
+    cid, model = prepared(q, ops=[big], text="Raise the standard manager approval threshold from 1,000,000 to 6,000,000 JPY.")
+    got = get_draft(q, q.admin, cid, "technical").json()
+    holds = [u for u in got["unresolved"] if u["kind"] == "server_hold"]
+    assert holds and all(h["hold"] == "approval_order_inverted" and h["basis"] == "rules" for h in holds)                                  # 6M passes the CAPEX Finance tiers (2M / 5M)
+    assert {h["other_rule"] for h in holds} >= {"rule-capex-finance-config", "rule-capex-finance-policy"}
+    assert any("inverted" in h["instruction"] for h in holds) and got["status"] == "PARTIAL"
+    assert [f for f in got["files"] if f["ref"] == "F001"][0]["action"] == "MANUAL" and [f for f in got["files"] if f["ref"] == "F001"][0]["reason"] == "server_hold"
+    review = q.admin.get(f"/v2/business/changes/{cid}/review", params={"workspace_id": q.env.ws, "mode": "technical"}).json()
+    assert any(b["code"] == "server_hold" for b in review["can"]["blockers"]) and review["can"]["approve_knowledge"] is False
+    assert ask_guidance(q, q.admin, cid).status_code == 200
+    g = settle_guidance(q, q.admin, cid, "technical")
+    assert g["guidance"]["status"] == "completed" and "HOLD (a person decides)" in model.prompts[0] and "inverted" in model.prompts[0]
+    ref = holds[0]["ref"]
+    r = q.admin.post(f"/v2/business/changes/{cid}/review/clarify", json={"workspace_id": q.env.ws, "ref": ref, "disposition": "resolved_by_person", "answer": "The Finance tiers move too; handled in a second change.", "reason": "Decided with Finance on 24 Oct.",
+                                                                  "binding": {"semantic_diff_hash": g["technical"]["semantic_diff_hash"], "draft_hash": g["technical"]["draft_hash"]}})
+    assert r.status_code == 200, r.text
+    after = q.admin.get(f"/v2/business/changes/{cid}/review", params={"workspace_id": q.env.ws, "mode": "technical"}).json()
+    assert not any(b["code"] == "server_hold" and b.get("ref") == ref for b in after["can"]["blockers"])
+    plain = get_draft(q, q.req, cid).json()
+    assert any(u["kind"] == "server_hold" and "inverted" in u["instruction"] for u in plain["unresolved"])                                   # the hold is shown without evidence rights
 
 
 def test_the_draft_is_built_without_a_model_for_a_confirmed_request_and_follows_permissions(qa_env):
     q = qa_env
-    cid, model = prepared(q)
+    cid, model = prepared(q, deps=False)                                  # the draft itself needs no dependency step (only guidance does)
     r = get_draft(q, q.req, cid)
     assert r.status_code == 200 and model.calls == 0
     body = r.json()

@@ -5,6 +5,8 @@ snapshot, never a decision, and makes no model call."""
 
 from __future__ import annotations
 
+from infra.db_offload import db_route
+from infra.v2_policy_routes import _json_body_sync
 import json
 import os
 
@@ -109,13 +111,14 @@ def business_gaps(request: Request, workspace_id: str):
 
 
 @router.post("/v2/business/analyse")
-async def business_analyse(request: Request):
+@db_route
+def business_analyse(request: Request):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     if not (isinstance(workspace_id, str) and workspace_id.strip()):
         return _error("workspace_id required", 400)
@@ -139,13 +142,13 @@ async def business_analyse(request: Request):
         return _error(str(exc), 409)
 
 
-async def _answer_call(request: Request, confirm: bool):
+def _answer_call(request: Request, confirm: bool):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, gap_id, answer = body.get("workspace_id"), body.get("gap_id"), body.get("answer")
     if not (isinstance(workspace_id, str) and workspace_id.strip()):
         return _error("workspace_id required", 400)
@@ -177,17 +180,20 @@ async def _answer_call(request: Request, confirm: bool):
 
 
 @router.post("/v2/business/gaps/answer-preview")
-async def business_answer_preview(request: Request):
-    return await _answer_call(request, confirm=False)
+@db_route
+def business_answer_preview(request: Request):
+    return _answer_call(request, confirm=False)
 
 
 @router.post("/v2/business/gaps/answer")
-async def business_answer(request: Request):
-    return await _answer_call(request, confirm=True)
+@db_route
+def business_answer(request: Request):
+    return _answer_call(request, confirm=True)
 
 
 @router.post("/v2/business/gaps/propose")
-async def business_gap_proposals(request: Request):
+@db_route
+def business_gap_proposals(request: Request):
     """Ask a model to SUGGEST gaps and relations over the knowledge version people are working on (KNO-06). Suggestions only: they are shown labelled in the gap queue
     and the graph and change nothing until a person answers. Needs a human actor with `knowledge.confirm` and `ai.use`; the same version and attempt is one job."""
     if not _origin_ok(request):
@@ -195,7 +201,7 @@ async def business_gap_proposals(request: Request):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, attempt = body.get("workspace_id"), body.get("attempt", 1)
     if not (isinstance(workspace_id, str) and workspace_id.strip()):
         return _error("workspace_id required", 400)
@@ -266,10 +272,11 @@ def _interpret_shell(request, workspace_id, action, *, mutating=True):
 
 
 @router.post("/v2/business/gaps/{gap_id}/interpret")
-async def business_gap_interpret(request: Request, gap_id: str):
+@db_route
+def business_gap_interpret(request: Request, gap_id: str):
     """Ask a model to read a person's free-text answer to one open gap into the question's structured form (KNO-07). The reading is a proposal with a preview; the
     person confirms through `POST /v2/business/gaps/answer` as with the controls. The same version, gap and text is one job."""
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, text = body.get("workspace_id"), body.get("text")
 
     def action(store, tenant, authority):
@@ -340,14 +347,14 @@ def business_knowledge_diff(request: Request, workspace_id: str, from_revision: 
     return _read(request, workspace_id, build)
 
 
-async def _decide_call(request: Request, action):
+def _decide_call(request: Request, action):
     """Shared shell of the two human decisions below: origin, sign-in, human actor, knowledge.confirm, then `action(store, tenant, account, body)`."""
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     if not (isinstance(workspace_id, str) and workspace_id.strip()):
         return _error("workspace_id required", 400)
@@ -371,32 +378,35 @@ async def _decide_call(request: Request, action):
 
 
 @router.post("/v2/business/accept")
-async def business_accept(request: Request):
+@db_route
+def business_accept(request: Request):
     def action(store, tenant, account, body):
         snapshot_id = body.get("snapshot_id")
         if not (isinstance(snapshot_id, str) and snapshot_id.strip()):
             raise bk.ContractError("invalid_field", "snapshot_id required")
         return v2_business.accept_snapshot(store, tenant, body["workspace_id"], actor_id=account, snapshot_id=snapshot_id,
                                            acknowledged_open_gaps=body.get("acknowledged_open_gaps") is True)
-    return await _decide_call(request, action)
+    return _decide_call(request, action)
 
 
 @router.post("/v2/business/decisions/revoke")
-async def business_revoke(request: Request):
+@db_route
+def business_revoke(request: Request):
     def action(store, tenant, account, body):
         return v2_business.revoke_decision(store, tenant, body["workspace_id"], actor_id=account, decision_id=body.get("decision_id") or "", reason=body.get("reason"))
-    return await _decide_call(request, action)
+    return _decide_call(request, action)
 
 
 @router.post("/v2/business/context")
-async def business_context(request: Request):
+@db_route
+def business_context(request: Request):
     """Context pack for a business question, pinned to one snapshot. Business items need `project.read`; source text and quotes need `evidence.read`."""
     if not _origin_ok(request):                       # a read-only POST is still a cookie-authenticated POST
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, query, view = body.get("workspace_id"), body.get("query"), body.get("view", "target")
     top_k = body.get("top_k", 40)
     if not (isinstance(workspace_id, str) and workspace_id.strip() and isinstance(query, str) and query.strip()):
@@ -470,7 +480,8 @@ def _quota_for_qa():
 
 
 @router.post("/v2/business/questions")
-async def ask_business_question(request: Request):
+@db_route
+def ask_business_question(request: Request):
     """Ask a business question about the accepted knowledge (view target) or what the sources say (view observed). Idempotent per snapshot, view, question and access scope:
     the same question again returns the stored answer and makes no model call. Needs `knowledge.answer` and `ai.use`; a model call is admitted by the member policy."""
     if not _origin_ok(request):
@@ -478,7 +489,7 @@ async def ask_business_question(request: Request):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, question, view, follow_up = body.get("workspace_id"), body.get("question"), body.get("view", "target"), body.get("follow_up_of")
     attempt = body.get("attempt", 1)
     try:
@@ -597,7 +608,8 @@ def _refusal(exc):
 
 
 @router.post("/v2/business/changes")
-async def request_business_change(request: Request):
+@db_route
+def request_business_change(request: Request):
     """State a change to a business rule in words (an actor, a condition, an exception, a scope, a value, or several at once). The server understands it as validated operations over
     the accepted knowledge and shows what it understood; nothing changes until a person confirms, and even then only a request is recorded."""
     if not _origin_ok(request):
@@ -605,7 +617,7 @@ async def request_business_change(request: Request):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, text, choice = body.get("workspace_id"), body.get("request"), body.get("decided_conflict_intent")
     try:
         authority = _authority(identity, request, workspace_id if isinstance(workspace_id, str) else "")
@@ -681,7 +693,10 @@ def read_business_change(request: Request, change_id: str, workspace_id: str, mo
                                     "knowledge_moved": bool(current and current["snapshot"]["snapshot_id"] != result["pin"]["snapshot_id"]),
                                     "nothing_applied": "Confirming records your request only. No rule, file or code is changed by it.",
                                     "decided_conflict_choices": [{"rule_id": c["rule_id"], "quote": c["quote"], "options": c["options"]} for c in result.get("decided_conflict_choices", [])],
-                                    "retargeted": [{"from": titles.get(r["from"], r["from"]), "to": titles.get(r["to"], r["to"]), "intent": r["intent"]} for r in result.get("retargeted", [])]}
+                                    "retargeted": [{"from": titles.get(r["from"], r["from"]), "to": titles.get(r["to"], r["to"]), "intent": r["intent"]} for r in result.get("retargeted", [])],
+                                    # contract version 2: parts the person wrote that only restate what stays as it is (verified against the rule's current condition)
+                                    "kept_as_is": [{"quote": k["quote"], "rule": k["rule_title"]} for k in result.get("kept_as_is", [])],
+                                    "context": list(result.get("context", []))}                  # contract version 4: text read as context (no change), verified by the server
             if mode == "technical":
                 out["understanding"]["technical"] = {"pin": result["pin"], "operations": result["operations"], "rejected": result["rejected"], "offered_rule_ids": result["offered_rule_ids"],
                                                      "write_scope": result["write_scope"], "read_scope": result["read_scope"], "config_sha256": result["config_sha256"], "model": result.get("model")}
@@ -697,13 +712,14 @@ def read_business_change(request: Request, change_id: str, workspace_id: str, mo
 
 
 @router.post("/v2/business/changes/{change_id}/confirm")
-async def confirm_business_change(request: Request, change_id: str):
+@db_route
+def confirm_business_change(request: Request, change_id: str):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     try:
         authority = _authority(identity, request, workspace_id if isinstance(workspace_id, str) else "")
@@ -826,7 +842,8 @@ def _merge_dependency_state(out, store, tenant, workspace_id, change_id, got, *,
 
 
 @router.post("/v2/business/changes/{change_id}/impact/simulate")
-async def request_change_simulation(request: Request, change_id: str):
+@db_route
+def request_change_simulation(request: Request, change_id: str):
     """Measure a CONFIRMED numeric change on the public Harbor sample through the existing deterministic simulation (0 provider calls). One job per supported case, bound to the
     change, the draft's edit set and the pinned sources; the report shows `MEASURED` counts or `NOT_SIMULATED` with the reason. Needs a human actor with `change.prepare`."""
     if not _origin_ok(request):
@@ -834,7 +851,7 @@ async def request_change_simulation(request: Request, change_id: str):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     try:
         authority = _authority(identity, request, workspace_id if isinstance(workspace_id, str) else "")
@@ -861,14 +878,15 @@ async def request_change_simulation(request: Request, change_id: str):
 
 
 @router.post("/v2/business/changes/{change_id}/impact/dependencies")
-async def request_change_dependencies(request: Request, change_id: str):
+@db_route
+def request_change_dependencies(request: Request, change_id: str):
     """Ask a model to propose dependencies of a CONFIRMED change that the stored graph does not show. Proposals only; nothing is changed or confirmed."""
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, attempt = body.get("workspace_id"), body.get("attempt", 1)
     try:
         authority = _authority(identity, request, workspace_id if isinstance(workspace_id, str) else "")
@@ -926,7 +944,8 @@ def _risk_memo_board(store, tenant, workspace_id, change_id, board_run_id):
 
 
 @router.post("/v2/business/changes/{change_id}/impact/risk-memo")
-async def request_change_risk_memo(request: Request, change_id: str):
+@db_route
+def request_change_risk_memo(request: Request, change_id: str):
     """SUR-06: ask a model for an advisory risk / trade-off memo over the impact report of a CONFIRMED change (and, optionally, a finished review-board run of it). One job
     per change, attempt, board report and frozen config + pinned model; the same request again makes no new call. The memo changes no severity, review or change."""
     if not _origin_ok(request):
@@ -934,7 +953,7 @@ async def request_change_risk_memo(request: Request, change_id: str):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, attempt, board_run_id = body.get("workspace_id"), body.get("attempt", 1), body.get("board_run_id")
     try:
         authority = _authority(identity, request, workspace_id if isinstance(workspace_id, str) else "")
@@ -1016,13 +1035,36 @@ def _dependency_input(store, tenant, workspace_id, change_id, got):
     st = _qa_state(rec)
     if st["status"] == "done" and rec.get("execution_result"):
         res = rec["execution_result"]
+        pin_now = (got["report"].get("pin") or {}).get("snapshot_id")
+        if pin_now and (res.get("pin") or {}).get("snapshot_id") not in (None, pin_now):
+            return [], {"status": "stale", "reason": "The model dependency check was run on an earlier version of the knowledge; its result is not used.", "complete": False}
         merged = business_impact.merge_dependencies(got["report"], {"accepted": res["accepted"], "rejected": res["rejected"], "notes": res["notes"]}, rules_not_shown=res["rules_not_shown"])
         titles = got["titles"]
         deps = [dict(d, from_title=titles.get(d["from_rule_id"], "?"), to_title=titles.get(d["to_rule_id"], "?")) for d in merged["accepted"]]
-        return deps, {"status": "completed", "reason": None, "complete": merged["complete"], "job_id": rec.get("job_id"), "gaps": [g["text"] for g in merged["gaps"]], "evidence_access": bool(res["evidence_access"])}
+        # complete = the model check ran over every rule (coverage of the proposal); the deterministic unknowns are listed on the draft as their own items
+        return deps, {"status": "completed", "reason": None, "complete": not merged["gaps"], "job_id": rec.get("job_id"), "gaps": [g["text"] for g in merged["gaps"]], "evidence_access": bool(res["evidence_access"])}
     if st["status"] in ("failed", "cancelled"):
         return [], {"status": "failed", "reason": "The model dependency check did not finish; dependencies beyond the stored relations are unknown, not absent.", "complete": False}
     return [], {"status": "pending", "reason": "The model dependency check is still running.", "complete": False}
+
+
+def dependency_gate(probe, deps_state) -> Optional[dict]:
+    """Why guidance may not run yet (None = it may): the dependency check is required and is not completed on this pin with full coverage, or is not applicable with
+    grounds. The caller shows the reason; nothing is run on its own (a dependency job is a paid, admitted job)."""
+    from core.change_intelligence.v2 import business_draft
+    rules = probe.get("rules") or {}
+    need = business_draft.dependency_requirement(probe["report"], rules)
+    if not need["required"]:
+        return None
+    if deps_state.get("status") == "completed" and deps_state.get("complete"):
+        return None
+    status = deps_state.get("status")
+    text = {"not_requested": "Run the dependency check first (POST .../impact/dependencies); guidance uses its result.",
+            "pending": "The dependency check is still running; ask for guidance when it has finished.",
+            "failed": "The dependency check did not finish; run it again before asking for guidance.",
+            "stale": "The dependency check was run on an earlier version of the knowledge; run it again.",
+            "completed": "The dependency check did not cover every rule; its result is partial, so guidance would be too."}.get(status, "The dependency check is not complete.")
+    return {"code": "dependencies_incomplete", "dependency_status": status, "reason": deps_state.get("reason") or need["reason"], "next_action": text}
 
 
 def _merge_guidance_state(draft, store, tenant, workspace_id, change_id, *, can_evidence):
@@ -1230,13 +1272,13 @@ def read_business_change_file_diff(request: Request, change_id: str, workspace_i
     except v2_business.BusinessKnowledgeRefused as exc:
         return JSONResponse({"error": str(exc), "code": exc.code}, status_code=409, headers=_NO_STORE)
 
-async def _decision_call(request: Request, change_id: str, *, kind_from_body: bool):
+def _decision_call(request: Request, change_id: str, *, kind_from_body: bool):
     if not _origin_ok(request):
         return _error("origin refused", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     try:
         authority = _authority(identity, request, workspace_id if isinstance(workspace_id, str) else "")
@@ -1273,16 +1315,18 @@ async def _decision_call(request: Request, change_id: str, *, kind_from_body: bo
 
 
 @router.post("/v2/business/changes/{change_id}/review/decide")
-async def decide_business_change(request: Request, change_id: str):
+@db_route
+def decide_business_change(request: Request, change_id: str):
     """Accept, reject or request changes on the knowledge change (kind `knowledge`), or approve/reject the automatic file edits (kind `file_writes`). `change.approve`, distinct
     approver by workspace policy, bound to the draft the person saw. Records a decision only; nothing is applied or committed here."""
-    return await _decision_call(request, change_id, kind_from_body=True)
+    return _decision_call(request, change_id, kind_from_body=True)
 
 
 @router.post("/v2/business/changes/{change_id}/review/clarify")
-async def clarify_business_change(request: Request, change_id: str):
+@db_route
+def clarify_business_change(request: Request, change_id: str):
     """A person's disposition or answer for one open item of the draft (requester or `knowledge.confirm`). It labels or answers; it never changes an action or applies anything."""
-    return await _decision_call(request, change_id, kind_from_body=False)
+    return _decision_call(request, change_id, kind_from_body=False)
 
 
 # ---- code change recommendations (SYN-01): a developer's checklist, never an edit ---------------------------------------------------------------------------------
@@ -1346,7 +1390,8 @@ def _code_proposal_binding(store, tenant, workspace_id, change_id, repo_id, auth
 
 
 @router.post("/v2/business/changes/{change_id}/code/proposal")
-async def request_code_proposal(request: Request, change_id: str):
+@db_route
+def request_code_proposal(request: Request, change_id: str):
     """SUR-03 proposal-only: a model explains the code change a CONFIRMED change needs and proposes edits on the recommended files of a declared repository at a pinned base
     commit; the server builds the diff in memory and parses the changed files. Nothing is applied or run. Human actor, `code.patch` + `ai.use` + `evidence.read`."""
     if not _origin_ok(request):
@@ -1354,7 +1399,7 @@ async def request_code_proposal(request: Request, change_id: str):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, repo_id, attempt = body.get("workspace_id"), body.get("repo_id"), body.get("attempt", 1)
     try:
         authority = _authority(identity, request, workspace_id if isinstance(workspace_id, str) else "")
@@ -1409,7 +1454,8 @@ def read_code_proposal(request: Request, change_id: str, workspace_id: str, repo
 
 
 @router.post("/v2/business/changes/{change_id}/code/apply")
-async def refuse_business_code_apply(request: Request, change_id: str):
+@db_route
+def refuse_business_code_apply(request: Request, change_id: str):
     """Always refused: the product never edits, patches, runs or deploys code. The route exists so that the refusal is explicit and testable, not a 404 that looks like a missing feature."""
     if not _origin_ok(request):
         return _error("origin refused", 403)
@@ -1417,7 +1463,7 @@ async def refuse_business_code_apply(request: Request, change_id: str):
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
     try:
-        body = await _json_body(request)
+        body = _json_body_sync(request)
         workspace_id = body.get("workspace_id")
         authority = _authority(identity, request, workspace_id if isinstance(workspace_id, str) else "")
         require_human_actor(authority)
@@ -1430,7 +1476,8 @@ async def refuse_business_code_apply(request: Request, change_id: str):
 
 
 @router.post("/v2/business/changes/{change_id}/commit")
-async def commit_business_change(request: Request, change_id: str):
+@db_route
+def commit_business_change(request: Request, change_id: str):
     """Commit an APPROVED knowledge change into the accepted knowledge (CHG-05): the decided meaning becomes TARGET rules in a new accepted business revision, atomically with
     its decision, audit and outbox marker. `knowledge.confirm`, human actor, bound to the draft seen. No file, code or document is touched; pending implementation is listed."""
     if not _origin_ok(request):
@@ -1438,7 +1485,7 @@ async def commit_business_change(request: Request, change_id: str):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     try:
         authority = _authority(identity, request, workspace_id if isinstance(workspace_id, str) else "")
@@ -1527,7 +1574,8 @@ def read_business_change_source(request: Request, change_id: str, workspace_id: 
 
 
 @router.post("/v2/business/changes/{change_id}/source/apply")
-async def choose_business_change_source_mode(request: Request, change_id: str):
+@db_route
+def choose_business_change_source_mode(request: Request, change_id: str):
     """The person's choice for the source files of a committed change. `mode: "ai"` (`change.apply`, human actor, bound to the draft seen incl. `edits_hash`) creates one
     deterministic `business.source_apply` job that writes the APPROVED YAML scalar edits into a new source revision; `mode: "manual"` returns the instructions and writes
     nothing. Code is never edited; unsupported items stay manual."""
@@ -1536,7 +1584,7 @@ async def choose_business_change_source_mode(request: Request, change_id: str):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id = body.get("workspace_id")
     try:
         authority = _authority(identity, request, workspace_id if isinstance(workspace_id, str) else "")
@@ -1562,7 +1610,8 @@ async def choose_business_change_source_mode(request: Request, change_id: str):
 
 
 @router.post("/v2/business/changes/{change_id}/draft/guidance")
-async def request_change_draft_guidance(request: Request, change_id: str):
+@db_route
+def request_change_draft_guidance(request: Request, change_id: str):
     """Ask a model to write guidance over the server-built draft of a CONFIRMED change (summary, manual instructions, questions, holds). Text only; the model adds, drops or
     upgrades nothing, and nothing is applied. Needs `change.prepare` and `ai.use`; the asker must be the requester or hold `knowledge.confirm`."""
     if not _origin_ok(request):
@@ -1570,7 +1619,7 @@ async def request_change_draft_guidance(request: Request, change_id: str):
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
-    body = await _json_body(request)
+    body = _json_body_sync(request)
     workspace_id, attempt = body.get("workspace_id"), body.get("attempt", 1)
     try:
         authority = _authority(identity, request, workspace_id if isinstance(workspace_id, str) else "")
@@ -1584,6 +1633,11 @@ async def request_change_draft_guidance(request: Request, change_id: str):
         from infra.adapters import v2_business_change
         if v2_business_change.read_intent(store, tenant, workspace_id, change_id) is None:
             return JSONResponse({"error": "Confirm the request first.", "code": "not_confirmed"}, status_code=409, headers=_NO_STORE)
+        probe = v2_business_change.impact_for_intent(store, tenant, workspace_id, change_id)
+        _deps, dep_state = _dependency_input(store, tenant, workspace_id, change_id, probe)
+        gate = dependency_gate(probe, dep_state)
+        if gate is not None:
+            return JSONResponse({"error": "Guidance needs the dependency check first.", **gate}, status_code=409, headers=_NO_STORE)
         jid = _guidance_job_id(change_id, attempt)
         try:
             rec = store.job_record(tenant, workspace_id, jid)

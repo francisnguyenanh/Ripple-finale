@@ -184,8 +184,8 @@ _NOT_HOLDS = re.compile(r"(?i)\b(you (do not|don't|no longer) hold|not (held by|
 _ABLE = re.compile(r"(?i)\byou (can|may|are (allowed|able|permitted) to|could)\s+(now\s+)?(proceed (by|to)\s+)?(approv|decid|confirm|commit|apply|clarif|answer|review|reject|accept)")
 _UNABLE = re.compile(r"(?i)\byou (cannot|can't|can not|may not|are not (allowed|able|permitted) to|could not)\s+(approv|decid|confirm|commit|apply|clarif|answer|review|reject|accept)|\byour role cannot\b")
 _REQUIRED = re.compile(r"(?i)\byou (are|were) (required|obliged)\b|\byou (must|have to)\b")
-CHECKS_VERSION = "request-assistant-checks/13"                  # checks/13: "the person who holds / acts is not named" is authority prose too; checks/12: a stated status must agree with the recorded step phases; checks/11: "who acts is not stated / unknown" is authority prose; checks/10: cause only from facts that record a reason (listed in the prompt), a withheld why is said, limitations guarded, authority claims about this request by anyone; checks/9: third-person authority bound to its clause + third-person permission; checks/8: server authority section + truncation notice; checks/6-7: corrected / typed model assertions
-COMPATIBLE_CHECKS = frozenset({"request-assistant-checks/4", "request-assistant-checks/5", "request-assistant-checks/6", "request-assistant-checks/7", "request-assistant-checks/8", "request-assistant-checks/9", "request-assistant-checks/10", "request-assistant-checks/11", "request-assistant-checks/12", CHECKS_VERSION})   # authority already typed and server-rendered: shown as stored, no legacy filtering
+CHECKS_VERSION = "request-assistant-checks/14"                  # checks/14: a block that cites only the proposal (the request, the draft rule change) must say it is proposed (RQA-V10 P1); checks/13: "the person who holds / acts is not named" is authority prose too; checks/12: a stated status must agree with the recorded step phases; checks/11: "who acts is not stated / unknown" is authority prose; checks/10: cause only from facts that record a reason (listed in the prompt), a withheld why is said, limitations guarded, authority claims about this request by anyone; checks/9: third-person authority bound to its clause + third-person permission; checks/8: server authority section + truncation notice; checks/6-7: corrected / typed model assertions
+COMPATIBLE_CHECKS = frozenset({"request-assistant-checks/4", "request-assistant-checks/5", "request-assistant-checks/6", "request-assistant-checks/7", "request-assistant-checks/8", "request-assistant-checks/9", "request-assistant-checks/10", "request-assistant-checks/11", "request-assistant-checks/12", "request-assistant-checks/13", CHECKS_VERSION})   # authority already typed and server-rendered: shown as stored, no legacy filtering
 _ROLE_WORDS = {"requester": ("requester", "person who asked"), "approver": ("approver",), "reviewer": ("reviewer",), "knowledge owner": ("knowledge owner",),
                "administrator": ("administrator", "admin"), "system": ("system", "the ai")}
 # A third-person authority claim: a role word as the SUBJECT of a holding / obligation / permission predicate. The gap may not cross into a new clause with its own
@@ -323,6 +323,20 @@ _RUNNING_WORDS = re.compile(r"(?i)\b(?:under ?way|in progress|being (?:written|p
                             r"|has (?:already )?started|already started|currently working)\b")
 _STOPPED_WORDS = re.compile(r"(?i)\b(?:stopped|halted|stalled|stuck)\b")
 _NEG_BEFORE = re.compile(r"(?i)\b(?:not|no|never|isn't|hasn't|wasn't|nothing)\b[^.;,]{0,25}$")
+
+
+# checks/14 (live finding RQA-V10-20261023-01, P1): the request title "should be approved by the Finance Controller" and the draft rule change were restated as
+# "Purchases ... are routed to the Finance Controller" — a proposal shown as the rule in effect, on a question inviting exactly that. A block whose cited facts are
+# ALL proposal facts must carry the proposal mood; the current rule (`rule_change:scope:*`), the state or a decision make the block about what is, not what is asked.
+_PROPOSAL_MOOD = re.compile(r"(?i)\b(?:propos\w*|request\w*|ask(?:s|ed|ing)?|wants?|wanted|should|would|draft\w*|plan(?:s|ned)?|suggest\w*|seek\w*|intend\w*|if (?:it is )?approved|once approved)\b")
+
+
+def _proposal_fact(f: Mapping) -> bool:
+    return f.get("kind") == "request" or (f.get("kind") == "rule_change" and str(f.get("key") or "").startswith("rule_change:draft:"))
+
+
+def proposal_stated_as_in_effect(text: str, cited: list) -> bool:
+    return bool(cited) and all(_proposal_fact(f) for f in cited) and not _PROPOSAL_MOOD.search(text)
 
 
 def status_problem(text: str, facts: list) -> bool:
@@ -547,6 +561,8 @@ def check_answer(model: Mapping, pack_: Mapping, limits: Mapping, *, legacy: boo
             reason = "cause_without_cause_fact"
         elif not legacy and status_problem(text, pack_["facts"]):
             reason = "status_contradicts_record"                                              # checks/12: "underway" / "stopped" against the recorded phases
+        elif not legacy and proposal_stated_as_in_effect(text, cited):
+            reason = "proposal_stated_as_in_effect"                                           # checks/14: what is asked is never shown as what is
         else:                                                                               # a wrong claim keeps its specific reason; a right one is still refused in free text:
             reason = authority_problem(text, cited, b["kind"]) or free_text_authority(text)   # authority is stated only through typed assertions (AIG-01)
         if reason:
@@ -623,13 +639,25 @@ def cause_basis(facts: Iterable[Mapping]) -> list:
     return [f for f in facts if f["kind"] in CAUSE_FACTS]
 
 
+_PLACEHOLDER = re.compile(r"\{(perspective|as_of|authority|cause_facts|facts|history|question)\}")
+_SECTION_TAG = re.compile(r"<(/?)(facts|history|question|authority)\b", re.I)
+
+
+def _neutralise(text: str) -> str:
+    """A data value cannot open or close one of the prompt's sections: `<facts`, `</question` ... (any case) become `&lt;facts`, `&lt;/question`."""
+    return _SECTION_TAG.sub(lambda m: "&lt;" + m.group(1) + m.group(2), text)
+
+
 def build_prompt(frozen: Mapping, pack_: Mapping, history: Iterable[Mapping], question: str, *, perspective: str) -> str:
     facts = "\n".join(f"{f['id']} [{f['kind']}] {f['text']}" for f in pack_["facts"]) or "(none)"
     hist = "\n".join(f"Q: {h['question']}\nA: {' '.join(b['text'] for b in h.get('blocks') or []) or '(no answer kept)'}" for h in history) or "(none)"
     authority = "\n".join(b["text"] for b in authority_summary(pack_["facts"])) or "(none)"      # answer/5: the server's own statement, shown to the model as data
     causes = ", ".join(f"{f['id']} [{f['kind']}]" for f in cause_basis(pack_["facts"])) or "(none)"   # checks/10: the same rule the validator applies
-    prompt = (frozen["prompt_template"].replace("{perspective}", perspective).replace("{as_of}", str(pack_.get("as_of"))).replace("{authority}", authority)
-              .replace("{cause_facts}", causes).replace("{facts}", facts).replace("{history}", hist).replace("{question}", question))
+    values = {"perspective": perspective, "as_of": str(pack_.get("as_of")), "authority": authority, "cause_facts": causes, "facts": facts, "history": hist,
+              "question": question}
+    # AH-03: ONE pass over the template's own placeholders, so a placeholder written inside the data (a source-derived fact, a question) is never expanded;
+    # the section tags inside the data are neutralised (conditional, as `live_analysis._escape_source_delimiters`: data without them is byte-identical).
+    prompt = _PLACEHOLDER.sub(lambda m: _neutralise(values[m.group(1)]) if m.group(1) in values else m.group(0), frozen["prompt_template"])
     if len(prompt) > int(frozen["limits"]["max_prompt_chars"]):
         raise ValueError("context_too_large")
     return prompt

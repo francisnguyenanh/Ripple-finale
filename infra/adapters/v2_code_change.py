@@ -287,7 +287,9 @@ def state(store, tenant_id, workspace_id, change_id, *, candidate_job_id=None, c
     if cand is None or cand.get("kind") != "code.candidate":
         raise TenantScopeError("candidate not found")
     res = _result(cand)
-    c = {"job_id": candidate_job_id, "status": _state(cand), "reason": cand.get("execution_reason") if cand.get("execution_status") == "FAILED" else None}
+    # `job_status` is the job's own state (pending / completed / failed) and is always present; `status` is replaced by the result's status (PROPOSED, ...) once the job
+    # completed, which is what the interface reads. Readers that wait for the job use `job_status` (test polling waited on a word `status` never carried, 2026-10-23).
+    c = {"job_id": candidate_job_id, "job_status": _state(cand), "status": _state(cand), "reason": cand.get("execution_reason") if cand.get("execution_status") == "FAILED" else None}
     if res:
         c.update({k: res.get(k) for k in ("status", "patch_hash", "base_sha", "repo_id", "target_pin", "implemented", "not_implemented", "statement")})
         c["files"] = [{k: f[k] for k in ("path", "replacements")} if can_read_evidence else {"replacements": f["replacements"]} for f in res.get("files", [])]
@@ -298,7 +300,7 @@ def state(store, tenant_id, workspace_id, change_id, *, candidate_job_id=None, c
     out["candidate"] = c
     val = _job(store, tenant_id, workspace_id, cc.validation_job_id(candidate_job_id))
     if val is not None:
-        v = {"job_id": val["job_id"], "status": _state(val), "reason": val.get("execution_reason") if val.get("execution_status") == "FAILED" else None}
+        v = {"job_id": val["job_id"], "job_status": _state(val), "status": _state(val), "reason": val.get("execution_reason") if val.get("execution_status") == "FAILED" else None}
         vr = _result(val)
         if vr:
             v.update({k: vr.get(k) for k in ("status", "validation_hash", "patch_hash", "base_sha", "runtime_digest", "isolation", "statement")})

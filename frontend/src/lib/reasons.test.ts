@@ -22,6 +22,13 @@ describe("plain()", () => {
     expect(plain("allocation_exhausted", false)).toContain("used up");
     expect(plain("model_data_policy_denied", true)).toBe("model_data_policy_denied");
   });
+  it("says a role that is not enabled is the operator's choice, not a switched-off server", () => {
+    expect(plain("role_not_enabled", false)).toContain("not enabled on this server");
+    expect(plain("role_not_enabled", false)).not.toContain("switched off");
+    const adv = failureAdvice("role_not_enabled: kind='analysis'; nothing was sent and nothing was reserved");
+    expect(adv.what).toContain("not enabled");
+    expect(adv.retryHelps).toBe(false);
+  });
   it("shows the server text unchanged in Technical view", () => {
     expect(plain("applies_to: say which kinds of case", true)).toBe("applies_to: say which kinds of case");
   });

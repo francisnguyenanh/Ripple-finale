@@ -31,6 +31,22 @@ from infra.v2_sandbox import SandboxRefused, router as _v2_sandbox_router, sandb
 app = FastAPI(title="Ripple", docs_url=None, redoc_url=None, openapi_url=None, dependencies=[Depends(sandbox_guard)])
 app.add_exception_handler(SandboxRefused, sandbox_refused_handler)
 
+from infra.db_pool import PoolBusy as _PoolBusy                                     # noqa: E402
+import logging as _logging                                                         # noqa: E402
+
+_capacity_log = _logging.getLogger("ripple.capacity")
+
+
+async def _busy_handler(request: Request, exc: Exception):
+    """AH-01: no database connection / work slot became free in time -> a bounded, explained 503 (no DSN, no internal message); the HTTP guard middleware still adds
+    the request ID and security headers. Other database errors are NOT mapped here (they are not overload). One sanitized log line carries the counters only."""
+    from infra import db_offload, db_pool
+    _capacity_log.warning("service_busy kind=%s pool=%s work=%s", "work" if isinstance(exc, db_offload.DbWorkBusy) else "pool", db_pool.busy_counts(), db_offload.stats())
+    return JSONResponse({"error": "The service is busy. Please try again in a moment.", "code": "service_busy"}, status_code=503,
+                        headers={"Retry-After": "2", "Cache-Control": "no-store"})
+
+app.add_exception_handler(_PoolBusy, _busy_handler)
+
 
 @app.middleware("http")
 async def _wake_worker_after_a_write(request: Request, call_next):
@@ -163,13 +179,36 @@ def _forward(body):
 
 
 @app.get("/health")
-def health():
+async def health():                                   # AH-01: liveness needs no thread and no database, so it answers while DB work is saturated
     return {"status": "ok"}
 
 
 @app.get("/ready")
-def ready():
-    return _backend.ready()
+async def ready():
+    """Readiness (AH-01): the in-process backend AND the Final database answer a trivial query, run off the event loop with the same bounded admission as every
+    database unit. An unreachable database is an honest 503 `unavailable` (no DSN, no driver text); a saturated pool is the usual bounded 503 `service_busy`;
+    without RIPPLE_V2_DSN the database is reported `not_configured`. Liveness stays `/health` (no thread, no database)."""
+    from infra.db_offload import run_db
+    from infra.v2_policy_routes import _v2_store
+
+    def check():
+        _backend.ready()
+        store = _v2_store()
+        if store is None:
+            return "not_configured"
+        with store._tx() as cur:
+            cur.execute("SELECT 1")
+            cur.fetchone()
+        return "ok"
+
+    try:
+        database = await run_db(check)
+    except _PoolBusy:
+        raise                                                                        # -> the bounded 503 service_busy handler
+    except Exception:                                                                # noqa: BLE001 - any failure to reach the database is "not ready"
+        _capacity_log.warning("ready database=unavailable")
+        return JSONResponse({"status": "unavailable", "database": "unavailable"}, status_code=503, headers={"Cache-Control": "no-store"})
+    return JSONResponse({"status": "ok", "database": database}, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -349,6 +388,10 @@ def v2_app_next_shell(request: Request):
     if provider_gate.is_disarmed():
         # The operator declared the provider off: the page greys out AI actions and says why (the server refuses them too).
         html = html.replace("<head>", '<head><meta name="ripple-provider" content="LIVE_DISARMED">', 1)
+    kinds = provider_gate.enabled_kinds_for_page()
+    if kinds is not None:
+        # The role allowlist: the page shows a kind that is not listed as not enabled (the server refuses it too). Names are fixed job kinds, never user text.
+        html = html.replace("<head>", '<head><meta name="ripple-ai-kinds" content="' + kinds + '">', 1)
     return HTMLResponse(html, headers={
         "Content-Security-Policy": _APP_CSP, "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})

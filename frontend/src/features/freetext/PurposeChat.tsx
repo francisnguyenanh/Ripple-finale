@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { useAction } from "@/lib/useAction";
 import { useNotify } from "@/lib/notify";
 import { useSession } from "@/session";
+import { aiWhy } from "@/lib/aiKinds";
 import { Permission, Turns } from "@/features/changes/ChatBits";
 import type { Chat, Rec, Understanding } from "@/features/changes/types";
 
@@ -135,12 +136,12 @@ export function PurposeChat({ ws, surface, context, convId, onConvId, seed }: { 
             : <span>Nothing was sent to the AI yet. It answers when you send a message, or press the button.</span>}
           {mine && !chat.ai_block && (
             <div className="flex flex-wrap gap-2 mt-1">
-              <Button variant="primary" data-testid={`${tp}-allow`} title={s.aiOff ? "AI actions are switched off on this server" : undefined} disabled={pending || s.aiOff} onClick={async () => { if (await run(() => call("/allow", { turns: 1 }))) await load(); }}>Ask the AI</Button>
+              <Button variant="primary" data-testid={`${tp}-allow`} title={aiWhy(s, "intent.interpret")} disabled={pending || !s.aiKind("intent.interpret")} onClick={async () => { if (await run(() => call("/allow", { turns: 1 }))) await load(); }}>Ask the AI</Button>
             </div>
           )}
           {!mine && chat.ai_block === "sandbox_hold" && chat.can_allow && (
             <div className="flex flex-wrap gap-2 mt-1">
-              <Button variant="primary" data-testid={`${tp}-allow-other`} title={s.aiOff ? "AI actions are switched off on this server" : undefined} disabled={pending || s.aiOff} onClick={async () => { if (await run(() => call("/allow", { turns: 1 }))) await load(); }}>Allow the AI to reply</Button>
+              <Button variant="primary" data-testid={`${tp}-allow-other`} title={aiWhy(s, "intent.interpret")} disabled={pending || !s.aiKind("intent.interpret")} onClick={async () => { if (await run(() => call("/allow", { turns: 1 }))) await load(); }}>Allow the AI to reply</Button>
             </div>
           )}
         </Callout>

@@ -206,7 +206,8 @@ class CodeCandidateExecutor:
             base_sha = _git(checkout, "rev-parse", "HEAD").strip()
             files = tracked_files(checkout)
             plan = code_patch.plan(rec["items"], {o["op_id"]: o for o in parts["intent"]["operations"]}, files, lambda rel: pathlib.Path(checkout, rel).read_text(encoding="utf-8"),
-                                   allowlist=repo["allowlist"], protected=repo["protected"], extra_sites=p.get("extra_sites") or [])
+                                   allowlist=repo["allowlist"], protected=repo["protected"], extra_sites=p.get("extra_sites") or [],
+                                   source_root=repo.get("source_root"))
         finally:
             shutil.rmtree(checkout, ignore_errors=True)
         if plan["diff"] and len(plan["diff"].encode("utf-8")) > MAX_DIFF_BYTES:

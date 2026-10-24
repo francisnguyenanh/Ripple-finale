@@ -78,25 +78,30 @@ class ChangeUnderstandExecutor:
             live = [r for r in live if r["rule_id"] in keep]
         offered = {r["rule_id"]: r for r in live}
         items = [i for i in bi.build_items(live, [], []) if i["kind"] == "rule"]
-        prompt = bc.build_prompt(frozen, payload["request"], items, max_chars=frozen["limits"]["max_prompt_chars"])
+        where = {rid: loc for rid, r in offered.items() if (loc := bc.rule_location(r))}                     # contract version 2: where each rule comes from
+        prompt = bc.build_prompt(frozen, payload["request"], items, max_chars=frozen["limits"]["max_prompt_chars"], where=where)
         if extraction._input_token_bound(prompt, frozen["output_schema"]) > config.max_input_tokens_per_call:
             raise NonRetryableExecutionError("budget_exceeded", "request and rules exceed the input ceiling")
         pin = {"snapshot_id": meta["snapshot_id"], "business_revision": meta["business_revision"], "source_revision_id": meta["source_revision_id"],
                "km_revision_id": meta["km_revision_id"], "decision_epoch": meta["decision_epoch"]}
-        ctx.request_context.update(cu_frozen=frozen, cu_sha=sha, cu_rules=offered, cu_relations=snap["relations"], cu_pin=pin)
+        ctx.request_context.update(cu_frozen=frozen, cu_sha=sha, cu_rules=offered, cu_relations=snap["relations"], cu_pin=pin, cu_where=where)
         return ExecutionRequest(prompt=prompt, schema=frozen["output_schema"], provider_calls_planned=1, external=True)
 
     def execute(self, ctx: ExecutionContext, request: ExecutionRequest, calls: ProviderCallBudget) -> ExecutionOutcome:
         rc = ctx.request_context
-        obj, model_id, actual, in_t, out_t, th_t = call_pinned_json(ctx, request, calls, ROLE, bc.MODEL_KEYS)
+        obj, model_id, actual, in_t, out_t, th_t = call_pinned_json(ctx, request, calls, ROLE, bc.MODEL_KEYS | bc.OPTIONAL_MODEL_KEYS,
+                                                                    optional_keys=frozenset(bc.OPTIONAL_MODEL_KEYS))   # contract version 2 key; older answers lack it
         try:
             model = bc.validate_model_object(obj, rc["cu_frozen"]["limits"])
         except ValueError as exc:
             raise NonRetryableExecutionError("schema_violation", str(exc)) from exc
         payload = ctx.job["payload"]
         choice = payload.get("decided_conflict_intent")
-        result = bc.resolve(model, payload["request"], rc["cu_rules"], rc["cu_relations"], rc["cu_frozen"]["limits"], pin=rc["cu_pin"],
-                            choices={choice["rule_id"]: choice["intent"]} if choice else None)
+        try:
+            result = bc.resolve(model, payload["request"], rc["cu_rules"], rc["cu_relations"], rc["cu_frozen"]["limits"], pin=rc["cu_pin"], where=rc.get("cu_where"),
+                                choices={choice["rule_id"]: choice["intent"]} if choice else None)
+        except ValueError as exc:                                         # a contract error the resolver did not turn into a question: a failed job, never a worker crash
+            raise NonRetryableExecutionError("operation_invalid", str(exc)) from exc
         result.update(executor_id=EXECUTOR_ID, config_sha256=rc["cu_sha"], provider_calls=1, applies_nothing=True, offered_rule_ids=sorted(rc["cu_rules"]),
                       titles={rid: r["title"] for rid, r in rc["cu_rules"].items()}, model={"pinned": model_id, "served": actual})
         return ExecutionOutcome(result=json.loads(_canon_json(result)), model_id=actual, input_tokens=in_t, output_tokens=out_t, thought_tokens=th_t)

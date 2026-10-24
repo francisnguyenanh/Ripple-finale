@@ -24,7 +24,7 @@ from infra.worker.execution_types import (
     ProviderExecutionError, ProviderInvalidResponseError, ProviderRateLimitError, ProviderTimeoutError, is_timeout_exception,
 )
 from infra.worker.gap_answer import _model_object
-from infra.worker.live_analysis import _client_for_model, _field, _token_count
+from infra.worker.live_analysis import generate_and_close, _client_for_model, _field, _token_count
 
 EXECUTOR_ID = "explain.v1"
 ROLE = "intent.explain"
@@ -99,7 +99,7 @@ def call_pinned_json(ctx: ExecutionContext, request: ExecutionRequest, calls: Pr
     calls.consume()
     try:
         client = _client_for_model(model_id)
-        response = client.models.generate_content(model=model_id, contents=request.prompt, config=call_config)
+        response = generate_and_close(client, model=model_id, contents=request.prompt, config=call_config)
     except Exception as exc:
         code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
         if callable(code):
@@ -111,9 +111,11 @@ def call_pinned_json(ctx: ExecutionContext, request: ExecutionRequest, calls: Pr
         err = ProviderExecutionError("provider request failed")
         # safe diagnostics for a refused request (live smoke LHA-SMOKE-20261018-03: an HTTP 400 left no reason on the attempt): status, class and the provider's short
         # message; the message is dropped if it echoes the prompt. No usage was reported, so the attempt stays priced fail-closed.
-        msg = " ".join(str(exc).split())[:240]
-        err.diagnostics = {"stage": "request", "status_code": code if isinstance(code, int) else None, "error_class": type(exc).__name__,
-                           "message": None if (request.prompt or "")[:60] and (request.prompt or "")[:60] in str(exc) else msg}
+        # AH-05: the provider's message only in its typed safe form (short, no quotes / brackets / tokens), else only its length: a prefix check on the prompt
+        # did not cover an echo of a later prompt fragment
+        from infra.worker.safe_diagnostics import safe_diagnostics
+        err.diagnostics = safe_diagnostics({"stage": "request", "status_code": code if isinstance(code, int) else None, "error_class": type(exc).__name__,
+                                            "message": str(exc)})
         raise err from exc
     actual = _field(response, "model_version") or model_id
     if not isinstance(actual, str) or actual not in config.model_prices:

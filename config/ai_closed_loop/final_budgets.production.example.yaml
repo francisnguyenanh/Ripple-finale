@@ -1,0 +1,89 @@
+# Production AI configuration of the Final build (shape and values proposed for the owner-approved first operating month; NOT deployed).
+# Copy outside version control, mount it from the platform's secret store and point RIPPLE_BUDGET_CONFIG_PATH at it. It uses its OWN ledger
+# (the production database); the evaluation configuration and mandate ledger are never reused. Re-read the model price on deploy day:
+# price_snapshot_max_age_days makes price_snapshot_status() report it stale after 30 days.
+# Money: total_cap_usd 10.00 is the owner's cap for the first operating month, shared by every role, user and both operating windows; it is a
+# safety limit, not a spending target. Every job reserves its worst case before the call and settles the provider-reported usage after it;
+# at the cap a paid action is refused with a reason (data and saved results stay readable).
+# Semantic retrieval: on (RIPPLE_SEMANTIC_RETRIEVAL=vertex); a business question may then make the answer call plus up to 3 semantic calls,
+# hence max_provider_calls_per_job 4 and per_job_cap_usd 0.16 (worst case 4 x 0.03792 = 0.15168; a recorded question costs about 0.005).
+default_model_id: gemini-3.5-flash-lite
+role_model_ids:
+  extraction: gemini-3.5-flash-lite
+  knowledge.gap_proposals: gemini-3.5-flash-lite
+  gap.answer_interpret: gemini-3.5-flash-lite
+  knowledge.qa: gemini-3.5-flash-lite
+  retrieval.semantic: gemini-3.5-flash-lite
+  change.understand: gemini-3.5-flash-lite
+  change.impact_deps: gemini-3.5-flash-lite
+  change.draft_guidance: gemini-3.5-flash-lite
+  request.qa: gemini-3.5-flash-lite
+  request.assistant: gemini-3.5-flash-lite
+  knowledge.mining: gemini-3.5-flash-lite
+  gap.interview: gemini-3.5-flash-lite
+  gap.interview_question: gemini-3.5-flash-lite
+  document.wording: gemini-3.5-flash-lite
+  document.variant: gemini-3.5-flash-lite
+  ma.specialist: gemini-3.5-flash-lite
+  ma.synthesis_memo: gemini-3.5-flash-lite
+  change.risk_memo: gemini-3.5-flash-lite
+  ci.semantic_drift: gemini-3.5-flash-lite
+  source.correspondence: gemini-3.5-flash-lite
+  code.diff_proposal: gemini-3.5-flash-lite
+  roi.analyst: gemini-3.5-flash-lite
+role_thinking_levels:
+  extraction: LOW
+  knowledge.qa: LOW
+  knowledge.gap_proposals: LOW
+  gap.answer_interpret: LOW
+  change.understand: MINIMAL
+  change.impact_deps: MINIMAL
+  change.draft_guidance: MINIMAL
+  retrieval.semantic: MINIMAL
+  ma.specialist: LOW
+  knowledge.mining: LOW
+  document.wording: LOW
+  gap.interview: MINIMAL
+model_prices:
+  gemini-3.5-flash-lite:
+    input_usd_per_1k: "0.0003"
+    output_usd_per_1k: "0.0025"
+price_snapshot_date: "2026-10-17"
+price_snapshot_max_age_days: 30
+request_timeout_seconds: 120
+per_job_cap_usd: "0.16"
+total_cap_usd: "10.00"
+max_input_tokens_per_call: 24000
+max_output_tokens: 12288
+generation_max_output_tokens: 6144
+max_retries: 0
+max_provider_calls_per_job: 4
+max_concurrent_jobs_per_workspace: 1
+# The only AI work the system starts by itself is re-reading files after an applied change or refresh (extraction); at most this many per decision event
+# (beyond it a person is asked). No other background model call exists: a repeated question with the same inputs returns the stored job (no new call).
+max_reanalysis_jobs_per_decision: 3
+fail_closed_on_missing_usage: true
+latency_slo_p50_seconds: 30.0
+latency_slo_p95_seconds: 90.0
+# Role allowlist: every AI job kind of the approved Final scope, listed one by one (never "all" in production). Pitch-era kinds stay out:
+# analysis, change.draft, gap.answer, sim.analysis, explain, intent.interpret, impact.judge (their screens say "not enabled on this server").
+enabled_roles:
+  - extraction
+  - knowledge.gap_proposals
+  - gap.answer_interpret
+  - knowledge.qa
+  - retrieval.semantic
+  - change.understand
+  - change.impact_deps
+  - change.draft_guidance
+  - request.qa
+  - knowledge.mining
+  - gap.interview_question
+  - document.variant
+  - ma.specialist
+  - ma.synthesis_memo
+  - change.risk_memo
+  - ci.semantic_drift
+  - source.correspondence
+  - code.diff_proposal
+  - roi.analyst

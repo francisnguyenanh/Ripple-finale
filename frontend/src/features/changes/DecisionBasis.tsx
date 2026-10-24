@@ -33,7 +33,7 @@ export function decisionBasis(d: FlowData, notes: Notes | null, canReadEvidence:
   const sim = d.simulation && isDone(d.simulation) ? ((d.simulation.execution_result ?? {}) as Rec) : null;
   const hb = sim?.harbor && sim.status === "EXECUTED" ? (sim.harbor as Rec) : null;
   const open = notes?.open_change_requests ?? [];
-  const nNotes = notes?.notes.length ?? 0;
+  const nNotes = notes?.total ?? notes?.notes.length ?? 0;                          // the notes are a page of the history; total counts them all
 
   const rows: Basis["rows"] = [
     {

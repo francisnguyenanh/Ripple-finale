@@ -117,6 +117,22 @@ def test_missing_file_stale_edge_cycle_and_fanout_cap():
     assert len(rep["affected_rules"]) <= bi.LIMITS["max_nodes"]
 
 
+def test_traversal_gap_names_only_connected_rules_the_walk_never_reached():
+    from core.change_intelligence.v2 import business_draft as bd
+    a, b = make("rule-a", "concept-c1", actor="role-x"), make("rule-b", "concept-c1", actor="role-y")
+    one = op("set_value", "rule-a", {"value": 7, "unit": "JPY"}, {"value": 9, "unit": "JPY"})
+    rep = report([one], [a, b])                              # role-y / art-rule-b lie beyond two hops, but they are not rules: the report is complete for rules
+    assert bg.traverse(bg.derive_relations([a, b]), "rule-a")["omitted"]["beyond_hops"] > 0
+    assert not any(g["kind"] == "graph_traversal_limited" for g in rep["gaps"]) and {i["rule_id"] for i in rep["affected_rules"]} == {"rule-a", "rule-b"}
+    b["concept_ids"] = ["concept-c1", "concept-c2"]
+    c = make("rule-c", "concept-c2", actor="role-z")         # rule-a -> c1 -> rule-b -> c2 -> rule-c: four hops
+    rep = report([one], [a, b, c])
+    gap = next(g for g in rep["gaps"] if g["kind"] == "graph_traversal_limited")
+    assert gap["rule_ids"] == ["rule-c"] and gap["count"] == 1 and rep["coverage"]["complete"] is False
+    u = bd.unresolved_items(rep, {r["rule_id"]: r for r in (a, b, c)}, 0)
+    assert any("1 further connected rule(s)" in x["instruction"] and "Title of rule-c" in x["instruction"] for x in u)
+
+
 def test_unknown_rule_in_an_operation_is_refused():
     with pytest.raises(ValueError, match="unknown_rule"):
         report([op("set_value", "rule-nope", {"value": 1, "unit": "JPY"}, {"value": 2, "unit": "JPY"})], [make("rule-a", "c")])

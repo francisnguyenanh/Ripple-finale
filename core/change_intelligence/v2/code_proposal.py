@@ -23,6 +23,17 @@ STATUSES = ("proposed", "nothing_to_change", "unsure")
 LABEL = ("Proposal only: a model's explanation and proposed edits, checked statically by the server. Nothing was applied to a repository and nothing was run; executing "
          "model-written code needs a VM-class sandbox that has not been granted. A person reviews it; the literal candidate path stays the only way to a patch.")
 _TEST_FILE = re.compile(r"(^|/)(tests?|spec)(/|$)|(^|/)test_[^/]*$|_test\.[a-z]+$|\.spec\.[a-z]+$", re.I)
+_CODE_LITERAL = re.compile(r"""(["'])([A-Za-z_][A-Za-z0-9_.\-]{2,80})\1""")       # a quoted code / key literal (a reason code, a config key, an enum value)
+
+
+def removed_literals(find: str, replace: str, named: str) -> list:
+    """Code literals an edit removes (present in the text it replaces, absent from its replacement) that the change and its recommendations never name: a rename or
+    removal nobody asked for (SUR-03 v3: a proposal also renamed the reason code NONPOSITIVE_AMOUNT). Adding a new literal is not counted."""
+    before = {m.group(2) for m in _CODE_LITERAL.finditer(find)}
+    after = {m.group(2) for m in _CODE_LITERAL.finditer(replace)}
+    return sorted(lit for lit in before - after if lit not in named)
+
+
 _NOT_PLAIN = re.compile(r"</?[a-z][a-z0-9]*(?:\s[^<>]*)?/?>|\*\*|^#|\]\(|https?://", re.M | re.I)      # code talk keeps comparators and backticks; markup and links are refused
 
 
@@ -67,7 +78,7 @@ def static_check(path: str, text: str, yaml_reader: Optional[Callable] = None) -
 
 
 def check(model: Mapping, offered: Mapping[str, str], refs: Iterable[str], *, allowlist: Iterable[str], protected: Iterable[str], limits: Mapping,
-          yaml_reader: Optional[Callable] = None) -> dict:
+          yaml_reader: Optional[Callable] = None, named: str = "") -> dict:
     """-> {files, diff, patch_hash, kept_edits, rejected, explanation, suggested_tests, notes, applied, executed}. An edit is refused whole with its reason, never edited."""
     refs = set(refs)
     texts = dict(offered)
@@ -94,6 +105,8 @@ def check(model: Mapping, offered: Mapping[str, str], refs: Iterable[str], *, al
             reason = "replace_too_long"
         elif texts[path].count(e["find"]) != 1:
             reason = "find_not_unique" if texts[path].count(e["find"]) > 1 else "find_not_in_file"
+        elif removed_literals(e["find"], e["replace"], named):
+            reason = "unrequested_literal_change:" + ",".join(removed_literals(e["find"], e["replace"], named)[:3])
         if reason:
             rejected.append({"index": i, "path": e["path"], "ref": e["ref"], "reason": reason})
             continue

@@ -9,6 +9,7 @@ not a security boundary; it is used because the executed code is the pinned publ
 """
 from __future__ import annotations
 
+from infra.db_offload import db_route, request_json
 import hashlib
 import json
 import re
@@ -143,14 +144,15 @@ def harbor_configs(request: Request, workspace_id: str):
 
 
 @router.post("/v2/harbor/try")
-async def harbor_try(request: Request):
+@db_route
+def harbor_try(request: Request):
     if not _origin_ok(request):                      # same CSRF rule as every other POST: the exact configured origin and the custom header
         return _error("origin not allowed", 403)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
     try:
-        body = await request.json()
+        body = request_json(request)
     except ValueError:
         return _error("a JSON body is required", 400)
     if not isinstance(body, dict) or not isinstance(body.get("workspace_id"), str):

@@ -563,6 +563,21 @@ def execute_admitted_claim(store: PostgresV2Store, tenant_id: str, workspace_id:
                            claim: OutboxClaim, worker_id: str, *,
                            config: object | None = None, lease_seconds: int = 30,
                            max_running: int | None = None) -> str:
+    """AH-05: a job created while this claim runs is linked to it as its parent (and never to an HTTP request ID inherited from a calling thread)."""
+    from infra.correlation import PARENT_JOB, REQUEST_ID
+    job_id, _kind = _job_id_and_kind(claim)
+    parent, request = PARENT_JOB.set(job_id or ""), REQUEST_ID.set("")
+    try:
+        return _execute_admitted_claim(store, tenant_id, workspace_id, claim, worker_id, config=config, lease_seconds=lease_seconds, max_running=max_running)
+    finally:
+        REQUEST_ID.reset(request)
+        PARENT_JOB.reset(parent)
+
+
+def _execute_admitted_claim(store: PostgresV2Store, tenant_id: str, workspace_id: str,
+                            claim: OutboxClaim, worker_id: str, *,
+                            config: object | None = None, lease_seconds: int = 30,
+                            max_running: int | None = None) -> str:
     """Run an admitted `JOB_QUEUED` claim to a real outcome, exactly once.
     Returns one of `DONE`, `RETRY_SCHEDULED`, `CANCELLED` (cancel checkpoint,
     or retries exhausted -- the outcome string for exhausted retries), `FAILED`
@@ -632,6 +647,21 @@ def execute_admitted_claim(store: PostgresV2Store, tenant_id: str, workspace_id:
         attempt.update(outcome="FAILED", reason=reason, retryable=False, provider_calls=0,
                        cost_usd=Decimal("0"), cost_estimate_usd=Decimal("0"), duration_ms=0)
         return _terminal("FAILED", reason, attempt)
+
+    if config is not None and (job_kind or job["kind"]) in _AI_KINDS:
+        # Role allowlist (infra/ai_kinds.py), read from the configuration loaded for THIS claim: a kind removed after the job was queued
+        # ends here, before any provider reservation, attempt journal entry or call; nothing is charged. Checked after the cancel and executor
+        # checks so a cancelled job still reads as cancelled.
+        from infra import ai_kinds
+        code = ai_kinds.refusal(getattr(config, "enabled_roles", None), job_kind or job["kind"])
+        if code:
+            reason = f"{code}: kind={job['kind']!r}; nothing was sent and nothing was reserved"
+            attempt = _base_attempt(claim, worker_id, job, executor, None, apply_model_data_policy(policy, None))
+            attempt.update(outcome="FAILED", reason=reason, retryable=False, provider_calls=0,
+                           cost_usd=Decimal("0"), cost_estimate_usd=Decimal("0"), duration_ms=0)
+            written = _terminal("FAILED", reason, attempt)
+            _notify_unrun(executor, store, tenant_id, workspace_id, job_id, reason)
+            return written
 
     request: ExecutionRequest | None = None
     stored = {"prompt_storage": policy.get("prompt_storage"), "request_excerpt": None}

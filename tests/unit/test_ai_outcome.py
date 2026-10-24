@@ -30,3 +30,18 @@ def test_execution_mode_follows_the_declared_provider_and_a_job_without_a_call_i
     monkeypatch.setenv("RIPPLE_PROVIDER_MODE", "SIMULATED")
     assert ao.annotate("knowledge.qa", {"claims": [{"origin": "model"}]}, 1)["ai_outcome"]["execution_mode"] == "synthetic"
 
+
+
+def test_request_assistant_outcome_counts_model_blocks_apart_from_server_authority_lines():
+    """AH-05.3: a request-assistant answer whose model blocks were all refused shows `rejected`, never a retained AI contribution; the server's authority
+    sentences are server_added; schema validity is never a semantic-verification claim (no such field exists)."""
+    from infra.worker import ai_outcome
+    refused = {"status": "refused", "blocks": [{"kind": "authority", "text": "You hold the current step."}], "rejected": [{"index": 0}, {"index": 1}]}
+    s = ai_outcome.summarize("request.qa", refused, 1, "LIVE")
+    assert (s["retained"], s["rejected"], s["server_added"], s["contribution"], s["execution_mode"]) == (0, 2, 1, "rejected", "real")
+    kept = {"status": "answered", "blocks": [{"kind": "authority", "text": "x"}, {"kind": "cause", "text": "y"}, {"kind": "fact", "text": "z"}], "rejected": []}
+    s2 = ai_outcome.summarize("request.qa", kept, 1, "SIMULATED")
+    assert (s2["retained"], s2["server_added"], s2["contribution"], s2["execution_mode"]) == (2, 1, "retained", "synthetic")
+    assert "verified" not in str(s2)
+    ex = ai_outcome.summarize("extraction", {"candidates": [1, 2], "rejected": [{"reason": "schema_invalid"}]}, 1, None)
+    assert (ex["retained"], ex["rejected"], ex["execution_mode"]) == (2, 1, "undeclared")
