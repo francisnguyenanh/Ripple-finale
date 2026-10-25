@@ -119,8 +119,9 @@ class KnowledgeQaExecutor:
             if rc.get("qa_lexical_empty") and not pack.get("items") and not (pack.get("observations") or {}).get("results"):
                 state = {"status": "no_evidence", "reason": "no_evidence_after_semantic_search", "detail": retrieval_state(pack)["detail"]}
                 return self._abstained(ctx, state, model_id=None, actual=None, semantic=(sem_calls, sem_in, sem_out))
-            if pack.get("sufficiency") == "insufficient" and sem.get("status") == "applied":
-                # the judge layer ran fully and found the evidence insufficient: no answer call is made; the limit of the search is stated, not hidden
+            if pack.get("sufficiency") == "insufficient" and sem.get("status") == "applied" and (pack.get("judge_coverage") or {}).get("complete"):
+                # the judge layer ran fully, received every item and passage this answer could use, and found them insufficient: no answer call is made; the limit
+                # of the search is stated, not hidden. A verdict over part of the evidence never vetoes (F-1: the pack keeps "unknown" and the answer call decides)
                 state = {"status": "no_evidence", "reason": "evidence_judged_insufficient", "detail": retrieval_state(pack)["detail"]}
                 return self._abstained(ctx, state, model_id=None, actual=None, semantic=(sem_calls, sem_in, sem_out))
             prompt, shown = qa.build_prompt(rc["qa_frozen"], payload["question"], pack, previous=rc["qa_previous"], can_read_evidence=rc["qa_can_evidence"])

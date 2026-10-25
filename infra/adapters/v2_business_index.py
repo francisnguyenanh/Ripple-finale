@@ -67,6 +67,30 @@ def semantic_adapter() -> sr.SemanticAdapter:
     return _ADAPTER
 
 
+def _judge_scope(pack: dict, sem: "dict | None") -> None:
+    """Bind the judge's sufficiency verdict to the evidence it actually received (F-1, 2026-10-25). The evidence the answer can use is the final pack: its items
+    (with their versions), its counter-evidence (conflicting rules, open questions) and the source observations shown to this reader; the judge never receives
+    observations. If any of it was not in the judge's request, the verdict says nothing about the whole pack: `sufficiency` becomes "unknown" (the verdict is
+    kept as `sufficiency_judged`) and a note says so. Only counts are exposed — never ids or texts the reader could not otherwise see."""
+    if not sem or (sem.get("layers") or {}).get("judge", {}).get("status") != "applied":
+        return
+    judged = set((sem.get("coverage") or {}).get("judged_ids") or [])
+    material = set(_covered_ids(pack.get("items") or []))
+    for c in pack.get("counterevidence") or []:
+        material.add(c.get("rule_id") or c.get("gap_id"))
+    material.discard(None)
+    unjudged = len(material - judged)
+    observations = len((pack.get("observations") or {}).get("results") or [])
+    complete = not unjudged and not observations
+    pack["judge_coverage"] = {"complete": complete, "pack_items": len(material), "unjudged_items": unjudged, "unjudged_observations": observations,
+                              "policy": (sem.get("coverage") or {}).get("policy")}
+    if not complete and pack.get("sufficiency") in ("sufficient", "partial", "insufficient"):
+        pack["sufficiency_judged"] = pack["sufficiency"]
+        pack["sufficiency"] = "unknown"
+        pack["notes"].append(f"The sufficiency check did not see everything this answer can use ({unjudged} item(s), {observations} source passage(s) unseen); "
+                             "its verdict is not applied to the whole answer.")
+
+
 def _covered_ids(entries) -> list:
     return [v for e in entries for v in [e["item_id"]] + [m["item_id"] for m in e.get("versions", [])]]
 
@@ -174,6 +198,7 @@ def context_pack(store, tenant_id, workspace_id, query, *, view="target", can_re
     accepted, pending = view_all["accepted"], view_all["pending"]
     snap = accepted if view == "target" else (accepted or pending)
     head = view_all["workspace"]
+    sem = None
     pack = {"view": view, "query": query, "pin": None, "index": {"status": "NONE"}, "served_from": None, "items": [], "counterevidence": [], "graph": [], "sufficiency": "unknown",
             "retrieval": {"method": bi.METHOD, "learned_embeddings": False, "embedding_version": None},
             "coverage": {}, "observations": {"status": "NOT_REQUESTED", "results": [], "withheld": 0}, "notes": []}
@@ -194,10 +219,20 @@ def context_pack(store, tenant_id, workspace_id, query, *, view="target", can_re
             ranked = bi.rank_items(items, query, top_k=top_k, max_chars=max_chars, lexicon=_lexicon(), relations=snap["relations"])
             pack["semantic"] = {"status": "off", "reason": "off_by_request"}
             if semantic:
+                # the selected items first, then what argues against them (conflicting rules, open questions): the judge must see both before its verdict can
+                # stand for the pack (F-1); the rest of the corpus fills the payload after them
+                kinds = {i["item_id"]: i["kind"] for i in items}
+                first = [r for r in _covered_ids(ranked["items"]) if r in kinds]
+                against = [c.get("rule_id") or c.get("gap_id") for c in bi.counterevidence([r for r in first if kinds[r] == "rule"], snap["rules"], snap["relations"], snap["gaps"])]
+                lexical = first
                 sem = semantic_adapter().run(query, items, snapshot_id=meta["snapshot_id"], view=view, index_version=bi.INDEX_VERSION,
-                                             access_scope="evidence" if can_read_evidence else "business", lexical_candidates=_covered_ids(ranked["items"]),
+                                             access_scope="evidence" if can_read_evidence else "business",
+                                             lexical_candidates=lexical, protected=[x for x in against if x],
                                              budget=semantic_budget, allow_external=allow_external_semantic)
                 pack["semantic"] = {k: sem.get(k, 0) for k in ("status", "provider", "config_version", "synthetic", "layers", "calls", "tokens", "tokens_in", "tokens_out", "cache", "payload_truncated", "sufficiency")}
+                cov = sem.get("coverage") or {}
+                pack["semantic"]["coverage"] = ({k: cov.get(k) for k in ("policy", "corpus", "offered", "omitted", "layer_candidates")}
+                                                | {"judged": len(cov.get("judged_ids") or [])})
                 if sem["status"] in ("applied", "partial"):
                     ranked = bi.rank_items(items, query, top_k=top_k, max_chars=max_chars, lexicon=_lexicon(), relations=snap["relations"], semantic=sem)
                     for entry in ranked["items"]:
@@ -236,4 +271,5 @@ def context_pack(store, tenant_id, workspace_id, query, *, view="target", can_re
                 pack["observations"] = obs
             else:
                 pack["observations"] = {"status": obs["status"], "source_revision_id": source_revision, "results": [], "withheld": len(obs.get("results", []))}
+    _judge_scope(pack, sem)
     return pack

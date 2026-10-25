@@ -31,10 +31,14 @@ def test_every_measured_role_is_pinned_and_each_pinned_file_matches_its_recorded
         assert pinned_sha(path) == m["sha"], f"{role}: {m['path']} changed; update the pin and reset its evidence to none"
 
 
-def test_no_pinned_row_claims_gate_evidence_on_this_build():
-    """A pilot run may be cited, but only as a pilot that is not a quality gate; a row may never read as measured quality on this build."""
+def test_no_pinned_row_claims_more_than_its_evidence():
+    """A row cites a rated run only with its set's independence level (owner decision 2026-10-18, AI_SYSTEM_PRINCIPLES section 5: agent-authored runs may be
+    cited, never as independent); otherwise it says none / older build / did not meet / measured limits. A pilot is cited only as a pilot that is not a quality gate."""
     for role, m in rows().items():
         ev = m["evidence"]
-        assert "none" in ev or "older build" in ev or "did not meet" in ev or "measured limits" in ev, (role, ev)
-        if "pilot" in ev:
+        rated = "on this pin" in ev or "on this build" in ev
+        assert rated or "none" in ev or "older build" in ev or "did not meet" in ev or "measured limits" in ev, (role, ev)
+        if rated:
+            assert "not independent" in ev and "independent" not in ev.replace("not independent", ""), (role, ev)
+        if "pilot" in ev and not rated:
             assert "not a quality gate" in ev and "gate evidence none" in ev, (role, ev)

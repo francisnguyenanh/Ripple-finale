@@ -148,3 +148,96 @@ def test_the_automatic_edits_of_a_held_rule_wait_and_the_dependency_requirement_
     linked = bi.build_report(intent["operations"], rules, bg.derive_relations(rules.values()), pin=PIN, known_artifacts={"art-rule-head"})
     need = bd.dependency_requirement(linked, rules)
     assert need["required"] is False and "nothing is left" in need["reason"]                                   # now every live rule is in the report
+
+
+def test_each_file_item_says_in_business_words_which_rule_it_concerns_and_how_a_check_item_is_linked():
+    """AI quality round F-3 (2026-10-25): a bare "role=check" line made the guidance model write "check all related documentation". The item now carries an
+    `about` line — the rule and its change, or the related rule and the kind of link — and the guidance prompt shows it; never a file, location or id."""
+    rules = {r["rule_id"]: r for r in [rule("rule-master", "Hazardous cargo of more than 500 kg needs the Ship Master's approval", "cargo.kg", "gt", 500, "role-ship-master", unit="kg"),
+                                       rule("rule-declare", "Cargo of hazard class 1, 2 or 3 is declared by the Cargo Clerk", "cargo.class", "eq", "1", "role-cargo-clerk", unit=None)]}
+    intent = {"intent_id": "chg-a", "request": "Master approval only above 800 kg.", "operations": [{"op_id": "op-1", "kind": "set_value", "rule_id": "rule-master",
+              "before": {"value": 500, "unit": "kg"}, "desired": {"value": 800, "unit": "kg"}, "user_quote": "q", "evidence_refs": [], "status": "confirmed"}]}
+    from core.change_intelligence.v2 import business_graph as bg
+    rel = bg.derive_relations(rules.values())                                                                  # same concept: a "defines" path, not confirmed
+    report = bi.build_report(intent["operations"], rules, rel, pin=PIN, known_artifacts={"art-rule-master", "art-rule-declare"})
+    draft = bd.build_draft(intent, report, rules, rel, pin=PIN, artifacts={"art-rule-master": "cargo.md", "art-rule-declare": "cargo.md"}, observations=[])
+    by_role = {i["role"]: i for i in draft["file_actions"]}
+    assert by_role["to_change"]["about"].startswith("changes “Hazardous cargo of more than 500 kg needs the Ship Master's approval”: when it applies:")
+    assert "800" in by_role["to_change"]["about"]
+    check = by_role["check"]["about"]
+    assert "Cargo of hazard class 1, 2 or 3 is declared by the Cargo Clerk" in check and "shares only the topic" in check and "same business concept" in check
+    assert "no action for this change" in check and by_role["check"]["link_kind"] == "same_topic_only"
+    for it in draft["file_actions"]:
+        assert "cargo.md" not in it["about"] and "rule-" not in it["about"] and "art-" not in it["about"]
+    frozen = json.loads((ROOT / "config/change_draft_guidance.json").read_text(encoding="utf-8"))
+    for evidence in (True, False):
+        prompt = bd.build_guidance_prompt(frozen, draft, can_read_evidence=evidence, max_chars=16000)
+        assert f"  about: {check}" in prompt and ("\n  file: " in prompt) is evidence                         # the about line for every reader; the file only with evidence rights
+    confirmed = rel + [{"edge_id": "e-dep", "type": "depends_on", "from": "rule-declare", "to": "rule-master", "status": "CONFIRMED", "provenance_refs": []}]
+    report2 = bi.build_report(intent["operations"], rules, confirmed, pin=PIN, known_artifacts={"art-rule-master", "art-rule-declare"})
+    draft2 = bd.build_draft(intent, report2, rules, confirmed, pin=PIN, artifacts={"art-rule-master": "cargo.md", "art-rule-declare": "cargo.md"}, observations=[])
+    about2 = next(i["about"] for i in draft2["file_actions"] if i["role"] == "check")
+    item2 = next(i for i in draft2["file_actions"] if i["role"] == "check")
+    assert item2["link_kind"] == "held" and "hold H00" in about2 and "a person decides" in about2                    # 500 -> 800 kg loses cases under the confirmed relation
+
+
+def test_a_state_field_whose_subject_is_the_path_segment_before_the_state_word_is_read_too():
+    """Acceptance item agd-05 (2026-10-25): "tenant_notice.issued" names the notice in the segment before the one-word state; the dependent posting rule loses
+    its trigger when the notice threshold rises. A segment naming something else ("cargo.approved" against a notice rule) is no basis."""
+    rules = {r["rule_id"]: r for r in [rule("rule-notice", "Shut-offs longer than 4 hours require a tenant notice", "shutoff.duration_hours", "gt", 4, "role-building-manager", unit="hours", outcome="tenant_notice_issued"),
+                                       rule("rule-posting", "When a tenant notice is issued, the concierge posts it in the lobby", "tenant_notice.issued", "eq", True, "role-concierge", unit=None, outcome="posting_required", concept="concept-y"),
+                                       rule("rule-other", "Approved cargo is stowed on deck", "cargo.approved", "eq", True, "role-deck", unit=None, outcome="stowage", concept="concept-z")]}
+    out = holds(rules, change("rule-notice", rules, {"value": 8, "unit": "hours"}))
+    assert [(h["hold"], h["other_rule_id"], h["basis"], h["evidence"]["relation"]) for h in out] == [("dependent_rule_loses_trigger", "rule-posting", "rule_condition", "tenant_notice.issued")]
+    assert holds(rules, change("rule-notice", rules, {"value": 2, "unit": "hours"})) == []                     # widened: nothing loses its trigger
+
+
+def test_related_rules_are_classed_by_what_the_knowledge_proves_and_every_one_stays_listed():
+    """Continuation 2026-10-25 (acceptance agd-06 / agd-08): a rule reached only through the same concept or role is not something to check; a separate
+    obligation with its own threshold on the same measure is not to be aligned; a held tier points to its hold; a rule whose own condition is the changed rule's
+    act follows from it. Classes come from conditions, outcomes and holds — no rule id or sentence."""
+    from core.change_intelligence.v2 import business_graph as bg
+    rules = {r["rule_id"]: r for r in [
+        rule("rule-cio", "Subscriptions of 1,000,000 JPY or more are approved by the CIO", "sub.cost_jpy", "gte", 1000000, "role-cio", outcome="approval_required"),
+        rule("rule-register", "Subscriptions of 1,000,000 JPY or more are listed for Internal Audit", "sub.cost_jpy", "gte", 1000000, "role-audit-clerk", outcome="register_listing"),
+        rule("rule-cfo", "Subscriptions of 5,000,000 JPY or more are approved by the CFO", "sub.cost_jpy", "gte", 5000000, "role-cfo", outcome="approval_required"),
+        rule("rule-renewal", "Subscriptions the CIO has approved are renewed by procurement", "sub.cio_approved", "eq", True, "role-procurement", unit=None, outcome="renewal"),
+        rule("rule-cards", "Corporate cards are used only by their holder", "card.holder_match", "eq", True, "role-cio", unit=None, outcome="card_rule", concept="concept-cards")]}
+    rel = bg.derive_relations(rules.values())
+    def kinds(new_value):
+        intent = {"intent_id": "c", "request": "r", "operations": [{"op_id": "op-1", "kind": "set_value", "rule_id": "rule-cio", "before": {"value": 1000000, "unit": "JPY"},
+                  "desired": {"value": new_value, "unit": "JPY"}, "user_quote": "q", "evidence_refs": [], "status": "confirmed"}]}
+        arts = {f"art-{r}" for r in rules}
+        report = bi.build_report(intent["operations"], rules, rel, pin=PIN, known_artifacts=arts)
+        draft = bd.build_draft(intent, report, rules, rel, pin=PIN, artifacts={a: f"{a}.md" for a in arts}, observations=[])
+        return {i["rule_ids"][0]: (i["link_kind"], i["about"]) for i in draft["file_actions"]}
+    k = kinds(1500000)
+    assert k["rule-register"][0] == "independent_obligation" and "nothing requires the two to match" in k["rule-register"][1]
+    assert k["rule-cfo"][0] == "independent_obligation" and "keeps the order of the two tiers" in k["rule-cfo"][1]
+    assert k["rule-renewal"][0] == "held"                                                                       # 1.0 -> 1.5 M drops cases the renewal rule followed
+    lowered = kinds(800000)                                                                                       # more cases reach the CIO: nothing is held
+    assert lowered["rule-renewal"][0] == "follows_from" and "sub.cio_approved" in lowered["rule-renewal"][1] and "only adds cases" in lowered["rule-renewal"][1] and "no case loses it" in lowered["rule-renewal"][1]
+    assert k.get("rule-cards", ("same_topic_only",))[0] == "same_topic_only"
+    held = kinds(6000000)                                                                                       # past the CFO tier: held
+    assert held["rule-cfo"][0] == "held" and "hold H00" in held["rule-cfo"][1] and "no action" not in held["rule-cfo"][1]
+    assert set(k) >= {"rule-cio", "rule-register", "rule-cfo", "rule-renewal"}                                 # every related rule stays listed
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("field, held", [
+    ("interruption.tenant_notice_issued", True),         # subject before the state word in the last segment
+    ("interruption.customer_notice_issued", False),      # a different notice than the one the changed rule issues
+    ("tenant_notice.issued", True),                      # one-word state: subject in the segment before
+    ("building.tenant_notice.issued", True),             # three segments, the same shape
+    ("notice_issued", True),                             # a single segment
+    ("cargo.approved", False),                           # the segment names something the changed rule does not decide
+    ("tenant_notice.issued_count", False),               # not a boolean state (value is a number below)
+])
+def test_state_field_shapes_are_read_as_a_class(field, held):
+    value = 3 if field.endswith("_count") else True
+    rules = {"rule-notice": rule("rule-notice", "Shut-offs longer than 4 hours require a tenant notice", "shutoff.hours", "gt", 4, "role-building-manager", unit="hours", outcome="tenant_notice_issued"),
+             "rule-dep": rule("rule-dep", "Dependent rule", field, "eq" if value is True else "gte", value, "role-concierge", unit=None, outcome="posting_required", concept="concept-y")}
+    out = holds(rules, change("rule-notice", rules, {"value": 8, "unit": "hours"}))
+    assert bool([h for h in out if h["other_rule_id"] == "rule-dep" and h["basis"] == "rule_condition"]) is held

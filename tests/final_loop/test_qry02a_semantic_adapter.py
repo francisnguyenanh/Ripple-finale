@@ -31,9 +31,7 @@ CAPS = dict(sr.DEFAULT_CAPS)
 @pytest.mark.parametrize("resp", [
     {"terms": ["x"], "candidate_ids": ["rule-z"]},                      # id that was not offered
     {"terms": ["x"], "candidate_ids": ["rule-a", "rule-a"]},            # duplicate
-    {"terms": ["x"] * 9, "candidate_ids": []},                          # over the term cap
     {"terms": [], "candidate_ids": ["rule-a"] * 11},                    # over the candidate cap
-    {"terms": [" "], "candidate_ids": []}, {"terms": ["a\nb"], "candidate_ids": []}, {"terms": ["x" * 41], "candidate_ids": []}, {"terms": [3], "candidate_ids": []},
     {"terms": [], "candidate_ids": [], "evidence": "invented"},          # unknown key
     "text", None, [],
 ])
@@ -56,8 +54,15 @@ def test_judge_output_is_validated(resp):
         sr.validate_judge(resp, IDS, CAPS)
 
 
+def test_malformed_or_surplus_search_terms_are_dropped_and_counted_and_the_grounded_ids_survive():
+    """2026-10-25 (acceptance run AIQ-ACC-QA): a term is not evidence; one bad term no longer discards the candidate ids. Ids stay strictly checked (above)."""
+    for terms, kept in ((["x"] * 9, ["x"] * 8), ([" ", "leave"], ["leave"]), (["a\nb", "time off"], ["time off"]), (["x" * 41, "holiday"], ["holiday"]), ([3, "rest"], ["rest"])):
+        got = sr.validate_expand({"terms": terms, "candidate_ids": ["rule-a"]}, IDS, CAPS)
+        assert got["terms"] == kept and got["candidate_ids"] == ["rule-a"] and got["terms_dropped"] == len(terms) - len(kept)
+
+
 def test_valid_outputs_pass():
-    assert sr.validate_expand({"terms": [" leave "], "candidate_ids": ["rule-a"]}, IDS, CAPS) == {"terms": ["leave"], "candidate_ids": ["rule-a"]}
+    assert sr.validate_expand({"terms": [" leave "], "candidate_ids": ["rule-a"]}, IDS, CAPS) == {"terms": ["leave"], "candidate_ids": ["rule-a"], "terms_dropped": 0}
     assert sr.validate_rank({"scores": {"rule-a": 0.25, "rule-b": 1}}, IDS, CAPS)["scores"]["rule-b"] == 1.0
     assert sr.validate_judge({"labels": {"rule-a": "supports", "gap-c": "unrelated"}, "sufficiency": "partial"}, IDS, CAPS)["sufficiency"] == "partial"
 
@@ -97,7 +102,9 @@ def test_three_layers_apply_independently_and_the_result_is_cached_by_scope():
     a = sr.SemanticAdapter(p)
     first = run(a)
     assert first["status"] == "applied" and first["calls"] == 3 and p.calls == 3 and first["cache"] == "miss" and first["synthetic"] is True
-    assert first["terms"] == ["extra"] and first["candidate_ids"] == ["gap-c"] and set(first["labels"]) == {"rule-a", "rule-b", "gap-c"}
+    # the lexical candidates are offered first (selection policy v1, F-1), so the scripted expand layer's first offered id is rule-a
+    assert first["terms"] == ["extra"] and first["candidate_ids"] == ["rule-a"] and set(first["labels"]) == {"rule-a", "rule-b"}
+    assert first["coverage"]["judged_ids"] == ["rule-a", "rule-b"] and first["coverage"]["offered"] == 3 and first["coverage"]["omitted"] == 0
     again = run(a)
     assert again["cache"] == "hit" and again["calls"] == 0 and p.calls == 3
     for change in ({"query": "who approves holidays"}, {"snapshot_id": "snap-2"}, {"view": "observed"}, {"access_scope": "evidence"}, {"index_version": "v-other"}):
@@ -194,7 +201,7 @@ def test_missing_usage_fails_closed_and_stops_further_calls():
 
 
 def test_token_cap_stops_the_run():
-    p = sr.ScriptedProvider(lambda l, r, t: (good(l, r, t), {"input_tokens": 4000, "output_tokens": 100}))
+    p = sr.ScriptedProvider(lambda l, r, t: (good(l, r, t), {"input_tokens": 6100, "output_tokens": 100}))   # two calls pass the 12,000-token total
     out = run(sr.SemanticAdapter(p))
     assert p.calls == 2 and out["layers"]["expand"]["status"] == "applied" and out["layers"]["rank"]["reason"] == "token_cap_reached" and out["layers"]["judge"]["reason"] == "token_cap_reached"
 
@@ -208,7 +215,7 @@ def test_external_provider_is_not_called_while_the_provider_switch_is_off():
 
 
 def test_replay_provider_needs_a_record_and_reports_synthetic():
-    req = sr.build_request("expand", "who approves leave", sr.offered_items(OFFERED_ITEMS, max_chars=1000)[0])
+    req = sr.build_request("expand", "who approves leave", sr.offered_items(OFFERED_ITEMS, max_chars=1000, priority=["rule-a", "rule-b"])[0])   # the run's selection
     rp = sr.ReplayProvider({req["request_hash"]: {"terms": ["time off"], "candidate_ids": []}}, usage={"input_tokens": 0, "output_tokens": 0})
     out = run(sr.SemanticAdapter(rp))
     assert out["layers"]["expand"]["status"] == "applied" and out["terms"] == ["time off"] and out["synthetic"] is True
@@ -334,7 +341,9 @@ def test_pack_with_a_synthetic_provider_keeps_authority_and_counterevidence_and_
     assert plain["semantic"] == {"status": "off", "reason": "off_by_request"} and p.calls == 0
     pack = ask(pack_env, env, "Who reviews CAPEX requests?")
     assert pack["semantic"]["status"] == "applied" and pack["semantic"]["synthetic"] is True and pack["semantic"]["provider"] == "scripted" and p.calls == 3
-    assert pack["sufficiency"] == "partial" and all(i["relevance"] in ("supports", "partial", "unrelated", "unknown") for i in pack["items"])
+    # the admin reader also gets source passages, which the judge never receives: its "partial" covers only what it saw and is kept as sufficiency_judged (F-1)
+    assert pack["sufficiency"] == "unknown" and pack["sufficiency_judged"] == "partial" and pack["judge_coverage"]["unjudged_observations"] >= 1
+    assert all(i["relevance"] in ("supports", "partial", "unrelated", "unknown") for i in pack["items"])
     snapshot_ids = {i["item_id"] for i in plain["items"]} | {i["item_id"] for i in pack["items"]}
     with env.store._tx() as cur:
         cur.execute("SELECT item_id FROM v2_business_index_items WHERE tenant_id=%s AND workspace_id=%s AND snapshot_id=%s", (env.tenant, env.ws, pack["pin"]["snapshot_id"]))
@@ -349,6 +358,7 @@ def test_pack_with_a_synthetic_provider_keeps_authority_and_counterevidence_and_
     req = env.req_client()                                                              # another access scope never shares the entry
     low = ask(req, env, "Who reviews CAPEX requests?")
     assert low["semantic"]["cache"] == "miss" and p.calls == 6 and low["observations"]["results"] == []
+    assert low["sufficiency"] == ("partial" if low["judge_coverage"]["complete"] else "unknown")              # no passage shown: the verdict stands when the judge saw every item
     obs = ask(pack_env, env, "Who reviews CAPEX requests?", view="observed")
     assert obs["semantic"]["cache"] == "miss" and all(i["authority"] == "OBSERVED" for i in obs["items"] if i["kind"] == "rule" and not i["versions"])
 

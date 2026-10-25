@@ -504,14 +504,18 @@ def _tokens(text) -> set:
 
 
 def _state_leaves(rule: Mapping) -> list:
-    """The boolean leaves of a rule's condition whose field names a state another act sets ("cargo.master_approved", "interruption.customer_notice_issued"):
-    -> [(leaf, the words before the state word)]."""
+    """The boolean leaves of a rule's condition whose field names a state another act sets ("cargo.master_approved", "interruption.customer_notice_issued",
+    "tenant_notice.issued"): -> [(leaf, the words naming what is in that state)]. The subject is the words before the state word in the last path segment, or —
+    when the last segment is the state word alone — the words of the segment before it (acceptance item agd-05, 2026-10-25)."""
     out = []
     for leaf in _hold_leaves(rule.get("condition")):
         if isinstance(leaf.get("value"), bool):
-            words = [t for t in re.split(r"[^a-z0-9]+", str(leaf.get("field") or "").rsplit(".", 1)[-1].lower()) if t]
-            if len(words) >= 2:
-                out.append((leaf, set(words[:-1])))
+            segments = [[t for t in re.split(r"[^a-z0-9]+", seg.lower()) if t] for seg in str(leaf.get("field") or "").split(".")]
+            segments = [s for s in segments if s]
+            if segments and len(segments[-1]) >= 2:
+                out.append((leaf, set(segments[-1][:-1])))
+            elif len(segments) >= 2 and len(segments[-1]) == 1:
+                out.append((leaf, set(segments[-2])))
     return out
 
 
@@ -713,6 +717,64 @@ def _op_outcome(op: Mapping, rc: Mapping, items: list, unresolved: list, rules: 
             "flags": [f for f in rc["flags"]], "simulation": None}
 
 
+_LINK_ABOUT = {"confirmed_link": "linked to the changed rule by a confirmed relation", "inferred_dependency": "possibly related to the changed rule (not confirmed)",
+               "counterevidence": "disagrees with the changed rule (kept as evidence, not changed)"}
+_EDGE_ABOUT = {"defines": "it belongs to the same business concept", "approves": "the same role acts on it", "depends_on": "a stored relation links them",
+               "implements": "a stored relation links them", "exception_to": "a stored relation links them", "conflicts_with": "the two disagree"}
+
+
+LINK_KINDS = ("changed", "held", "follows_from", "independent_obligation", "same_topic_only", "counterevidence")
+
+
+def _item_link(item: Mapping, rules: Mapping[str, Mapping], changes: Iterable[Mapping], affected: Mapping[str, Mapping], edges: Mapping[str, Mapping],
+               held_by: Optional[Mapping[str, Mapping]] = None) -> tuple:
+    """(link_kind, about) of a file item, in business words (rule titles, values, the kind of link) — never a file, location or id. A related rule is classed by
+    what the knowledge proves, not by sharing a topic (continuation of the AI quality round, 2026-10-25: acceptance items agd-06 / agd-08 listed a rule reached
+    only through the same concept or the same role as something to check, and the model then suggested aligning it):
+      follows_from            its own condition is a changed rule's act, or a confirmed relation of the knowledge links it — check whether it should change too;
+      independent_obligation  it decides on its own threshold of a field the changed rule measures — a separate duty this change does not alter;
+      same_topic_only         reached only through the same business concept or role — nothing links its condition to the change;
+      counterevidence         it disagrees with a changed rule (kept as evidence).
+    Every related rule stays listed; only its label and the action it asks for differ."""
+    rid = (item.get("rule_ids") or [None])[0]
+    rule = rules.get(rid) or {}
+    title = rule.get("title") or rid
+    changes = list(changes)
+    if item.get("role") == "to_change":
+        c = next((x for x in changes if x["rule_id"] == rid), None)
+        what = "; ".join(d["text"] for d in (c or {}).get("diff") or [])
+        return "changed", (f"changes “{title}”: {what}" if what else f"changes “{title}”")
+    a = affected.get(rid) or {}
+    path = [edges[e] for e in a.get("path") or [] if e in edges]
+    hold = (held_by or {}).get(rid)
+    if hold is not None:                                                  # the server raised a hold about this rule: the item points to that decision, never "no action"
+        return "held", f"related rule “{title}” is the subject of hold {hold['ref']} ({hold['hold'].replace('_', ' ')}): a person decides how it fits before the change goes on"
+    if a.get("link") == "counterevidence":
+        return "counterevidence", f"related rule “{title}” disagrees with the changed rule (kept as evidence, not changed); a person may need to settle which stands"
+    trigger = next((f for c in changes for f in [_triggered_by(rule, c["before"])] if f), None)
+    confirmed = path and all(e.get("status") == "CONFIRMED" and e.get("type") in _DEPENDENT_TYPES for e in path)
+    if trigger or confirmed:
+        basis = f"its own condition “{trigger}” is what the changed rule decides" if trigger else "a confirmed relation of the knowledge links them"
+        # the direction of the effect, from the changed rule itself: a narrowing change that drops cases is held above (class "held"); here no case is lost
+        widened = [w for c in changes for w in [_narrows(c["after"], c["before"])] if w]
+        effect = (f"the change only adds cases ({widened[0]} now reach it); no case loses it, so nothing here needs a decision unless the extra cases matter"
+                  if widened else "check whether it should change with it")
+        return "follows_from", f"related rule “{title}” follows from the changed rule ({basis}); {effect}"
+    measured = {l["field"] for c in changes for l in _hold_leaves((c.get("before") or {}).get("condition")) if _hold_is_num(l.get("value"))}
+    own = [l for l in _hold_leaves(rule.get("condition")) if l.get("field") in measured and _hold_is_num(l.get("value"))]
+    if own and any((rule.get("outcome") or {}).get("kind") == ((c.get("before") or {}).get("outcome") or {}).get("kind") for c in changes):
+        return "independent_obligation", (f"related rule “{title}” is another tier of the same decision with its own threshold ({_value_words(own[0]['value'])}"
+                                          f"{' ' + own[0]['unit'] if own[0].get('unit') else ''}); this change keeps the order of the two tiers and does not alter it; "
+                                          "no action for this change")
+    if own:
+        return "independent_obligation", (f"related rule “{title}” is a separate obligation on the same measure with its own threshold ({_value_words(own[0]['value'])}"
+                                          f"{' ' + own[0]['unit'] if own[0].get('unit') else ''}); this change does not alter it and nothing requires the two to match; "
+                                          "no action for this change")
+    how = sorted({_EDGE_ABOUT[e["type"]] for e in path if e.get("type") in _EDGE_ABOUT}) or ["it is listed by the impact report"]
+    return "same_topic_only", (f"related rule “{title}” shares only the topic with the changed rule ({'; '.join(how)}); nothing links its condition to the change; "
+                               "no action for this change")
+
+
 def build_draft(intent: Mapping, report: Mapping, rules: Mapping[str, Mapping], relations: Iterable[Mapping], *, pin: Mapping, artifacts: Mapping[str, str],
                 observations: Iterable[Mapping], proposed_dependencies: Optional[Iterable[Mapping]] = None, dependency_state: Optional[Mapping] = None) -> dict:
     ops = [dict(o) for o in intent["operations"]]
@@ -720,7 +782,15 @@ def build_draft(intent: Mapping, report: Mapping, rules: Mapping[str, Mapping], 
     by_rule = {c["rule_id"]: c for c in changes}
     items = file_actions(report, ops, rules, artifacts, observations)
     unresolved = unresolved_items(report, rules, 0)
+    relations = list(relations)
+    affected = {i["rule_id"]: i for i in report.get("affected_rules") or []}
+    edges = {e["edge_id"]: e for e in relations if e.get("edge_id")}
     holds = server_holds(changes, rules, relations, proposed_dependencies or [], report.get("counterevidence_rule_ids") or [])
+    held_by = {}
+    for h in holds:
+        held_by.setdefault(h["other_rule_id"], h)
+    for it in items:
+        it["link_kind"], it["about"] = _item_link(it, rules, changes, affected, edges, held_by)
     held_rules = {h["rule_id"] for h in holds}
     for it in items:                                                      # the automatic edits of a held rule wait for the person's decision
         if it["action"] == "AI_EDIT_SUPPORTED" and set(it.get("rule_ids") or []) & held_rules:
@@ -862,7 +932,7 @@ def build_guidance_prompt(frozen: Mapping, draft: Mapping, *, can_read_evidence:
     lines, used = [], 0
     for it in list(draft["file_actions"]) + list(draft["unresolved"]):
         if it["ref"].startswith("F"):
-            line = f"- ref={it['ref']} kind={it['kind']} role={it['role']} action={it['action']} reason={it['reason']}"
+            line = f"- ref={it['ref']} kind={it['kind']} role={it['role']} action={it['action']} reason={it['reason']}" + (f"\n  about: {it['about']}" if it.get("about") else "")
             if can_read_evidence:
                 line += f"\n  file: {it['path']}" + (f" at {it['locator']}" if it.get("locator") else "") + (f"\n  stored: {it['stored_text'][:160]}" if it.get("stored_text") else "")
         elif it["kind"] == "server_hold":                              # business-level: rule titles and values, no file or location; a person must decide

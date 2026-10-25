@@ -21,10 +21,27 @@ from typing import Callable, Iterable, Mapping, Optional
 from core.change_intelligence.v2.serialize import canonical_hash
 
 CONFIG_VERSION = "semantic-retrieval-config-v1"
+# How the bounded payload is chosen (part of the cache key, so a verdict judged on another selection is never reused). v1 (2026-10-25, F-1): the items the
+# lexical / vector search already selected are offered first, in their relevance order, then the rest of the authorized corpus in id order while it fits; before
+# v1 the corpus was cut in id order only, so an item the answer needed could be missing from what expand, rank and judge saw.
+SELECTION_POLICY = "priority-candidates-v2"        # v2 (2026-10-25, continuation): rank / judge candidates composed by group within explicit budgets (below)
+# The envelope every layer works in, derived from one set of numbers so the parts agree (continuation of the AI quality round, 2026-10-25):
+#  * a layer's answer is at most PROVIDER_OUTPUT_TOKENS (the provider's max_output_tokens, which includes any thinking; the semantic role runs at MINIMAL); a
+#    scores / labels answer costs about len(id) + ANSWER_CHARS_PER_ITEM characters per candidate plus a small wrapper, and the provider's tokenizer gives at least
+#    OUTPUT_CHARS_PER_TOKEN characters per token on such JSON (observed cut points: 898-1,368 characters at 512 tokens, the lowest 1.75 per token), so rank / judge get only the candidates
+#    whose answer fits;
+#  * rank / judge inputs carry the candidates' text, at most half the expand payload (`max_payload_chars` / 2);
+#  * the token total therefore stays below (payload + 2 x payload / 2) / INPUT_CHARS_PER_TOKEN + 3 x (instruction + output) — DEFAULT_CAPS["max_tokens"].
+PROVIDER_OUTPUT_TOKENS = 512
+OUTPUT_CHARS_PER_TOKEN = 1.7
+ANSWER_CHARS_PER_ITEM = 18
+ANSWER_WRAPPER_CHARS = 60
+INPUT_CHARS_PER_TOKEN = 3.0
+INSTRUCTION_TOKENS = 200
 LAYERS = ("expand", "rank", "judge")
 RELEVANCE_LABELS = ("supports", "partial", "unrelated")
 SUFFICIENCY = ("sufficient", "partial", "insufficient")
-DEFAULT_CAPS = {"max_calls": 3, "max_payload_chars": 12000, "max_terms": 8, "max_candidates": 10, "timeout_seconds": 8.0, "max_retries": 1, "max_tokens": 6000,
+DEFAULT_CAPS = {"max_calls": 3, "max_payload_chars": 12000, "max_terms": 8, "max_candidates": 10, "max_extra_candidates": 10, "min_lexical_candidates": 10, "timeout_seconds": 8.0, "max_retries": 1, "max_tokens": 12000,
                 "max_term_chars": 40, "fail_closed_on_missing_usage": True}
 SEMANTIC_WEIGHT = 0.3          # final score = 0.7 x lexical + 0.3 x rank score, only where the rank layer scored the item (fixed, not tuned)
 TERM_WEIGHT = 0.5
@@ -44,24 +61,73 @@ class InvalidOutput(ValueError):
 
 # ---- requests ----------------------------------------------------------------------------------------------------------------------
 
-def offered_items(items: Iterable[Mapping], *, max_chars: int) -> tuple:
-    """(offered, truncated): id, kind and business text of the items the viewer may read, in id order, within `max_chars`. Never source quotes, locators, hashes or evidence refs."""
-    out, used, truncated = [], 0, False
-    for it in sorted(items, key=lambda i: (i["kind"], i["item_id"])):
+def offered_selection(items: Iterable[Mapping], *, max_chars: int, priority: Iterable[str] = ()) -> tuple:
+    """(offered, omitted_ids): id, kind and business text of the items the viewer may read, within `max_chars`. The `priority` ids (the candidates the lexical /
+    vector search already selected, most relevant first) come first, then every other item in (kind, id) order. Whole records only: an item that does not fit is
+    left out and listed, and smaller items after it may still fit. Never source quotes, locators, hashes or evidence refs."""
+    items = list(items)
+    by_id = {i["item_id"]: i for i in items}
+    order, seen = [], set()
+    for iid in priority:
+        if iid in by_id and iid not in seen:
+            order.append(by_id[iid])
+            seen.add(iid)
+    order += [i for i in sorted(items, key=lambda i: (i["kind"], i["item_id"])) if i["item_id"] not in seen]
+    out, omitted, used = [], [], 0
+    for it in order:
         entry = {"item_id": it["item_id"], "kind": it["kind"], "text": it["text"]}
         cost = len(entry["text"]) + len(entry["item_id"]) + 24
         if used + cost > max_chars:
-            truncated = True
-            break
+            omitted.append(it["item_id"])
+            continue
         out.append(entry)
         used += cost
-    return out, truncated
+    return out, omitted
+
+
+def offered_items(items: Iterable[Mapping], *, max_chars: int, priority: Iterable[str] = ()) -> tuple:
+    """(offered, truncated) — `offered_selection` with a yes / no for "something was left out"."""
+    out, omitted = offered_selection(items, max_chars=max_chars, priority=priority)
+    return out, bool(omitted)
+
+
+def worst_case_tokens(caps: Mapping) -> int:
+    """The most tokens the three layers can use inside the envelope above (inputs at the payload bounds, every answer at the output limit)."""
+    inputs = (caps["max_payload_chars"] + 2 * (caps["max_payload_chars"] // 2)) / INPUT_CHARS_PER_TOKEN
+    return int(inputs + 3 * (INSTRUCTION_TOKENS + PROVIDER_OUTPUT_TOKENS))
+
+
+def layer_candidates(lexical: Iterable[str], protected: Iterable[str], expanded: Iterable[str], offered_by_id: Mapping[str, Mapping], caps: Mapping) -> tuple:
+    """(candidates, omitted) for rank / judge. Groups in this order, each in its own relevance order: the first `min_lexical_candidates` of the pack's lexical /
+    vector candidates, then the protected ids (counter-evidence of the selected rules), then the expansion's new candidates, then the rest of the lexical ones.
+    An id joins only while the layer's answer still fits the provider's output limit (id length + JSON per item) and the candidates' text fits half the payload,
+    up to `max_candidates + max_extra_candidates`. `omitted` counts what each group lost: {lexical, protected, expanded}."""
+    lexical = [i for i in dict.fromkeys(lexical) if i in offered_by_id]
+    protected = [i for i in dict.fromkeys(protected) if i in offered_by_id and i not in lexical[: caps["min_lexical_candidates"]]]
+    expanded = [i for i in dict.fromkeys(expanded) if i in offered_by_id and i not in lexical and i not in protected]
+    head, tail = lexical[: caps["min_lexical_candidates"]], [i for i in lexical[caps["min_lexical_candidates"]:] if i not in protected]
+    order = [("lexical", i) for i in head] + [("protected", i) for i in protected] + [("expanded", i) for i in expanded] + [("lexical", i) for i in tail]
+    out_budget = PROVIDER_OUTPUT_TOKENS * OUTPUT_CHARS_PER_TOKEN - ANSWER_WRAPPER_CHARS
+    in_budget = caps["max_payload_chars"] // 2
+    limit = caps["max_candidates"] + caps["max_extra_candidates"]
+    chosen, omitted, out_used, in_used = [], {"lexical": 0, "protected": 0, "expanded": 0}, 0, 0
+    for group, iid in order:
+        out_cost = len(iid) + ANSWER_CHARS_PER_ITEM
+        in_cost = len(offered_by_id[iid]["text"]) + len(iid) + 24
+        if len(chosen) >= limit or out_used + out_cost > out_budget or in_used + in_cost > in_budget:
+            omitted[group] += 1
+            continue
+        chosen.append(iid)
+        out_used += out_cost
+        in_used += in_cost
+    return chosen, omitted
 
 
 def build_request(layer: str, query: str, offered: list, *, candidates: Optional[list] = None) -> dict:
     if layer not in LAYERS:
         raise ValueError(f"layer must be one of {LAYERS}")
-    req = {"layer": layer, "query": query, "items": offered if layer == "expand" else [i for i in offered if i["item_id"] in set(candidates or [])]}
+    by_id = {i["item_id"]: i for i in offered}
+    req = {"layer": layer, "query": query, "items": offered if layer == "expand" else [by_id[c] for c in dict.fromkeys(candidates or []) if c in by_id]}   # relevance order
     req["request_hash"] = canonical_hash({"layer": layer, "query": query, "items": [(i["item_id"], i["text"]) for i in req["items"]]})
     return req
 
@@ -87,17 +153,18 @@ def validate_expand(resp, offered_ids: set, caps: Mapping) -> dict:
     terms, ids = resp.get("terms", []), resp.get("candidate_ids", [])
     if not isinstance(terms, list) or not isinstance(ids, list):
         raise InvalidOutput("expand: terms and candidate_ids must be lists")
-    if len(terms) > caps["max_terms"] or len(ids) > caps["max_candidates"]:
+    if len(ids) > caps["max_candidates"]:
         raise InvalidOutput("expand: over the term or candidate cap")
-    for t in terms:
-        if not isinstance(t, str) or not t.strip() or len(t) > caps["max_term_chars"] or any(c in t for c in "\n\r\x00"):
-            raise InvalidOutput("expand: a term is not a short plain word or phrase")
+    # search terms are not evidence (they only widen the lexical query): a malformed or surplus term is dropped and counted, never allowed in, and it no longer
+    # discards the grounded candidate ids beside it (acceptance run AIQ-ACC-QA-20261025: 4 of 12 expand answers were thrown away for one term, 2026-10-25)
+    good = [t for t in terms if isinstance(t, str) and t.strip() and len(t) <= caps["max_term_chars"] and not any(c in t for c in "\n\r\x00")]
+    kept_terms = good[: caps["max_terms"]]
     for i in ids:
         if not isinstance(i, str) or i not in offered_ids:
             raise InvalidOutput("expand: a candidate id was not offered")
     if len(set(ids)) != len(ids):
         raise InvalidOutput("expand: duplicate candidate id")
-    return {"terms": [t.strip() for t in terms], "candidate_ids": list(ids)}
+    return {"terms": [t.strip() for t in kept_terms], "candidate_ids": list(ids), "terms_dropped": len(terms) - len(kept_terms)}
 
 
 def validate_rank(resp, offered_ids: set, caps: Mapping) -> dict:
@@ -189,7 +256,7 @@ class SemanticCache:
     @staticmethod
     def key(*, query: str, snapshot_id, view: str, index_version: str, access_scope: str, provider: Provider, caps: Mapping) -> str:
         return canonical_hash({"q": " ".join(query.lower().split()), "snapshot": snapshot_id, "view": view, "index": index_version, "access": access_scope,
-                               "provider": provider.provider_id, "config": provider.config_version, "caps": dict(caps)})
+                               "provider": provider.provider_id, "config": provider.config_version, "caps": dict(caps), "selection": SELECTION_POLICY})
 
     def get(self, key):
         if key in self.data:
@@ -284,7 +351,7 @@ class SemanticAdapter:
         return out
 
     def run(self, query: str, items: list, *, snapshot_id, view: str, index_version: str, access_scope: str, lexical_candidates: Iterable[str] = (),
-            budget=None, allow_external: bool = False) -> dict:
+            budget=None, allow_external: bool = False, protected: Iterable[str] = ()) -> dict:
         """Run the three layers over `items` (the viewer's items of the pinned snapshot). Always returns a labelled result; never raises for provider trouble.
         An EXTERNAL provider is called only inside a provider-backed job that passes its per-attempt `budget` (`allow_external=True`): a read route never pays."""
         key = self.cache.key(query=query, snapshot_id=snapshot_id, view=view, index_version=index_version, access_scope=access_scope, provider=self.provider, caps=self.caps)
@@ -293,7 +360,9 @@ class SemanticAdapter:
             return dict(cached, cache="hit", calls=0, tokens=0, tokens_in=0, tokens_out=0)
         result = {"status": "fallback", "provider": self.provider.provider_id, "config_version": self.provider.config_version, "synthetic": self.provider.synthetic,
                   "layers": {l: {"status": "not_run"} for l in LAYERS}, "terms": [], "candidate_ids": [], "scores": {}, "labels": {}, "sufficiency": "unknown", "calls": 0,
-                  "tokens": 0, "tokens_in": 0, "tokens_out": 0, "cache": "miss", "payload_truncated": False}
+                  "tokens": 0, "tokens_in": 0, "tokens_out": 0, "cache": "miss", "payload_truncated": False,
+                  "coverage": {"policy": SELECTION_POLICY, "corpus": len(items), "offered": 0, "omitted": 0, "judged_ids": [], "judge_digest": None,
+                               "layer_candidates": {}}}
         if isinstance(self.provider, DisarmedProvider):
             for l in LAYERS:
                 result["layers"][l] = {"status": "fallback", "reason": "disarmed"}
@@ -306,8 +375,10 @@ class SemanticAdapter:
             for l in LAYERS:
                 result["layers"][l] = {"status": "fallback", "reason": "outside_budget_boundary"}
             return result                                    # a paid provider runs only under a job reservation and call budget
-        offered, truncated = offered_items(items, max_chars=self.caps["max_payload_chars"])
-        result["payload_truncated"] = truncated
+        lexical_candidates, protected = list(lexical_candidates), list(protected)
+        offered, omitted = offered_selection(items, max_chars=self.caps["max_payload_chars"], priority=lexical_candidates + protected)
+        result["payload_truncated"] = bool(omitted)
+        result["coverage"].update(offered=len(offered), omitted=len(omitted))
         offered_ids = {i["item_id"] for i in offered}
         state = {"calls": 0, "tokens": 0, "tokens_in": 0, "tokens_out": 0, "budget": budget if self.provider.external else None, "attempts": {}, "retried_after": {}}
         stop = None
@@ -320,8 +391,11 @@ class SemanticAdapter:
             if layer == "expand":
                 req = build_request("expand", query, offered)
             else:
-                cands = sorted(set(lexical_candidates) | set(result["candidate_ids"])) if layer == "rank" else sorted(set(lexical_candidates) | set(result["candidate_ids"]))
-                cands = [c for c in cands if c in offered_ids][: self.caps["max_candidates"] + 40]
+                # the pack's own candidates in relevance order, then the expansion's; bounded so the layer's answer fits the provider's output limit (512
+                # tokens hold about 30 scores or labels: acceptance run AIQ-ACC-QA-20261025 cut 10 / 12 rank answers at MAX_TOKENS with 50 candidates in id order)
+                offered_by_id = {i["item_id"]: i for i in offered}
+                cands, lost = layer_candidates(lexical_candidates, protected, result["candidate_ids"], offered_by_id, self.caps)
+                result["coverage"]["layer_candidates"][layer] = {"count": len(cands), "omitted": lost}
                 if not cands:
                     result["layers"][layer] = {"status": "skipped", "reason": "no_candidates"}
                     continue
@@ -345,10 +419,14 @@ class SemanticAdapter:
             result["layers"][layer] = {"status": "applied", **self._attempts(layer, state)}
             if layer == "expand":
                 result["terms"], result["candidate_ids"] = valid["terms"], valid["candidate_ids"]
+                if valid.get("terms_dropped"):
+                    result["layers"][layer]["terms_dropped"] = valid["terms_dropped"]
             elif layer == "rank":
                 result["scores"] = valid["scores"]
             else:
                 result["labels"], result["sufficiency"] = valid["labels"], valid["sufficiency"]
+                # what the judge actually received: its verdict covers these items (same snapshot text, digest of the request), nothing else
+                result["coverage"].update(judged_ids=sorted(i["item_id"] for i in req["items"]), judge_digest=req["request_hash"])
         result["calls"], result["tokens"], result["tokens_in"], result["tokens_out"] = state["calls"], state["tokens"], state["tokens_in"], state["tokens_out"]
         applied = [l for l, v in result["layers"].items() if v["status"] == "applied"]
         result["status"] = "applied" if len(applied) == len([l for l in LAYERS if result["layers"][l]["status"] != "skipped"]) and applied else ("partial" if applied else "fallback")
