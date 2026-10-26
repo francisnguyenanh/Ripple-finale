@@ -2421,11 +2421,12 @@ class PostgresV2Store:
     def audit_events(self, tenant_id: str, workspace_id: str) -> list[dict]:
         self.head(tenant_id, workspace_id)
         with self._tx() as cur:
-            cur.execute("""SELECT id, event_type, actor_id, payload
+            cur.execute("""SELECT id, event_type, actor_id, payload, created_at
                 FROM v2_audit WHERE tenant_id=%s AND workspace_id=%s
                 ORDER BY id""", (tenant_id, workspace_id))
+            # SCN-12 / plan 17: the recorded time of each event (additive), so activity lists show when it happened instead of no time at all
             return [{"id": row[0], "event_type": row[1], "actor_id": row[2],
-                     "payload": _as_object(row[3])} for row in cur.fetchall()]
+                     "payload": _as_object(row[3]), "created_at": row[4].isoformat() if row[4] is not None else None} for row in cur.fetchall()]
 
     def create_job(self, tenant_id: str, workspace_id: str, job_id: str,
                    kind: str, payload: Mapping[str, object], *,

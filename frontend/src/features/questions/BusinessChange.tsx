@@ -72,21 +72,19 @@ export function BusinessChange({ ws }: { ws: string }) {
     if (r) setDone(r);
   };
   const tech = u?.technical as Rec | undefined;
-  return (
-    <div className="grid gap-4" data-testid="business-change">
-      {canAsk ? (
+  // SCN-02: a request opened already confirmed (from My work or a link) shows its task first: task frame, review and decisions; what the AI understood and the
+  // composer for another request stay one click away (mounted, so typed text is kept). Right after confirming here, the page keeps its order so the
+  // confirmation stays where the person acted.
+  const focused = !!cid && !!data?.confirmed && !done;
+  const composer = canAsk ? (
         <div className="rounded-lg border border-border bg-surface p-4 grid gap-3">
           <Field label="Describe a change to a business rule" hint="For example who approves, when it applies, an exception, where it applies, or a value. Nothing changes until you confirm, and confirming only records your request.">
             <TextArea data-testid="chg-input" rows={3} maxLength={2000} value={text} onChange={(e) => setText(e.target.value)} />
           </Field>
           <div><Button variant="primary" data-testid="chg-submit" title={!text.trim() ? "Describe the change first." : pending ? "The request is being sent." : undefined} disabled={pending || !text.trim()} aria-describedby={!text.trim() ? submitWhy : undefined} onClick={() => void submit()}>Check my request</Button>{!text.trim() && <span id={submitWhy} data-testid="chg-submit-why" className="ml-3 text-sm text-muted">Describe the change first.</span>}</div>
         </div>
-      ) : <Muted testid="chg-no-ask">You can read change requests, but your role cannot make new ones.</Muted>}
-      {err && <Callout tone="danger" testid="chg-error">{err}</Callout>}
-      {data && data.status !== "done" && data.status !== "failed" && data.status !== "cancelled" && <div data-testid="chg-pending" data-status={String(data.status)}>
-        <RunHold ws={ws} status={String(data.status)} hold={data.hold as Rec | undefined} onChanged={() => setReload((n) => n + 1)} /></div>}
-      {data && (data.status === "failed" || data.status === "cancelled") && <Callout tone="danger" testid="chg-failed">{JOB_WORDS[data.status as string]}: {reasonText(data.reason as string | null)}</Callout>}
-      {u && (
+      ) : <Muted testid="chg-no-ask">You can read change requests, but your role cannot make new ones.</Muted>;
+  const understanding = u && (
         <article data-testid="chg-understanding" data-status={u.status as string} className="rounded-lg border border-border bg-surface p-4 grid gap-3">
           <Muted testid="chg-request">Your request: {String(data?.request)}</Muted>
           <div className="flex flex-wrap items-center gap-3"><StatePill state={u.status as string} label={STATUS_WORDS[u.status as string] ?? (u.status as string)} testid="chg-status" /></div>
@@ -123,7 +121,35 @@ export function BusinessChange({ ws }: { ws: string }) {
           {done || data?.confirmed ? <Callout tone="info" testid="chg-confirmed">Your request is recorded. No rule has been changed.</Callout>
             : u.can_confirm && <div><Button variant="primary" data-testid="chg-confirm" disabled={pending} onClick={() => void confirm()}>Confirm this is what I mean</Button></div>}
         </article>
-      )}
+  );
+  const status = <>
+      {err && <Callout tone="danger" testid="chg-error">{err}</Callout>}
+      {data && data.status !== "done" && data.status !== "failed" && data.status !== "cancelled" && <div data-testid="chg-pending" data-status={String(data.status)}>
+        <RunHold ws={ws} status={String(data.status)} hold={data.hold as Rec | undefined} onChanged={() => setReload((n) => n + 1)} /></div>}
+      {data && (data.status === "failed" || data.status === "cancelled") && <Callout tone="danger" testid="chg-failed">{JOB_WORDS[data.status as string]}: {reasonText(data.reason as string | null)}</Callout>}
+  </>;
+  if (focused)
+    return (
+      <div className="grid gap-4" data-testid="business-change" data-focus="request">
+        {status}
+        <BusinessChangeReview ws={ws} cid={cid} />
+        {understanding && (
+          <details data-testid="chg-understanding-more" className="rounded-lg border border-border bg-surface px-4 py-3">
+            <summary className="cursor-pointer w-fit text-sm font-medium text-primary">What the AI understood from the request</summary>
+            <div className="mt-3">{understanding}</div>
+          </details>
+        )}
+        <details data-testid="chg-compose-more" className="rounded-lg border border-border bg-surface px-4 py-3">
+          <summary className="cursor-pointer w-fit text-sm font-medium text-primary">{canAsk ? "Ask for another change" : "About new change requests"}</summary>
+          <div className="mt-3">{composer}</div>
+        </details>
+      </div>
+    );
+  return (
+    <div className="grid gap-4" data-testid="business-change" data-focus="compose">
+      {composer}
+      {status}
+      {understanding}
       {cid && (done || data?.confirmed) ? <BusinessChangeReview ws={ws} cid={cid} /> : null}
     </div>
   );

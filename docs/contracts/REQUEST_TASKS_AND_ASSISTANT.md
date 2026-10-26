@@ -23,7 +23,7 @@ newest proposal of an intent replaces older ones through `previous_proposal_job_
 | `business_change` | the person who asked, holders of `knowledge.confirm` or `change.approve` | `v2_business_routes._change_record_for` |
 Anyone else gets the generic "request not found" (404), the same answer as for a request that does not exist. The generic job read (`GET /v2/jobs/{id}`) must not reveal a
 `business_change` record or a job bound to one (`change_id` in its payload) to someone who may not read that change (RQA-01 closes this gap; before it the job route returned
-such records to every `project.read` member).
+such records to every `project.read` member). The workspace audit (`GET /v2/audit/{ws}`) applies the same rule (SCN-12, 2026-10-26): an event bound to a business change (its `chg-…` job, intent or change id, or a job whose payload names that change as `change_id` or `intent_id`) is returned only to the person who asked and to holders of `knowledge.confirm` / `change.approve`, and an event of a `request.qa` job only to the person who asked it; an unresolvable binding is withheld.
 
 ## 3. Task view (read-only) — `GET /v2/requests/{family}/{id}/task-view?workspace_id=`
 ```
@@ -58,6 +58,12 @@ such records to every `project.read` member).
   reader is asked to do), `optional`, `blocked` (the reader's request that nobody can move on its current path), `waiting_human`, `waiting_system`, `recent`; each item
   carries `family`, `page`, `params`, `stage`, `step`, `blocked`, `blockers`; a request whose view fails is counted in `unavailable`, never shown as "no work". The legacy
   `todo` / `waiting` / `recent` lists keep their meaning.
+  - `coverage` (SCN-12, 2026-10-26, additive): `{scope: "loaded", candidate_limits{source: n}, truncated[source], recent_loaded, recent_shown, complete}`. The list is
+    built from newest-first candidate sources, each read up to its limit: `proposal` and `business_change` (40 each); for a reader with `intent.create` also its own
+    `change_request_conversation` (10) and `own_intent` (40). A source with more candidates than its limit is named in `truncated` (the sections may then miss requests;
+    no total is computed). A reader without `knowledge.confirm` / `change.approve` reads only their own business changes as candidates, so the cut and `truncated` never reflect requests they may not read. `sections.recent` / `recent` show at most 5 of `recent_loaded`. `complete` is true only when `truncated` is empty and `unavailable` is 0.
+    Section lengths are counts of request entries in this loaded list, not workspace totals; unreadable requests are excluded before anything is counted and never hinted.
+    No server pagination, sort, filter or cursor exists; a consumer that needs one is a separate dependency.
 - `completion_axes`: separate axes (knowledge, file writes, source apply, verification, result decision) as the family has them; never one combined badge.
 - Unknown or failed reads are `unknown` / `availability: partial`, never "no work". The read writes nothing, runs no job and calls no model.
 

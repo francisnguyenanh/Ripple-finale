@@ -12,9 +12,13 @@ import type { Rec } from "@/features/changes/types";
 import { CodeCandidate, CodeRecommendations } from "./CodePanel";
 import { ChangeAiPanels } from "./ChangeAiPanels";
 import { TaskFrame } from "@/features/request-assistant/TaskFrame";
+import { useTaskView } from "@/features/request-assistant/taskView";
 import { refusalWords } from "@/lib/refusal";
 import { DiffView } from "@/features/changes/ProposalStage";
 import { basename } from "@/lib/fmt";
+import { ArrowDown } from "lucide-react";
+import { jumpTo, pickJump, type JumpTarget } from "./decisionJump";
+import { ClauseCompare } from "./ClauseCompare";
 
 const q = encodeURIComponent;
 const ACTION_WORDS: Record<string, string> = { approve: "Accepted", reject: "Rejected", request_changes: "Changes requested", clarify: "Clarified" };
@@ -99,8 +103,11 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
     const t = setTimeout(() => setTick((x) => x + 1), 2000);
     return () => clearTimeout(t);
   }, [simStatus, tick]);
+  // The task projection is read once here and shared with the task frame (same request, same refresh as before): it says what this person is asked to do now.
+  const task = useTaskView(ws, "business_change", data ? cid : null, data);
   if (err) return <Callout tone="danger" testid="rev-error">{err}</Callout>;
   if (!data) return null;
+  const askedNow = ((task.tv?.obligations ?? []) as Rec[]).filter((o) => o.obligation_me && o.state === "current").map((o) => String(o.code));
   const draft = data.draft as Rec;
   const impact = data.impact as Rec;
   const can = data.can as Rec;
@@ -159,14 +166,35 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
   };
   const kd = can.knowledge_decision as Rec | null;
   const fd = can.file_writes_decision as Rec | null;
+  const why = (k: string) => `rev-why-${k}-${cid}`;                              // SCN-02: a disabled decision names its reason beside it (aria-describedby)
+  // SCN-17: the controls this page renders for each obligation, under the same conditions that render them below (so a link never points at nothing).
+  const decideAt: JumpTarget = { id: `rev-reason-${cid}`, disabled: false, label: "Go to the decision controls" };
+  const jumps: Record<string, JumpTarget | undefined> = {
+    decide_knowledge: s.can("change.approve") ? decideAt : undefined,
+    decide_file_writes: s.can("change.approve") ? decideAt : undefined,
+    commit_knowledge: s.can("knowledge.confirm") && !data.commit
+      ? { id: `rev-commit-${cid}`, disabled: !can.commit_knowledge, reasonId: !can.commit_knowledge && reasons.commit_knowledge ? why("commit") : undefined, label: "Go to the commit control" } : undefined,
+    apply_source_edits: source && !!data.commit && !sourceJob
+      ? { id: `rev-apply-${cid}`, disabled: !can.apply_source_edits, reasonId: !can.apply_source_edits && reasons.apply_source_edits ? why("apply") : undefined, label: "Go to the apply control" } : undefined,
+  };
+  const jumpLink = (asked: string[]) => {
+    const t = pickJump(asked, jumps);
+    return t ? (
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="secondary" data-testid="task-jump" data-target={t.id} onClick={() => jumpTo(t)}>{t.label}<ArrowDown size={14} aria-hidden="true" /></Button>
+        {t.disabled && <span className="text-sm text-muted" data-testid="task-jump-disabled">Not available to you right now; the reason is shown there.</span>}
+      </div>
+    ) : null;
+  };
   return (
+    <>
+    <TaskFrame key={`${ws}|${cid}`} ws={ws} family="business_change" id={cid} refreshKey={data} shared={task} detail={jumpLink} />
     <section data-testid="chg-review" data-status={draft.status as string} className="rounded-lg border border-border bg-surface p-4 grid gap-4">
       <div className="flex flex-wrap items-center gap-3">
         <h3 className="font-semibold">Review the change</h3>
         <StatePill state={draft.status as string} label={STATUS_WORDS[draft.status as string] ?? (draft.status as string)} testid="rev-status" />
         {data.knowledge_moved && <Callout tone="warn" testid="rev-moved">The business knowledge changed after this request was confirmed. It has to be stated and confirmed again; decisions are refused.</Callout>}
       </div>
-      <TaskFrame key={`${ws}|${cid}`} ws={ws} family="business_change" id={cid} refreshKey={data} />
       <div className="grid gap-4 items-start xl:grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)]" data-testid="rev-workspace">   {/* EUI-01: evidence / work left, decisions rail right from 1280 px */}
       <div className="grid gap-4 min-w-0" data-testid="rev-evidence">
       <Muted>{String(draft.statement)}</Muted>
@@ -175,10 +203,7 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
         {ruleChanges.map((c, i) => (
           <div key={i} data-testid="rev-rule" data-valid={String(c.valid)} className="rounded-md border border-border p-3 text-sm grid gap-1">
             <p className="font-medium">{c.title as string}</p>
-            <div className="grid gap-1 md:grid-cols-2 md:gap-4">
-              <p><span className="text-muted">Before:</span> {c.before as string}</p>
-              <p><span className="text-muted">After:</span> {c.after as string}</p>
-            </div>
+            <ClauseCompare before={c.before} after={c.after} />
             {((c.aspects ?? []) as Rec[]).length > 0 && (
               <ul className="grid gap-1" data-testid="rev-aspects" aria-label="What changes in the rule">
                 {((c.aspects ?? []) as Rec[]).map((a, j) => (
@@ -253,20 +278,21 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
       </div>
       {s.can("change.approve") && (
         <div data-testid="rev-decide" className="grid gap-2 rounded-md border border-border p-3">
-          <Field label="Your decision" hint="Accepting the knowledge change does not approve any file edit; approving file edits does not accept the change. Nothing is applied here.">
-            <TextArea data-testid="rev-reason" rows={2} maxLength={1000} placeholder="Why, in your own words" value={reason} onChange={(e) => setReason(e.target.value)} />
+          {/* "Your decision" only when the projection asks this person to decide now; a person who may decide but is not asked reads "Decision" (SCN-17) */}
+          <Field label={askedNow.some((c) => c === "decide_knowledge" || c === "decide_file_writes") ? "Your decision" : "Decision"} hint="Accepting the knowledge change does not approve any file edit; approving file edits does not accept the change. Nothing is applied here.">
+            <TextArea id={`rev-reason-${cid}`} data-testid="rev-reason" rows={2} maxLength={1000} placeholder="Why, in your own words" value={reason} onChange={(e) => setReason(e.target.value)} />
           </Field>
           {((can.flags_to_acknowledge ?? []) as string[]).length > 0 && (
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" data-testid="rev-ack" checked={ack} onChange={(e) => setAck(e.target.checked)} />I have read the warnings above and mean this change.</label>
           )}
           <div className="flex flex-wrap gap-2">
-            <Button variant="primary" data-testid="rev-approve" disabled={pending || !reason.trim() || !can.approve_knowledge} title={!can.approve_knowledge ? reasons.approve_knowledge : undefined} onClick={() => void run(() => decide("knowledge", "approve"))}>Accept the knowledge change</Button>
+            <Button variant="primary" data-testid="rev-approve" disabled={pending || !reason.trim() || !can.approve_knowledge} title={!can.approve_knowledge ? reasons.approve_knowledge : undefined} aria-describedby={!can.approve_knowledge && reasons.approve_knowledge ? why("knowledge") : undefined} onClick={() => void run(() => decide("knowledge", "approve"))}>Accept the knowledge change</Button>
             <Button data-testid="rev-request-changes" disabled={pending || !reason.trim() || !!kd && kd.action !== "request_changes" || data.knowledge_moved === true} onClick={() => void run(() => decide("knowledge", "request_changes"))}>Request changes</Button>
             <Button data-testid="rev-reject" disabled={pending || !reason.trim() || !!kd && kd.action !== "request_changes" || data.knowledge_moved === true} onClick={() => void run(() => decide("knowledge", "reject"))}>Reject</Button>
-            <Button data-testid="rev-approve-files" disabled={pending || !reason.trim() || !can.approve_file_writes} title={!can.approve_file_writes ? reasons.approve_file_writes : undefined} onClick={() => void run(() => decide("file_writes", "approve"))}>Approve the automatic file edits</Button>
+            <Button data-testid="rev-approve-files" disabled={pending || !reason.trim() || !can.approve_file_writes} title={!can.approve_file_writes ? reasons.approve_file_writes : undefined} aria-describedby={!can.approve_file_writes && reasons.approve_file_writes ? why("files") : undefined} onClick={() => void run(() => decide("file_writes", "approve"))}>Approve the automatic file edits</Button>
           </div>
-          {!can.approve_knowledge && reasons.approve_knowledge && <Muted testid="rev-why-not">{reasons.approve_knowledge}</Muted>}
-          {!can.approve_file_writes && reasons.approve_file_writes && <Muted testid="rev-why-not-files">{reasons.approve_file_writes}</Muted>}
+          {!can.approve_knowledge && reasons.approve_knowledge && <Muted id={why("knowledge")} testid="rev-why-not">{reasons.approve_knowledge}</Muted>}
+          {!can.approve_file_writes && reasons.approve_file_writes && <Muted id={why("files")} testid="rev-why-not-files">{reasons.approve_file_writes}</Muted>}
           {kd && <Muted testid="rev-current-knowledge">Current knowledge decision: {ACTION_WORDS[kd.action as string]} by {kd.by as string}.</Muted>}
           {fd && <Muted testid="rev-current-files">Current file-edit decision: {ACTION_WORDS[fd.action as string]} by {fd.by as string}.</Muted>}
         </div>
@@ -283,7 +309,7 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
         {data.commit ? <Muted testid="rev-committed">Committed as business version {String((data.commit as Rec).business_revision)} by {String((data.commit as Rec).by)}.</Muted> : null}
         {s.can("knowledge.confirm") && !data.commit && (
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="primary" data-testid="rev-commit" disabled={pending || !can.commit_knowledge} title={!can.commit_knowledge ? reasons.commit_knowledge : undefined}
+            <Button id={`rev-commit-${cid}`} variant="primary" data-testid="rev-commit" disabled={pending || !can.commit_knowledge} title={!can.commit_knowledge ? reasons.commit_knowledge : undefined} aria-describedby={!can.commit_knowledge && reasons.commit_knowledge ? why("commit") : undefined}
               onClick={() => void run(async () => {
                 setNote(null);
                 try {
@@ -292,7 +318,7 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
                 } catch (e) { setNote(errText(e)); }
                 setTick((t) => t + 1);
               })}>Commit the knowledge change</Button>
-            {!can.commit_knowledge && reasons.commit_knowledge && <Muted testid="rev-why-not-commit">{reasons.commit_knowledge}</Muted>}
+            {!can.commit_knowledge && reasons.commit_knowledge && <Muted id={why("commit")} testid="rev-why-not-commit">{reasons.commit_knowledge}</Muted>}
           </div>
         )}
         {source && (
@@ -305,7 +331,7 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
             {sourceJob && <p data-testid="rev-source-job">Automatic edit job: {String(sourceJob.status).toLowerCase()}{sourceJob.reason ? ` (${String(sourceJob.reason)})` : ""}.{sourceJob.published ? " A new source revision was published; the next analysis reads it back." : ""}</p>}
             {!!data.commit && !sourceJob && (
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant="primary" data-testid="rev-apply-source" disabled={pending || !can.apply_source_edits} title={!can.apply_source_edits ? reasons.apply_source_edits : undefined}
+                <Button id={`rev-apply-${cid}`} variant="primary" data-testid="rev-apply-source" disabled={pending || !can.apply_source_edits} title={!can.apply_source_edits ? reasons.apply_source_edits : undefined} aria-describedby={!can.apply_source_edits && reasons.apply_source_edits ? why("apply") : undefined}
                   onClick={() => void run(async () => {
                     setNote(null);
                     try {
@@ -322,7 +348,7 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
                       setNote(`Nothing is written by Ripple. ${(r.manual as Rec[]).length} item(s) to edit by hand; refresh the sources afterwards so the knowledge can read them back.`);
                     } catch (e) { setNote(errText(e)); }
                   })}>A person edits the files</Button>
-                {!can.apply_source_edits && reasons.apply_source_edits && <Muted testid="rev-why-not-apply">{reasons.apply_source_edits}</Muted>}
+                {!can.apply_source_edits && reasons.apply_source_edits && <Muted id={why("apply")} testid="rev-why-not-apply">{reasons.apply_source_edits}</Muted>}
               </div>
             )}
           </div>
@@ -357,5 +383,6 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
         </div>
       </Tech>
     </section>
+    </>
   );
 }

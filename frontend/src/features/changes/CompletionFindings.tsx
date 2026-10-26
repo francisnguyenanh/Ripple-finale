@@ -133,7 +133,7 @@ export function CompletionFindings({ dto, disp, setDisp }: { dto: Rec; disp: Dis
                 <ul className="list-disc pl-5">{g.lines.map((l, k) => <li key={k} data-testid="possible-effect-item" data-finding-id={g.ids[k]}>{l}<Tech> <code>{g.ids[k]}</code></Tech></li>)}</ul>
                 {s.can("change.accept_result") && (<>
                   {CHOICES.map(([v, label]) => <label key={v} className="flex items-center gap-2"><input type="radio" name={`d-${g.key}`} data-testid={`disp-${v}`} checked={first?.disposition === v} onChange={() => set({ disposition: v })} />{label}</label>)}
-                  {(first?.disposition === "accepted_limit" || first?.disposition === "judged_unrelated") && <input data-testid="disp-reason" aria-label={`Reason for ${g.file}`} className="border border-border rounded px-2 py-1" placeholder="Reason (at least 10 characters)" value={first.reason} onChange={(e) => set({ reason: e.target.value })} />}
+                  {(first?.disposition === "accepted_limit" || first?.disposition === "judged_unrelated") && <input data-testid="disp-reason" aria-label={`Reason for ${g.file}`} className="border border-border-strong rounded px-2 py-1" placeholder="Reason (at least 10 characters)" value={first.reason} onChange={(e) => set({ reason: e.target.value })} />}
                 </>)}
               </fieldset>
             );

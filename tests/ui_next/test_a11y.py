@@ -59,6 +59,9 @@ def test_pages_have_no_axe_violations(env, ch, pw_browser, scheme, w, h):
             expect(tid(page, "page-title")).to_be_visible()
             page.wait_for_load_state("networkidle")
             if view == "Questions":
+                expect(tid(page, "questions-sections")).to_be_visible()
+                if tid(page, "questions-sections").get_attribute("data-folded") == "true":   # SCN-05: on a phone the navigator is one disclosure; open it first
+                    tid(page, "qsec-toggle").click()
                 tid(page, "qsec-all").click()                            # the page opens on one section (D2): scan every section, as before
                 expect(tid(page, "qsection-ask")).to_be_visible()
                 page.wait_for_load_state("networkidle")

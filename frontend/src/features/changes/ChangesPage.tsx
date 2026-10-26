@@ -12,7 +12,7 @@ import { FlowProvider, useFlow } from "./flow";
 import { IntentStage } from "./IntentStage";
 import { ProposalStage } from "./ProposalStage";
 import { Journey } from "./JourneyBar";
-import { NextCard, RequestCard, SupersededCard } from "./RequestCard";
+import { fmtForm, NextCard, RequestCard, SupersededCard } from "./RequestCard";
 import { CheckStage } from "./CheckStage";
 import { ReviewStage } from "./ReviewStage";
 import { StageProvider, useStages } from "./StageCard";
@@ -70,7 +70,8 @@ function Flow() {
       )}
       <LegacyAiNote />
       <SupersededCard />
-      {reqId && <TaskFrame key={`${ws}|${reqId}`} ws={ws} family="intent_flow" id={reqId} refreshKey={data} shared={task} detail={task.tv ? <NextCard inline /> : undefined} />}
+      {reqId && <TaskFrame key={`${ws}|${reqId}`} ws={ws} family="intent_flow" id={reqId} refreshKey={data} shared={task} detail={task.tv ? <NextCard inline /> : undefined}
+        fallbackTitle={data.intent ? (() => { const f = fmtForm(data.intent); return `${f.title}: ${f.from} → ${f.to}`; })() : undefined} />}
       <Journey />
       <NextCard />
       <ExpandAll />

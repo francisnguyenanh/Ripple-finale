@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SECTIONS, selectedSection, visible, type SectionId } from "./sections";
+import { deepLinked, SECTIONS, selectedSection, visible, type SectionId } from "./sections";
 
 const all = SECTIONS.map((s) => s.id);
 
@@ -31,5 +31,20 @@ describe("Questions sections", () => {
   it("a section the account cannot use is not selectable", () => {
     const without: SectionId[] = all.filter((i) => i !== "source-ask");
     expect(selectedSection("source-ask", without)).toBeNull();
+  });
+});
+
+describe("deepLinked (SCN-17)", () => {
+  it("only an item link inside the selected section folds the navigator", () => {
+    expect(deepLinked("change", { chg: "chg-1" })).toBe(true);
+    expect(deepLinked("ask", { q: "q-1" })).toBe(true);
+    expect(deepLinked("findings", { finding: "f-1" })).toBe(true);
+    expect(deepLinked("source-ask", { qa: "c-1" })).toBe(true);
+  });
+  it("the default section, a chosen section without a link, all sections, or a link to another section do not", () => {
+    expect(deepLinked(selectedSection("", ["open", "change"]), {})).toBe(false);
+    expect(deepLinked("rules", {})).toBe(false);
+    expect(deepLinked(null, { chg: "chg-1" })).toBe(false);
+    expect(deepLinked("rules", { chg: "chg-1" })).toBe(false);
   });
 });

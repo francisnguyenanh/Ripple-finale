@@ -139,10 +139,16 @@ def test_navigator_is_keyboard_operable_on_a_narrow_screen(env, ch, pw_browser):
     try:
         page, ctx = _open(pw_browser, server, env)
         page.set_viewport_size({"width": 390, "height": 844})
+        expect(tid(page, "questions-sections")).to_have_attribute("data-folded", "true")      # SCN-05: one labelled disclosure on a phone, the content is not pushed down
+        tid(page, "qsec-toggle").focus()
+        page.keyboard.press("Enter")                                                             # opens with the keyboard
+        expect(tid(page, "qsec-rules")).to_be_visible()
         tid(page, "qsec-rules").focus()
         page.keyboard.press("Enter")
         expect(tid(page, "qsection-rules")).to_be_visible()
         expect(tid(page, "qsection-ask")).to_be_hidden()
+        expect(tid(page, "qsec-rules")).to_be_hidden()                                          # choosing folds it again
+        expect(tid(page, "qsec-toggle")).to_contain_text("Rules")                              # and it names the section shown
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1")
         ctx.close()
     finally:

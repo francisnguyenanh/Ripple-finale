@@ -7,12 +7,13 @@ import { Background, Controls, Handle, Position, ReactFlow, type Edge, type Node
 import { Network, TreePine } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Denied, Callout, Card, Field, Muted, StatePill, Tech, TextInput, Select } from "@/components/bits";
+import { EmptyState, Denied, Callout, Card, Field, Muted, StatePill, Tech, TextInput, Select } from "@/components/bits";
 import { StatusBadge } from "@/components/StatusBadge";
 import { basename, nodePhrase, ruleTitle, scopeText, valueText } from "@/lib/fmt";
 import { replaceHash, hashFor } from "@/lib/route";
 import { PageHeader } from "@/pages/Page";
 import { useSession } from "@/session";
+import { looseSplit } from "./graphSplit";
 import { bizLabel, EDGE_BIZ, nodeHelp, nodeHistoryLines, nodeStatus, STATE_HELP, SYMBOL, sym, TYPE_LABEL } from "./explorerText";
 import { ExplorerTree, locText } from "./ExplorerTree";
 import { layout, matches, type GEdge, type GNode } from "./layout";
@@ -110,6 +111,38 @@ function Detail({ g, tree, id, reload }: { g: Graph; tree: Tree; id: string | nu
   );
 }
 
+const LOOSE_CHIPS = 60;                                                            // bounded: never thousands of chips in the page at once
+
+function LooseItems({ loose, hidden, cut, declutter, total, canvas, linked, sel, select, showLoose, setShowLoose, limit, setLimit, label }: {
+  loose: GNode[]; hidden: Set<string>; cut: boolean; declutter: boolean; total: number; canvas: number; linked: number; sel: string | null; select: (id: string) => void;
+  showLoose: boolean; setShowLoose: (v: boolean) => void; limit: number; setLimit: (n: number) => void; label: (n: GNode) => string;
+}) {
+  if (!loose.length) return <p className="mt-1 text-xs text-muted" data-testid="graph-counts">All {total} items shown are on the canvas.</p>;
+  if (!linked) return <p className="mt-1 text-xs text-muted" data-testid="graph-counts" data-all-loose="true">None of the {total} items shown has a link to another shown item, so all stay on the canvas. This is not proof that they are unrelated{cut ? "; the graph was also cut at its size limit" : ""}.</p>;
+  const shown = loose.slice(0, limit);
+  return (
+    <section className="mt-2 grid gap-2 rounded-lg border border-border bg-surface p-3" data-testid="graph-loose" aria-labelledby="graph-loose-h">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 id="graph-loose-h" className="text-sm font-semibold">No link in the loaded graph ({loose.length})</h2>
+        <Button size="sm" variant="ghost" aria-pressed={showLoose} data-testid="graph-loose-toggle" onClick={() => setShowLoose(!showLoose)}>{showLoose ? "Keep them in this list" : "Show them on the canvas too"}</Button>
+      </div>
+      <p className="text-xs text-muted" data-testid="graph-counts">{declutter ? `Canvas: ${canvas} linked items. Listed here: ${loose.length}. Together: ${total} items shown.` : `All ${total} items are on the canvas; ${loose.length} of them have no link to another shown item.`} No link here means none in what was loaded and shown, not that the item is unrelated{cut ? "; the graph was cut at its size limit, so links may be missing" : ""}.</p>
+      <ul className="flex flex-wrap gap-2">
+        {shown.map((n) => (
+          <li key={n.id}>
+            <button type="button" data-testid="graph-loose-chip" data-node-id={n.id} aria-pressed={sel === n.id} onClick={() => select(n.id)}
+              className={`rounded-full border px-3 py-1 text-sm text-left ${sel === n.id ? "border-primary bg-surface-2 font-semibold" : "border-border hover:bg-surface-2"}`}>
+              {SYMBOL[n.state] ? <span aria-hidden="true">{SYMBOL[n.state]} </span> : null}{label(n)}
+              {hidden.has(n.id) && <span className="text-xs text-muted"> (its links point to items the filter hides)</span>}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {loose.length > limit && <div><Button size="sm" variant="ghost" data-testid="graph-loose-more" onClick={() => setLimit(limit + LOOSE_CHIPS)}>Show {Math.min(LOOSE_CHIPS, loose.length - limit)} more ({loose.length - limit} not listed yet)</Button></div>}
+    </section>
+  );
+}
+
 export function ExplorerPage() {
   const s = useSession();
   const ws = s.route.ws!;
@@ -122,6 +155,8 @@ export function ExplorerPage() {
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
   const [closedInSearch, setClosedInSearch] = React.useState<Set<string>>(new Set());
   const [focusId, setFocusId] = React.useState<string | null>(null);
+  const [showLoose, setShowLoose] = React.useState(false);                       // SCN-07: put the unlinked items back on the canvas
+  const [looseLimit, setLooseLimit] = React.useState(LOOSE_CHIPS);
   const initialised = React.useRef(false);
   const sessionRefresh = s.refresh;
   const load = React.useCallback(async () => {
@@ -166,13 +201,18 @@ export function ExplorerPage() {
 
   const vis = React.useMemo(() => (tree ? filterTree(tree, query, state) : null), [tree, query, state]);
   const visible = React.useMemo(() => (g ? g.nodes.filter((n) => matches(n, query, state)) : []), [g, query, state]);
+  // SCN-07: an item with no edge to another SHOWN item goes to a list under the canvas. That says only "no link in the loaded, filtered graph", never "no
+  // relation": a link to an item the filter hides, or a graph cut at its size limit, is named per item / per page.
+  const split = React.useMemo(() => looseSplit(g?.edges ?? [], visible), [g, visible]);
+  const declutter = !showLoose && split.loose.length > 0 && split.linked.length > 0;
+  const onCanvas = declutter ? visible.filter((n) => !split.looseIds.has(n.id)) : visible;
   const flow = React.useMemo(() => {
     if (!g || !tree) return { nodes: [] as Node<KData>[], edges: [] as Edge[] };
-    const pos = layout(visible);
-    const ids = new Set(visible.map((n) => n.id));
+    const pos = layout(onCanvas);
+    const ids = new Set(onCanvas.map((n) => n.id));
     const nearIds = new Set<string>();
     if (sel) g.edges.forEach((e) => { if (e.from === sel) nearIds.add(e.to); if (e.to === sel) nearIds.add(e.from); });
-    const nodes: Node<KData>[] = visible.map((n) => ({
+    const nodes: Node<KData>[] = onCanvas.map((n) => ({
       id: n.id, type: "k", position: pos[n.id], draggable: false, connectable: false,
       data: { n, label: s.mode === "technical" ? n.label : graphLabel(n, tree, false), selected: n.id === sel, near: nearIds.has(n.id), onSelect: select },
     }));
@@ -181,7 +221,7 @@ export function ExplorerPage() {
       ariaLabel: `${e.type}${e.projection ? " (proposed link, not proof)" : ""}`,
     }));
     return { nodes, edges };
-  }, [g, tree, visible, sel, select, s.mode]);
+  }, [g, tree, onCanvas, sel, select, s.mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (err && (err.status === 403 || err.status === 404)) return (<><PageHeader id="explorer" /><Denied err={err} /></>);
   if (err) return (<><PageHeader id="explorer" /><Callout tone="danger" testid={err.status === 403 || err.status === 404 ? "link-unavailable" : "state-error"}>{err.status === 403 || err.status === 404 ? "This page is not available to your account. Nothing was changed and nothing from that workspace is shown." : "The server could not complete the request."} <Button onClick={() => void load()}>Try again</Button></Callout></>);
@@ -269,12 +309,22 @@ export function ExplorerPage() {
         ) : (
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
             <div id="explorer-main" className="min-w-0">
-              {!visible.length ? <div data-testid="state-empty" className="rounded-lg border border-border bg-surface p-6">No item matches the filter.</div> : (
+              {!visible.length ? (
+                <EmptyState kind="no-match" testid="state-empty" title="No item matches the filter"
+                  action={<Button size="sm" variant="secondary" data-testid="explorer-clear-filter" onClick={() => { setQuery(""); setState(""); }}>Clear the search and state</Button>}>
+                  <span>The graph still holds its items; only this search and state hide them.</span>
+                </EmptyState>
+              ) : (
                 <div data-testid="graph-svg" role="group" aria-label="Knowledge graph. Use the tree view for the same information as text." className="h-[600px] rounded-lg border border-border bg-surface">
                   <ReactFlow nodes={flow.nodes} edges={flow.edges} nodeTypes={NODE_TYPES} fitView minZoom={0.2} maxZoom={1.6} nodesDraggable={false} nodesConnectable={false} edgesFocusable={false} proOptions={{ hideAttribution: false }}>
                     <Background /><Controls showInteractive={false} />
                   </ReactFlow>
                 </div>
+              )}
+              {visible.length > 0 && (
+                <LooseItems loose={split.loose} hidden={split.hiddenLink} cut={!!g.coverage.truncated} declutter={declutter} total={visible.length} canvas={onCanvas.length}
+                  linked={split.linked.length} sel={sel} select={select} showLoose={showLoose} setShowLoose={setShowLoose} limit={looseLimit} setLimit={setLooseLimit}
+                  label={(n) => (s.mode === "technical" ? n.label : graphLabel(n, tree, false))} />
               )}
               {visible.length > 0 && (                                                    // UX-11: the line key sits next to the graph; the full legend stays below
                 <p data-testid="graph-key" className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">

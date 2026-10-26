@@ -2,7 +2,8 @@
 // Add an example here when a new shared variant or component gets its first real consumer (docs/design-system/COMPONENT_GUIDELINES.md).
 import * as React from "react";
 import { Button } from "@/components/ui/button";
-import { Callout, Field, HowItWorks, Muted, StatePill, TextArea, TextInput } from "@/components/bits";
+import { Callout, Card, Datum, Field, HowItWorks, Muted, StatePill, TextArea, TextInput } from "@/components/bits";
+import { DataTable, type Column } from "@/components/ui/data-table";
 import { StatusBadge, type Status } from "@/components/StatusBadge";
 import { ResultSummary } from "@/components/decision/ResultSummary";
 import { NextActionPanel } from "@/components/decision/NextActionPanel";
@@ -24,6 +25,8 @@ const TOKENS: [string, string][] = [
   ["bg", "bg-bg"], ["surface", "bg-surface"], ["surface-2", "bg-surface-2"], ["border", "bg-border"], ["text", "bg-text"], ["text-muted", "bg-muted"],
   ["primary", "bg-primary"], ["on-primary", "bg-on-primary"], ["success", "bg-success"], ["warning", "bg-warning"], ["danger", "bg-danger"],
   ["on-danger", "bg-on-danger"], ["info", "bg-info"], ["sim", "bg-sim"], ["focus", "bg-[var(--focus)]"],
+  ["border-strong", "bg-border-strong"], ["nav-bg", "bg-nav-bg"], ["nav-hover", "bg-nav-hover"], ["header-bg", "bg-header-bg"], ["header-surface", "bg-header-surface"],
+  ["header-border", "bg-header-border"], ["header-text", "bg-header-text"], ["header-muted", "bg-header-muted"], ["header-focus", "bg-header-focus"],
 ];
 const noop = () => undefined;
 
@@ -91,6 +94,22 @@ export function Catalog() {
             </div>
           ))}
         </div>
+        {/* SCN-13 zones: navy command bar, tinted side navigation with the active marker, stone canvas, white panel. Static sample: links go nowhere. */}
+        <div className="grid overflow-hidden rounded-lg border border-border" data-testid="catalog-zones">
+          <div className="rp-cmd flex flex-wrap items-center gap-3 border-b border-header-border bg-header-bg px-4 py-2 text-header-text">
+            <strong className="text-lg">Ripple</strong>
+            <span className="text-xs font-semibold uppercase tracking-wider text-header-muted">Workspace</span><span className="text-sm">Harbor procurement</span>
+            <span className="rounded-full border border-header-muted px-2 py-0.5 text-xs">Your demo session is running</span>
+            <button type="button" onClick={noop} className="ml-auto rounded-md px-3 py-1.5 text-sm hover:bg-header-surface">Account</button>
+          </div>
+          <div className="grid grid-cols-[10rem_minmax(0,1fr)]">
+            <nav aria-label="Catalog navigation sample" className="grid content-start gap-1 border-r border-border bg-nav-bg p-2 text-sm">
+              <span className="rounded-md border-l-4 border-primary bg-surface px-3 py-2 font-semibold shadow-card" aria-current="page">Overview</span>
+              <span className="rounded-md border-l-4 border-transparent px-3 py-2 text-muted">Sources</span>
+            </nav>
+            <div className="bg-bg p-4"><Card title="Panel on the canvas" level={3}><Muted>Header strip, then body.</Muted></Card></div>
+          </div>
+        </div>
       </Block>
 
       <Block id="cat-buttons" title="Buttons">
@@ -128,6 +147,31 @@ export function Catalog() {
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Reason" hint="Recorded with your name."><TextInput placeholder="Why, in your own words" /></Field>
           <Field label="Details"><TextArea rows={2} /></Field>
+        </div>
+      </Block>
+
+      <Block id="cat-panel" title="Panels, summary data and tables (SCN-01 / SCN-09)">
+        <Muted>A Card with a header is split into a header strip and a body (SCN-13); without a header it is one padded body. Eyebrow only when it adds information; meta is a scoped timestamp the server gave (never the render clock); flush lets a table meet the panel edge; the left accent is selective and always repeats a state the text already says.</Muted>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card title="Purchases from high-risk suppliers go to the Finance Controller instead of the Operations Director, a long title that wraps" eyebrow="Business knowledge change"
+            description="One sentence that says what this panel is for." meta="Task status read 2026-10-26 10:00 (UTC)" accent="primary" testid="catalog-card-rich">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Datum label="Step now" value="Waiting for the knowledge decision" />
+              <Datum label="Held by" value="You" />
+              <Datum label="Your part" value={null} />
+            </div>
+          </Card>
+          <Card title="Blocked request" accent="warning" level={3} testid="catalog-card-warning">
+            <Callout tone="warn"><strong>What blocks this request</strong><span>The business knowledge changed after this request was confirmed.</span></Callout>
+          </Card>
+        </div>
+        <Card title="My work" eyebrow="Requests placed for you" flush testid="catalog-card-flush">
+          <CatalogTable />
+        </Card>
+        <div className="grid gap-3 grid-cols-3" role="group" aria-label="Counts example">
+          <Datum label="Waiting for you" value={2} size="lg" className="rounded-md border border-border border-l-4 border-l-primary p-3" />
+          <Datum label="Waiting for someone else" value={0} size="lg" className="rounded-md border border-border p-3" />
+          <Datum label="Blocked" value={null} unknown="Unavailable" size="lg" className="rounded-md border border-border p-3" />
         </div>
       </Block>
 
@@ -196,6 +240,21 @@ export function Catalog() {
 const TRIAGE_SAMPLE = [{ gap_id: "s1", kind: "missing_actor", priority: "critical", q: "Who approves purchases above the limit? (synthetic)" },
   { gap_id: "s2", kind: "conflicting_facts", q: "Two sources give different limits. (synthetic)" }, { gap_id: "s3", kind: "missing_actor", q: "Who files the receipt? (synthetic)" }];
 const TRIAGE_WORDS: Record<string, string> = { missing_actor: "Who acts?", conflicting_facts: "Sources disagree" };
+
+type CatRow = { id: string; title: string; count: number | null; at: string | null };
+const CAT_ROWS: CatRow[] = [
+  { id: "r1", title: "Item 10", count: 10, at: "2026-10-26T09:00:00Z" }, { id: "r2", title: "item 2", count: 2, at: null },
+  { id: "r3", title: "A very long request title that wraps over more than one line on a narrow screen without being cut", count: null, at: "2026-10-25T23:00:00Z" },
+];
+const CAT_COLS: Column<CatRow>[] = [
+  { id: "title", header: "Request", essential: true, sortValue: (r) => r.title, cell: (r) => <span className="font-medium">{r.title}</span> },
+  { id: "count", header: "Count", align: "end", sortValue: (r) => r.count, cell: (r) => r.count === null ? <span className="text-muted">Unavailable</span> : <span className="tnum">{r.count}</span> },
+  { id: "at", header: "Read at", sortValue: (r) => r.at, cell: (r) => r.at ?? <span className="text-muted">Not recorded</span> },
+];
+function CatalogTable() {
+  return <DataTable<CatRow> flush testid="catalog-table" caption="Loaded rows" rows={CAT_ROWS} rowKey={(r) => r.id} columns={CAT_COLS} sortable density="compact"
+    scope="Sorted in the browser over the 3 rows loaded here; there is no server paging." />;
+}
 
 function TriageExample() {
   const [filter, setFilter] = React.useState("");

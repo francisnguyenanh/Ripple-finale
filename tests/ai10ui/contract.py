@@ -144,7 +144,15 @@ def tech_url(url):
     return url
 
 
+def open_account_menu(page):
+    """SCN-05: on a wide screen sign-out sits in the account disclosure of the command bar; open it as a person would (narrow screens show it in the menu)."""
+    btn = page.get_by_test_id("account-menu-button")
+    if btn.count() and btn.is_visible() and btn.get_attribute("aria-expanded") != "true":
+        btn.click()
+
+
 def logout(page):
+    open_account_menu(page)
     page.get_by_role("button", name="Sign out").click()
     expect(page.get_by_label("Account ID")).to_be_visible(timeout=WAIT_MS)
 
@@ -163,7 +171,11 @@ def sign_in_fresh(world, name, *, view=None, workspace=None):
 
 
 def select_workspace(page, workspace_id):
-    # on a small screen (new interface) the workspace picker sits inside the menu: open it first, as a person would
+    # on a small screen (new interface) the workspace picker sits inside the menu: open it first, as a person would. Right after a viewport change React may
+    # not have re-rendered the narrow layout yet, so wait until either the picker or the menu button is the visible control (no race on a stale layout).
+    page.wait_for_function("""() => { const sel = [...document.querySelectorAll('[data-testid="ws-select"]')].some(e => e.getClientRects().length);
+        const btn = document.querySelector('[data-testid="menu-button"]'); const narrow = window.innerWidth < 1024;
+        return narrow ? !!btn : sel; }""")
     if not page.get_by_label("Workspace").is_visible() and page.get_by_test_id("menu-button").count() and page.get_by_test_id("menu-button").is_visible():
         page.get_by_test_id("menu-button").click()
     page.get_by_label("Workspace").select_option(value=workspace_id)

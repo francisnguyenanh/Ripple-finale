@@ -5,7 +5,7 @@ import * as React from "react";
 import { ArrowLeftRight, Clock, FilePlus2, FileX2, FileDiff } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Denied, Callout, Card, Field, Fingerprint, Muted, StatePill, Tech, TextArea, TextInput, Select } from "@/components/bits";
+import { Denied, Callout, Card, EmptyState, Field, Fingerprint, Muted, Path, StatePill, Tech, TechField, TextArea, TextInput, Select } from "@/components/bits";
 import { actorsOf, filterEvents } from "./timelineFilter";
 import { StatusBadge } from "@/components/StatusBadge";
 import { basename, newId } from "@/lib/fmt";
@@ -17,6 +17,9 @@ import { ChangeResult } from "@/features/changes/ApplyStage";
 import { FlowProvider, useFlow } from "@/features/changes/flow";
 import type { Rec } from "@/features/changes/types";
 import { replaceHash, hashFor } from "@/lib/route";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { Inspector, useInspectorWide } from "@/components/ui/inspector";
+import { useParam } from "@/lib/param";
 
 const q = encodeURIComponent;
 const RESERVED = ["approval"];
@@ -228,6 +231,8 @@ function Body() {
   const { run } = useAction();
   const asked = React.useRef("");
   const approvalId = s.route.params.approval ?? "";
+  const [verId, setVerId] = useParam("version");                                 // SCN-10: the inspected version lives in the URL (reload / Back keep it)
+  const wide = useInspectorWide();
   const restoreId = s.route.params.restore ?? "";
   const approvalRef = React.useRef(approvalId);
   approvalRef.current = approvalId;
@@ -261,31 +266,106 @@ function Body() {
   if (err) return <Callout tone="danger" testid={err.status === 403 || err.status === 404 ? "link-unavailable" : "state-error"}>{err.status === 403 || err.status === 404 ? "This page is not available to your account. Nothing was changed and nothing from that workspace is shown." : "The server could not complete the request."} <Button onClick={() => void load()}>Try again</Button></Callout>;
   if (!hist) return <StatusBadge status="loading" />;
   const revs = ((hist.revisions ?? []) as Rec[]).slice().reverse();
+  const picked = verId ? revs.find((r) => String(r.revision_id) === verId) ?? null : null;
   const onChanged = async () => { await load(); await flowRefresh(); await s.refresh(); };
   return (
     <div className="grid gap-4">
       <Timeline events={activity} onRetry={() => void load()} />
-      <section aria-labelledby="h-rev" className="grid gap-3">
-        <h2 id="h-rev" className="text-lg font-semibold">Versions of the files</h2>
-        {revs.length === 0 && <div data-testid="state-empty" className="rounded-lg border border-border bg-surface p-4">This workspace has no versions yet.</div>}
-        {revs.map((rev) => (
-          <div key={rev.revision_id} data-testid="revision-row" data-revision-id={rev.revision_id} data-trigger={rev.trigger || "None"} data-current={String(!!rev.is_current)} data-restored-from={rev.restored_from || ""}
-            className="rounded-lg border border-border bg-surface p-4 flex flex-wrap items-center gap-3">
-            <strong>Version {rev.sequence}</strong>
-            <span className="text-sm">{TRIGGER[rev.trigger] ?? "created"}</span>
-            {rev.is_current && <span className="rounded-full border border-border px-2 text-xs">current</span>}
-            {rev.restored_from && <span className="text-sm text-muted">restored from an earlier version</span>}
-            <span className="text-sm text-muted">{rev.created_at ? new Date(rev.created_at).toLocaleString() : ""}</span>
-            <Tech><code className="text-xs">{rev.revision_id}{rev.restored_from ? ` restored from ${rev.restored_from}` : ""} [{rev.trigger}]</code></Tech>
-            {s.can("source.restore") && !rev.is_current && <Button data-testid="action-restore-preview" onClick={() => void doPreview(rev.revision_id)}><ArrowLeftRight size={14} aria-hidden="true" />Preview restore</Button>}
-          </div>
-        ))}
-      </section>
+      {/* SCN-09 second consumer: the versions as a typed table (loaded rows only; sorting by the raw number and time, never the formatted text) */}
+      <div className={verId && wide ? "grid gap-4 grid-cols-[minmax(0,1fr)_26rem] items-start" : "grid gap-4"}>
+      {verId && <VersionDetail ws={ws} rev={picked} onClose={() => setVerId("")} canRestore={s.can("source.restore")} onPreview={(t) => void doPreview(t)} />}
+      <Card title="Versions of the files" id="h-rev" flush testid="history-versions" description="Newest first. A restore makes a new version; nothing is deleted." className={verId && wide ? "col-start-1 row-start-1" : undefined}>
+        {revs.length === 0 ? <div className="px-4 py-3"><EmptyState kind="none" compact testid="state-empty" title="This workspace has no versions yet"><span>A version is made when sources are imported, a change is applied or a restore runs.</span></EmptyState></div> : (
+          <DataTable<Rec> flush testid="history-versions-table" caption="Versions of the files" captionHidden rows={revs} rowKey={(r) => String(r.revision_id)} sortable
+            scope={`Sorting covers the ${revs.length} version${revs.length === 1 ? "" : "s"} listed here.`}
+            rowProps={(rev) => ({ "data-testid": "revision-row", "data-revision-id": String(rev.revision_id), "data-trigger": String(rev.trigger || "None"), "data-current": String(!!rev.is_current), "data-restored-from": String(rev.restored_from || "") })}
+            columns={versionColumns(s.can("source.restore"), doPreview, verId, setVerId)} />
+        )}
+      </Card>
+      </div>
       <Compare ws={ws} revs={(hist.revisions ?? []) as Rec[]} />
       <RestoreCard ws={ws} preview={preview} approved={approved} onPreview={doPreview} onChanged={onChanged} />
       {data?.change ? <ChangeResult cs={data.change} /> : ids.apply ? <Muted testid="state-outcome">The state of this restore has not been read from the server yet. Nothing is shown as finished.</Muted> : null}
     </div>
   );
+}
+
+/** SCN-10: one version in the inspector. Reads the existing revision route (the same the comparison uses); the newest selection wins (an older response
+ *  never overwrites it); refused, failed and loading are three different states; nothing is written. */
+function VersionDetail({ ws, rev, onClose, canRestore, onPreview }: { ws: string; rev: Rec | null; onClose: () => void; canRestore: boolean; onPreview: (target: string) => void }) {
+  const id = rev ? String(rev.revision_id) : "";
+  const [got, setGot] = React.useState<{ id: string; files: Rec[] | null; state: "loading" | "ready" | "denied" | "error" }>({ id: "", files: null, state: "loading" });
+  const [attempt, setAttempt] = React.useState(0);
+  React.useEffect(() => {
+    if (!id) return;
+    let live = true;
+    setGot({ id, files: null, state: "loading" });
+    api<Rec>("GET", `/v2/sources/revisions/${q(id)}?workspace_id=${q(ws)}`)
+      .then((r) => { if (live) setGot({ id, files: (r.artifacts ?? []) as Rec[], state: "ready" }); })
+      .catch((e) => { if (live) setGot({ id, files: null, state: e instanceof ApiError && (e.status === 403 || e.status === 404) ? "denied" : "error" }); });
+    return () => { live = false; };
+  }, [ws, id, attempt]);
+  const view = got.id === id ? got : { id, files: null, state: "loading" as const };
+  return (
+    <Inspector open testid="history-version-detail" data={{ "revision-id": id, state: view.state }} closeTestid="history-version-close" onClose={onClose} selectionKey={id || "missing"}
+      eyebrow="Version of the files" title={rev ? `Version ${rev.sequence}` : "Version"} description="The files of this version as stored. Selecting it changes nothing."
+      className="xl:col-start-2 xl:row-start-1">
+      {!rev ? <Muted testid="history-version-missing">This version is not in the loaded history.</Muted> : (
+        <>
+          <dl className="grid gap-2 text-sm">
+            <div><dt className="text-xs font-semibold uppercase tracking-wider text-muted">How it was made</dt><dd>{TRIGGER[rev.trigger] ?? "created"}{rev.restored_from ? ", restored from an earlier version" : ""}</dd></div>
+            <div><dt className="text-xs font-semibold uppercase tracking-wider text-muted">Created</dt><dd>{rev.created_at ? new Date(rev.created_at).toLocaleString() : <span className="text-muted">Not recorded</span>}</dd></div>
+            <div><dt className="text-xs font-semibold uppercase tracking-wider text-muted">State</dt><dd>{rev.is_current ? "The current version" : "An earlier version"}</dd></div>
+          </dl>
+          <Tech><TechField label="revision" value={id} /></Tech>
+          {view.state === "loading" && <Muted testid="history-version-loading">Loading the files of this version...</Muted>}
+          {view.state === "denied" && <Callout tone="warn" testid="history-version-denied"><span>The files of this version are not available to your account.</span></Callout>}
+          {view.state === "error" && (
+            <Callout tone="warn" testid="history-version-error" role="status">
+              <span>The files of this version could not be read, so they are unknown here (not "no files").</span>
+              <div><Button size="sm" onClick={() => setAttempt((n) => n + 1)} data-testid="history-version-retry">Try again</Button></div>
+            </Callout>
+          )}
+          {view.state === "ready" && (
+            <DataTable<Rec> testid="history-version-files" caption={`Files of version ${rev.sequence}`} rows={view.files ?? []} rowKey={(f) => String(f.artifact_id)} density="compact"
+              empty="This version holds no files." scope={`${(view.files ?? []).length} file${(view.files ?? []).length === 1 ? "" : "s"} in this version.`}
+              columns={[
+                { id: "file", header: "File", essential: true, sortValue: (f) => String(f.logical_path ?? ""), cell: (f) => <span className="break-all"><Path p={f.logical_path} /></span> },
+                { id: "size", header: "Size (bytes)", align: "end", sortValue: (f) => (typeof f.byte_size === "number" ? f.byte_size : null), cell: (f) => typeof f.byte_size === "number" ? <span className="tnum">{f.byte_size}</span> : <span className="text-muted">Not recorded</span> },
+              ]} sortable />
+          )}
+          {canRestore && !rev.is_current && <div><Button data-testid="history-version-restore" onClick={() => onPreview(id)}><ArrowLeftRight size={14} aria-hidden="true" />Preview restore of this version</Button></div>}
+        </>
+      )}
+    </Inspector>
+  );
+}
+
+function versionColumns(canRestore: boolean, doPreview: (target: string) => void, selected: string, onSelect: (id: string) => void): Column<Rec>[] {
+  return [
+    { id: "version", header: "Version", essential: true, sortValue: (r) => Number(r.sequence), cell: (rev) => (
+      <span className="flex flex-wrap items-center gap-2">
+        <strong>Version {rev.sequence}</strong>
+        {rev.is_current && <span className="rounded-full border border-border px-2 text-xs">current</span>}
+        <Tech><code className="text-xs break-all">{rev.revision_id}</code></Tech>
+      </span>) },
+    { id: "how", header: "How it was made", essential: true, cell: (rev) => (
+      <span className="grid gap-0.5">
+        <span>{TRIGGER[rev.trigger] ?? "created"}</span>
+        {rev.restored_from && <span className="text-muted">restored from an earlier version<Tech> ({rev.restored_from})</Tech></span>}
+        <Tech><code className="text-xs">[{rev.trigger}]</code></Tech>
+      </span>) },
+    { id: "when", header: "Created", sortValue: (r) => (r.created_at ? String(r.created_at) : null), cell: (rev) => rev.created_at
+      ? <time dateTime={String(rev.created_at)} className="tnum">{new Date(rev.created_at).toLocaleString()}</time> : <span className="text-muted">Not recorded</span> },
+    { id: "action", header: "Action", align: "end", cell: (rev) => (
+      <span className="inline-flex flex-wrap justify-end gap-2">
+        <Button size="sm" variant="ghost" data-testid="history-version-open" aria-pressed={selected === String(rev.revision_id)}
+          onClick={() => onSelect(selected === String(rev.revision_id) ? "" : String(rev.revision_id))}>{selected === String(rev.revision_id) ? "Hide details" : "Details"}</Button>
+        {canRestore && !rev.is_current
+          ? <Button size="sm" data-testid="action-restore-preview" onClick={() => void doPreview(rev.revision_id)}><ArrowLeftRight size={14} aria-hidden="true" />Preview restore</Button>
+          : <span className="text-muted text-sm self-center">{rev.is_current ? "Current version" : "Restore needs the restore right"}</span>}
+      </span>) },
+  ];
 }
 
 export function HistoryPage() {

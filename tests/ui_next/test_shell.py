@@ -80,6 +80,13 @@ def test_copied_link_signed_out_then_sign_in_lands_on_the_same_page(env, pw_brow
         _login(p, env.req, f"cred-r-{env.nonce}")
         expect(tid(p, "page-title")).to_have_text("Changes")
         assert p.evaluate("location.hash") == f"#/ws/{env.ws}/changes?chat=abc"
+        tid(p, "account-menu-button").focus()                       # SCN-05: account and sign-out are a disclosure, keyboard first
+        p.keyboard.press("Enter")
+        expect(tid(p, "signout")).to_be_focused()
+        p.keyboard.press("Escape")
+        expect(tid(p, "account-menu")).to_have_count(0)
+        assert p.evaluate("document.activeElement.dataset.testid") == "account-menu-button"
+        tid(p, "account-menu-button").click()
         tid(p, "signout").click()
         expect(p.get_by_label("Account ID")).to_be_visible()
         assert "changes" not in p.evaluate("location.hash")

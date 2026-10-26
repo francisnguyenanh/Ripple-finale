@@ -89,9 +89,10 @@ const num = (v: unknown): React.ReactNode => (typeof v === "number" ? v : <span 
 
 function Metric({ label, value, testid, tone }: { label: string; value: React.ReactNode; testid: string; tone?: "warn" | "danger" }) {
   return (
-    <div data-testid={testid} className={`rounded-md border px-3 py-2 ${tone === "danger" ? "border-danger" : tone === "warn" ? "border-warning" : "border-border"}`}>
-      <dt className="text-xs text-muted">{label}</dt>
-      <dd className="text-base font-semibold">{value}</dd>
+    // SCN-06: the number carries the weight, the label is the 12 px kicker; a warning count keeps a coloured left marker beside its own words
+    <div data-testid={testid} className={`grid gap-0.5 content-start rounded-md border border-border px-3 py-2 ${tone === "danger" ? "border-l-4 border-l-danger" : tone === "warn" ? "border-l-4 border-l-warning" : ""}`}>
+      <dt className="text-xs font-semibold uppercase tracking-wider text-muted">{label}</dt>
+      <dd className="text-xl font-semibold tnum">{value}</dd>
     </div>
   );
 }
@@ -174,3 +175,16 @@ export function AnalysisButtons({ ws, row, canRun, onStart, busy, provider }: { 
     </>
   );
 }
+
+/** SCN-21: the same stage facts as `FileStages`, in short words for one table cell each. `row` absent = the lifecycle could not be read: Unknown, never 0. */
+export function stageWords(row: Rec | undefined): { reading: string; analysis: string; rules: string; rulesKnown: boolean } {
+  if (!row) return { reading: "Unknown", analysis: "Unknown", rules: "Unknown", rulesKnown: false };
+  const pr = (row.parse ?? {}) as Rec, ex = (row.extraction ?? {}) as Rec, cl = (row.claims ?? {}) as Rec;
+  const st = (ex.state as string) ?? "not_analysed";
+  const reading = pr.state === "parsed" ? `Read: ${pr.observations} piece${pr.observations === 1 ? "" : "s"} of content` : "Nothing readable found";
+  // rules the AI found in this file (pending or confirmed by a person); not the accepted business rules
+  const rules = typeof cl.total !== "number" ? "Unknown"
+    : cl.total > 0 ? `${cl.total} found (${num0(cl.confirmed)} confirmed, ${num0(cl.pending)} waiting)` : st === "analysed" ? "None found" : "None yet";
+  return { reading, analysis: ANALYSIS_LABEL[st] ?? st, rules, rulesKnown: typeof cl.total === "number" };
+}
+const num0 = (v: unknown) => (typeof v === "number" ? String(v) : "unknown");

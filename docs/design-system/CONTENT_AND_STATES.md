@@ -27,3 +27,6 @@
 - Model-written content carries the AI origin label (`OriginTag` / `OriginSection`); source observations and engine results carry their own. Origin is shown with text and icon, never colour alone, and never implies the content is correct.
 - Evidence or ids that need rights are not disclosed through tooltips, hidden DOM or paraphrase.
 - Request steps (task frame, whole-request view, My work, assistant) come from the one task projection: "your step" only where the person is asked now; "you may do this, but you are not asked to" where they only have the permission; a waiting step names the role pool or "the system", never "someone"; a step that cannot be placed or a list that could not be read is "unavailable", never empty.
+- A timestamp says what it times: the task frame's "Task status read ..." is when the projection was read (`as_of`), not when a source or rule last changed; a missing timestamp is not replaced by the render clock.
+- A count names its unit and scope ("request entries in the loaded list"); it is never presented as a workspace total unless the API states completeness.
+- Empty, no match, failed, partial and denied are five different states (`EmptyState` kinds). A no-match offers to clear the filter; an error never reads as "nothing here"; a denied read never confirms that the item exists.

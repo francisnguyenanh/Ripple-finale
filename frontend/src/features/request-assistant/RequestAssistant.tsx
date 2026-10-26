@@ -14,6 +14,7 @@ import { StatusBadge, type Status } from "@/components/StatusBadge";
 import { OriginTag } from "@/components/decision/Origin";
 import { actionStillCurrent, actionTarget, citationTarget, suggestQuestions } from "./guide";
 import { useSession } from "@/session";
+import { useMedia } from "@/lib/useMedia";
 
 type Rec = Record<string, unknown>;
 const q = encodeURIComponent;
@@ -44,6 +45,10 @@ export function RequestAssistant({ ws, family, id, tv }: { ws: string; family: "
   const composer = React.useRef<HTMLTextAreaElement>(null);
   const paidId = React.useId();
   const tid = st?.thread_id ? String(st.thread_id) : null;
+  const panel = React.useRef<HTMLElement>(null);
+  const wide = useMedia("(min-width: 1280px)");
+  const [back, setBack] = React.useState(false);                                   // SCN-04: after a citation jump below 1280 px, one way back to the conversation
+  const backToConversation = () => { setBack(false); panel.current?.scrollIntoView({ block: "start" }); composer.current?.focus(); };
 
   React.useEffect(() => {                                                          // read only: this person's own threads of this request; opening creates nothing
     let live = true;
@@ -113,18 +118,25 @@ export function RequestAssistant({ ws, family, id, tv }: { ws: string; family: "
   const suggestions = suggestQuestions(tv, msgs.map((m) => String(m.question)));
 
   return (
-    <aside data-testid="request-assistant" aria-label="Ask about this request" className="rounded-md border border-border p-3 grid gap-2 content-start">
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 className="font-semibold">Ask about this request</h3>
-        <StatusBadge status="info" label="Private to you" />
-      </div>
-      <Muted>The assistant reads only what you may read about this request, answers from those facts and never acts. Writing "I agree" here approves nothing.</Muted>
+    // SCN-04 regions: a scope header, the conversation (its own scroll in the rail from 1280 px; the page scrolls below that, never two nested scrolls on a phone)
+    // and the composer at the foot of the panel. Same state and keys as before: moving or resizing never remounts it, so the draft and the thread stay.
+    <aside ref={panel} data-testid="request-assistant" aria-label="Ask about this request"
+      className="rounded-md border border-border bg-surface grid content-start min-w-0 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:grid-rows-[auto_minmax(0,1fr)_auto]">
+      <header className="grid gap-1 border-b border-border p-3" data-testid="assistant-scope">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="font-semibold">Ask about this request</h3>
+          <StatusBadge status="info" label="Private to you" />
+        </div>
+        {tv?.title ? <p className="text-sm break-words"><span className="text-muted">About: </span>{String(tv.title)}</p> : null}
+        <Muted>It reads only what you may read about this request, answers from those facts and never acts. Writing "I agree" here approves nothing.</Muted>
+      </header>
+      <div className="grid gap-3 content-start p-3 min-h-0 xl:overflow-y-auto" data-testid="assistant-conversation" role="region" aria-label="Conversation" tabIndex={wide ? 0 : undefined}>
       {err && <Callout tone="danger" testid="assistant-error">{err}</Callout>}
       {!loaded && !err && <p role="status" className="text-sm text-muted">Loading...</p>}
       {msgs.length > 0 && (
         <ol className="grid gap-3 text-sm" aria-live="polite">
           {msgs.map((m) => <AssistantMessage key={String(m.message_id)} m={m} technical={technical} onCancel={(mid) => void cancel(mid)}
-            onAction={go} actionable={(a) => actionStillCurrent(tv, a) && actionTarget(family, a) !== null}
+            onAction={go} actionable={(a) => actionStillCurrent(tv, a) && actionTarget(family, a) !== null} onJumped={wide ? undefined : () => setBack(true)}
             onSource={tid ? (mid, ref) => api<Rec>("GET", `/v2/request-assistant/threads/${q(tid)}/messages/${q(mid)}/citations/${q(ref)}/source?workspace_id=${q(ws)}`) : undefined} />)}
         </ol>
       )}
@@ -145,8 +157,9 @@ export function RequestAssistant({ ws, family, id, tv }: { ws: string; family: "
           </ul>
         </div>
       )}
+      </div>
       {loaded && (
-        <>
+        <div className="grid gap-2 border-t border-border p-3" data-testid="assistant-composer">
           <Field label="Your question about this request">
             <TextArea ref={composer} data-testid="assistant-question" rows={2} maxLength={800} value={text} onChange={(e) => setText(e.target.value)} />
           </Field>
@@ -154,7 +167,10 @@ export function RequestAssistant({ ws, family, id, tv }: { ws: string; family: "
             <Button size="sm" variant="primary" data-testid="assistant-ask" aria-describedby={paidId} disabled={busy || pending || !text.trim()} onClick={() => void ask(text)}>Ask</Button>
             <span id={paidId} data-testid="assistant-paid-note" className="text-xs text-muted">Each question you send (Ask or Ask AI) is one paid model call. Editing a question sends nothing.</span>
           </div>
-        </>
+        </div>
+      )}
+      {back && !wide && (
+        <Button variant="primary" className="fixed bottom-4 right-4 z-40 shadow-pop" data-testid="assistant-back" onClick={backToConversation}>Back to conversation</Button>
       )}
     </aside>
   );
@@ -180,9 +196,9 @@ const SOURCE_WHY: Record<string, string> = {
 };
 const SOURCE_STATE: Record<string, string> = { current: "current", changed_since: "changed since", absent_now: "no longer in the sources" };
 
-export function AssistantMessage({ m, technical, onCancel, onAction, actionable, onSource }:
+export function AssistantMessage({ m, technical, onCancel, onAction, actionable, onSource, onJumped }:
   { m: Rec; technical: boolean; onCancel?: (messageId: string) => void; onAction?: (action: string) => void; actionable?: (action: string) => boolean;
-    onSource?: (messageId: string, factRef: string) => Promise<Rec> }) {
+    onSource?: (messageId: string, factRef: string) => Promise<Rec>; onJumped?: () => void }) {
   const badge = STATE[String(m.state)] ?? { status: "info" as Status, label: String(m.state) };
   const ans = (m.answer ?? null) as Rec | null;
   const cites = (m.citations ?? {}) as Record<string, Rec>;
@@ -213,7 +229,7 @@ export function AssistantMessage({ m, technical, onCancel, onAction, actionable,
               <Muted testid="assistant-citation">{technical ? `${r}: ${String(cites[r].text)}` : `${FACT_KIND[String(cites[r].kind)] ?? "Fact"}: ${String(cites[r].display ?? cites[r].text)}`}</Muted>
               {onSource && ["impact", "rule_change"].includes(String(cites[r].kind)) && (
                 <Button size="sm" variant="ghost" data-testid="assistant-citation-source" data-kind={String(cites[r].kind)} onClick={() => void showSource(r)}>Source</Button>)}
-              {citationTarget(cites[r]) && <Button size="sm" variant="ghost" data-testid="assistant-citation-show" data-kind={String(cites[r].kind)} onClick={() => setCiteNote(showCitation(citationTarget(cites[r])!) ? null : "That part is not shown on this page.")}>Show on this page</Button>}
+              {citationTarget(cites[r]) && <Button size="sm" variant="ghost" data-testid="assistant-citation-show" data-kind={String(cites[r].kind)} onClick={() => { const ok = showCitation(citationTarget(cites[r])!); setCiteNote(ok ? null : "That part is not shown on this page."); if (ok) onJumped?.(); }}>Show on this page</Button>}
               {sources[r] && sources[r] !== "loading" && (
                 <span className="basis-full grid gap-0.5 text-xs" data-testid="assistant-source" data-available={String((sources[r] as Rec).available)}>
                   {(sources[r] as Rec).available

@@ -92,6 +92,16 @@ def redact_gaps(gaps: dict, authority: dict) -> dict:
     return out
 
 
+def strip_raw_model_output(result) -> bool:
+    """The raw model object kept on some job results (`model_output`, e.g. an extraction's reading of a file) repeats the source text it read. A member without
+    `evidence.read` gets the validated result only; the raw object is removed from THIS response (the stored record is untouched)."""
+    if isinstance(result, dict) and result.get("model_output") not in (None, ""):
+        result["model_output"] = ""
+        result["model_output_redacted"] = True
+        return True
+    return False
+
+
 def redact_job_record(record: dict, authority: dict) -> dict:
     """The job record as this member may see it: extraction candidates keep their meaning (subject, value, unit, scope) and lose
     the raw source quotes unless the member holds `evidence.read`. Everything else is returned as it is."""
@@ -105,6 +115,8 @@ def redact_job_record(record: dict, authority: dict) -> dict:
         if strip_source_text_of_unaddressed(out["execution_result"]):
             stripped = True
         if scrub_clarification_questions(out["execution_result"]):
+            stripped = True
+        if strip_raw_model_output(out["execution_result"]):
             stripped = True
         if stripped:
             out["execution_result"]["evidence_redacted"] = True
@@ -127,5 +139,6 @@ def redact_job_record(record: dict, authority: dict) -> dict:
                             item[k] = [] if isinstance(item[k], list) else ""
                     if had:
                         item["quotes_redacted"] = True
+        strip_raw_model_output(res)
         res["evidence_redacted"] = True
     return out

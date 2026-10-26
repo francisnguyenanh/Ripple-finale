@@ -6,7 +6,8 @@ import { FileCode2, FileSpreadsheet, FileText, Search } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/dialog";
-import { Denied, Callout, Card, Field, HowItWorks, Muted, Name, Path, Select, StatePill, Tech, TechField, TextInput } from "@/components/bits";
+import { Inspector, useInspectorWide } from "@/components/ui/inspector";
+import { EmptyState, Denied, Callout, Card, Field, HowItWorks, Muted, Name, Path, Select, StatePill, Tech, TechField, TextInput } from "@/components/bits";
 import { StatusBadge } from "@/components/StatusBadge";
 import { downloadArtifact } from "@/lib/download";
 import { basename, humanize, newId } from "@/lib/fmt";
@@ -17,7 +18,8 @@ import { PageHeader } from "@/pages/Page";
 import { useSession } from "@/session";
 import { aiWhy } from "@/lib/aiKinds";
 import { jobState, isTerminal, type Job, type Rec } from "@/features/changes/types";
-import { AnalysisButtons, FileStages, LifeSummary, costNote } from "./Lifecycle";
+import { AnalysisButtons, FileStages, LifeSummary, costNote, stageWords } from "./Lifecycle";
+import { DataTable, type Column } from "@/components/ui/data-table";
 import { useParam } from "@/lib/param";
 import { filterFiles } from "./fileFilter";
 import { RepoSync } from "./RepoSync";
@@ -94,7 +96,9 @@ function EvidenceBody({ ws, rev, art, onFail, idp = "" }: { ws: string; rev: str
   const notify = useNotify();
   const [obs, setObs] = React.useState<Rec[] | null>(null);
   const [sel, setSel] = React.useState<Rec | null>(null);
+  const seq = React.useRef(0);                                                     // SCN-10: only the newest pick may fill the panel (rapid picks, a file switch)
   React.useEffect(() => {
+    seq.current += 1;
     setObs(null); setSel(null);
     if (!art) return;
     let live = true;
@@ -103,7 +107,11 @@ function EvidenceBody({ ws, rev, art, onFail, idp = "" }: { ws: string; rev: str
     return () => { live = false; };
   }, [art, rev, ws]); // eslint-disable-line react-hooks/exhaustive-deps
   const pick = async (o: Rec) => {
-    try { setSel(await api<Rec>("GET", `/v2/sources/revisions/${q(rev)}/evidence/${q(o.observation_id)}?workspace_id=${q(ws)}`)); } catch (e) { notify.fail(e); }
+    const mine = ++seq.current;
+    try {
+      const r = await api<Rec>("GET", `/v2/sources/revisions/${q(rev)}/evidence/${q(o.observation_id)}?workspace_id=${q(ws)}`);
+      if (mine === seq.current) setSel(r);                                         // an older answer never shows under a newer file or pick
+    } catch (e) { if (mine === seq.current) notify.fail(e); }
   };
   const loc = sel?.locator && typeof sel.locator === "object" ? Object.entries(sel.locator as Rec).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`).join("; ") : JSON.stringify(sel?.locator ?? "");
   return (
@@ -143,15 +151,12 @@ function SelectedFile({ ws, rev, a, row, provider, busy, onAnalyze, onClose }: {
 }) {
   const s = useSession();
   const notify = useNotify();
-  const head = React.useRef<HTMLHeadingElement>(null);
-  React.useEffect(() => { head.current?.focus(); }, [a?.artifact_id]);
+  // SCN-10: the shared inspector shell places this feature-owned body (pane from 1280 px, drawer / sheet below); the D6 cards are unchanged
   return (
-    <aside data-testid="sources-selected" data-artifact-id={a?.artifact_id ?? ""} aria-label="Selected file"
-      className="order-first lg:order-none lg:col-start-2 lg:row-start-1 rounded-lg border border-border bg-surface p-4 grid gap-3 min-w-0">
-      <div className="flex items-start gap-2">
-        <h2 ref={head} tabIndex={-1} className="font-semibold break-all flex-1 flex items-center gap-2">{a ? <><KindIcon mt={a.media_type} /><Path p={a.logical_path} /></> : "Selected file"}</h2>
-        <Button size="sm" variant="ghost" data-testid="sources-selected-close" onClick={onClose}>Close</Button>
-      </div>
+    <Inspector open testid="sources-selected" data={{ "artifact-id": a?.artifact_id ?? "" }} closeTestid="sources-selected-close" onClose={onClose} selectionKey={a?.artifact_id ?? "missing"}
+      eyebrow="Selected file" description="What has happened to this file, and what the parser read. Nothing starts when you select it."
+      title={a ? <><KindIcon mt={a.media_type} /><span className="break-all"><Path p={a.logical_path} /></span></> : "Selected file"}
+      className="xl:col-start-2 xl:row-start-1">
       {!a ? <Muted testid="sources-selected-missing">This file is not in the current version of the sources.</Muted> : (
         <>
           <Muted>{sizeText(a.byte_size)} - {KIND_WORDS[a.media_type] ?? a.media_type}</Muted>
@@ -171,7 +176,7 @@ function SelectedFile({ ws, rev, a, row, provider, busy, onAnalyze, onClose }: {
           </div>
         </>
       )}
-    </aside>
+    </Inspector>
   );
 }
 
@@ -395,7 +400,11 @@ export function SourcesPage() {
   const { run } = useAction();
   const [starting, setStarting] = React.useState<string | null>(null);
   const [fileFilter, setFileFilter] = React.useState("");
-  const [selId, setSelId] = useParam("file");                                     // D6: the selected file lives in the URL (reload / Back keep it)
+  const [selId, setSelId] = useParam("file");
+  // SCN-21: Cards (owner decision D6, the default) or Table; the choice lives in the URL like the selected file (no stored preference, no extra read).
+  const [listView, setListView] = useParam("files_view");
+  const asTable = listView === "table";
+  const wide = useInspectorWide();                                     // D6: the selected file lives in the URL (reload / Back keep it)
   React.useEffect(() => { setArt(null); }, [ws]);                                 // another workspace closes the evidence drawer
 
   const load = React.useCallback(async () => {
@@ -442,13 +451,40 @@ export function SourcesPage() {
     setStarting(null);
     if (r) location.hash = hashFor(ws, "sources", r.job_id || jobId);
   };
+  // One set of actions for both views (same guards, same consequences): Analyze / analysis status, Details (the D6 selected-file pane), Evidence, Export.
+  const actions = (a: Rec) => (
+    <div className="flex flex-wrap gap-2 items-center">
+      {rowOf(a) ? <AnalysisButtons ws={ws} row={rowOf(a)!} canRun={s.can("source.import")} busy={starting === a.artifact_id} onStart={() => void analyze(a)} provider={life?.provider as Rec} />
+        : s.can("source.import") && <Button disabled={!s.aiKind("extraction")} title={aiWhy(s, "extraction")} onClick={() => void analyze(a)}>Analyze</Button>}
+      <Button data-testid="artifact-details" aria-pressed={selId === a.artifact_id} onClick={() => { setArt(null); setSelId(selId === a.artifact_id ? "" : String(a.artifact_id)); }}>{selId === a.artifact_id ? "Hide details" : "Details"}</Button>
+      {s.can("evidence.read") && <Button onClick={() => { if (!wide) setSelId(""); setArt(a); }}><Search size={14} aria-hidden="true" />Evidence</Button>}{/* one detail panel at a time below 1280 px */}
+      {s.can("evidence.read") && view && <a role="link" tabIndex={0} data-testid="export-link-source" className="text-primary underline cursor-pointer text-sm"
+        onClick={() => void downloadArtifact(ws, view.revision_id, a, notify.fail)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void downloadArtifact(ws, view.revision_id, a, notify.fail); } }}>Export</a>}
+    </div>
+  );
+  const fileRow = (a: Rec) => ({ "data-testid": "artifact-row", "data-logical-path": String(a.logical_path), "data-artifact-id": String(a.artifact_id), "data-selected": String(selId === a.artifact_id) });
+  const columns: Column<Rec>[] = [
+    { id: "file", header: "File", essential: true, sortValue: (a) => String(a.logical_path), cell: (a) => (
+      <span className="grid gap-0.5 min-w-0">
+        <span className="font-medium flex items-start gap-2"><span className="mt-0.5 shrink-0"><KindIcon mt={a.media_type} /></span><span className="min-w-0 wrap-anywhere"><Path p={a.logical_path} /></span></span>
+        <span className="text-xs text-muted">{sizeText(a.byte_size)} - {KIND_WORDS[a.media_type] ?? a.media_type}{String(a.logical_path).includes("/") ? <> - folder <Name raw={String(a.logical_path).split("/").slice(0, -1).join("/")} /></> : null}</span>
+      </span>) },
+    { id: "reading", header: "Reading (parser)", essential: true, cell: (a) => <span data-testid="file-reading">{stageWords(rowOf(a)).reading}</span> },
+    { id: "analysis", header: "AI analysis", essential: true, cell: (a) => <span data-testid="file-analysis" data-state={(rowOf(a)?.extraction as Rec | undefined)?.state as string | undefined}>{stageWords(rowOf(a)).analysis}</span> },
+    { id: "rules", header: "Rules the AI found", essential: true, cell: (a) => { const w = stageWords(rowOf(a)); return <span data-testid="file-rules" data-known={String(w.rulesKnown)} className={w.rulesKnown ? undefined : "text-muted"}>{w.rules}</span>; } },
+    { id: "actions", header: "Actions", essential: true, cell: (a) => actions(a) },
+  ];
   return (
     <>
       <PageHeader id="sources" next={view ? "Open the Explorer to see what was read, or ask the AI to analyse a file." : "Add your first files with Import source files below."} />
       <div className="grid gap-4">
         {sub && <JobPanel ws={ws} id={sub} key={sub} />}
         {!loaded && <StatusBadge status="loading" />}
-        {loaded && !view && <div data-testid="state-empty" className="rounded-lg border border-border bg-surface p-6">No source has been imported into this workspace yet.</div>}
+        {loaded && !view && (
+          <EmptyState kind="none" testid="state-empty" title="No source has been imported into this workspace yet">
+            <span>{s.can("source.import") ? "Use Import source files below to add the documents, code and workbooks the knowledge is built from." : "A person who may import sources adds them; you can read them here once they are imported."}</span>
+          </EmptyState>
+        )}
         {view && (
           <>
             {life ? (
@@ -480,29 +516,38 @@ export function SourcesPage() {
                 <Muted testid="files-filter-count">Showing {shownFiles.length} of {allFiles.length} files.</Muted>
               </div>
             )}
-            <div className={selId ? "grid gap-4 lg:grid-cols-[minmax(0,1fr)_26rem] items-start" : ""}>
+            {allFiles.length > 0 && (
+              <div role="group" aria-label="File list view" className="flex flex-wrap items-center gap-2" data-testid="sources-view">
+                <span className="text-sm text-muted">Show the files as</span>
+                <Button size="sm" variant={asTable ? "secondary" : "primary"} aria-pressed={!asTable} data-testid="sources-view-cards" onClick={() => setListView("")}>Cards</Button>
+                <Button size="sm" variant={asTable ? "primary" : "secondary"} aria-pressed={asTable} data-testid="sources-view-table" onClick={() => setListView("table")}>Table</Button>
+              </div>
+            )}
+            <div className={selId && wide ? "grid gap-4 grid-cols-[minmax(0,1fr)_26rem] items-start" : ""}>
             {selId && <SelectedFile ws={ws} rev={view.revision_id} a={allFiles.find((x) => x.artifact_id === selId) ?? null} row={(() => { const f = allFiles.find((x) => x.artifact_id === selId); return f ? rowOf(f) : undefined; })()}
               provider={life?.provider as Rec} busy={starting === selId} onAnalyze={(a) => void analyze(a)} onClose={() => setSelId("")} />}
-            <div className={selId ? "grid gap-3 lg:col-start-1 lg:row-start-1" : "grid gap-3 md:grid-cols-2"}>{/* owner decision D6, updated 2026-10-21: the file cards stay; a selected-file pane is added beside them */}
+            {asTable ? (
+              <Card flush testid="sources-table-card" title="Files of this version" description="The same files, stages and actions as the cards, one row each. Details opens the selected-file pane."
+                className={selId && wide ? "col-start-1 row-start-1" : undefined}>
+                <DataTable<Rec> flush testid="sources-files-table" caption="Files of this version" captionHidden rows={shownFiles} rowKey={(a) => String(a.artifact_id)} rowProps={fileRow}
+                  columns={columns} scope={`${shownFiles.length} of the ${allFiles.length} files of this version (all are loaded; nothing is paged).`}
+                  empty={<EmptyState kind="no-match" compact testid="files-table-none" title="No file matches the filter" />} />
+              </Card>
+            ) : (
+            <div className={selId && wide ? "grid gap-3 col-start-1 row-start-1" : "grid gap-3 md:grid-cols-2"}>{/* owner decision D6, updated 2026-10-21: the file cards stay; a selected-file pane is added beside them */}
               {shownFiles.map((a) => (
-                <article key={a.artifact_id} data-testid="artifact-row" data-logical-path={a.logical_path} data-artifact-id={a.artifact_id} data-selected={String(selId === a.artifact_id)}
+                <article key={a.artifact_id} {...fileRow(a)}
                   className={`rounded-lg border bg-surface p-4 grid gap-2 min-w-0 ${selId === a.artifact_id ? "border-primary ring-2 ring-primary" : "border-border"}`}>
                   <h3 className="font-semibold flex items-center gap-2 break-all"><KindIcon mt={a.media_type} /><Path p={a.logical_path} /></h3>
                   <Muted>{sizeText(a.byte_size)} - {KIND_WORDS[a.media_type] ?? a.media_type} - folder {String(a.logical_path).includes("/") ? <Name raw={String(a.logical_path).split("/").slice(0, -1).join("/")} /> : "(top)"}</Muted>
                   <Tech><Muted>{a.byte_size} bytes - {a.media_type} - role: {a.source_role}</Muted></Tech>
                   <TechField label="artifact id" value={a.artifact_id} />
                   {rowOf(a) && <FileStages row={rowOf(a)!} provider={life?.provider as Rec} />}
-                  <div className="flex flex-wrap gap-2 items-center">
-                    {rowOf(a) ? <AnalysisButtons ws={ws} row={rowOf(a)!} canRun={s.can("source.import")} busy={starting === a.artifact_id} onStart={() => void analyze(a)} provider={life?.provider as Rec} />
-                      : s.can("source.import") && <Button disabled={!s.aiKind("extraction")} title={aiWhy(s, "extraction")} onClick={() => void analyze(a)}>Analyze</Button>}
-                    <Button data-testid="artifact-details" aria-pressed={selId === a.artifact_id} onClick={() => setSelId(selId === a.artifact_id ? "" : String(a.artifact_id))}>{selId === a.artifact_id ? "Hide details" : "Details"}</Button>
-                    {s.can("evidence.read") && <Button onClick={() => setArt(a)}><Search size={14} aria-hidden="true" />Evidence</Button>}
-                    {s.can("evidence.read") && <a role="link" tabIndex={0} data-testid="export-link-source" className="text-primary underline cursor-pointer text-sm"
-                      onClick={() => void downloadArtifact(ws, view.revision_id, a, notify.fail)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void downloadArtifact(ws, view.revision_id, a, notify.fail); } }}>Export</a>}
-                  </div>
+                  {actions(a)}
                 </article>
               ))}
             </div>
+            )}
             </div>
           </>
         )}

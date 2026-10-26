@@ -70,7 +70,10 @@ export function Journey() {
                 </span>
               </a>
               {(active || x.state === "redo" || x.state === "partial" || x.state === "failed" || x.state === "blocked") && (
-                <p className="text-sm pl-6 text-muted" data-testid="journey-detail"><strong className="text-text">{x.who === "Nobody" ? "" : `${x.who}: `}</strong>{x.text}</p>
+                // SCN-02: the reader's own current step is explained once, in the task frame's "What to do"; the journey points there instead of repeating it
+                shared?.tv && x.mine && x.state === "current"
+                  ? <p className="text-sm pl-6 text-muted" data-testid="journey-detail" data-points-to="task-action">Your step: see “What to do” in the task above.</p>
+                  : <p className="text-sm pl-6 text-muted" data-testid="journey-detail"><strong className="text-text">{x.who === "Nobody" ? "" : `${x.who}: `}</strong>{x.text}</p>
               )}
               {active && x.also && <p className="text-xs pl-6 text-muted" data-testid="journey-also">{x.also}</p>}
             </li>

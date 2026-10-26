@@ -28,6 +28,7 @@ VERDICTS = ("comment", "request_changes", "ready")
 MAX_NOTE_CHARS = 1000
 REVIEW_PAGE, REVIEW_PAGE_MAX = 100, 200          # AH-02: the review history is read as keyset pages, newest first (the effective verdicts never depend on the page)
 INBOX_LIMIT = 40
+OWN_CONVERSATION_LIMIT = 10                                              # the caller's own open change-request conversations the inbox reads
 REVIEWABLE = ("NEEDS_CHECK", "RUN_REVIEW", "REVIEW_RUNNING", "PREPARE_APPROVAL", "APPROVAL_PREPARING", "AWAITING_DECISION")   # a finished proposal that no decision has closed
 APPROVER_STEPS = ("change.approve", "verification.contract.set")
 
@@ -176,14 +177,14 @@ def post_review_note(request: Request):
 
 # ----------------------------------------------------------------------------- inbox
 
-def _jobs(store, tenant, ws, kind) -> list[str]:
-    """Newest first (by the time the job was queued)."""
+def _jobs(store, tenant, ws, kind, requested_by: str | None = None) -> list[str]:
+    """Newest first (by the time the job was queued); `requested_by` keeps only that account's jobs."""
     with store._tx() as cur:
         cur.execute("""SELECT j.job_id FROM v2_jobs j LEFT JOIN LATERAL (
                 SELECT min(a.created_at) AS at FROM v2_audit a WHERE a.tenant_id=j.tenant_id AND a.workspace_id=j.workspace_id
                   AND a.event_type='JOB_QUEUED' AND a.payload->>'job_id'=j.job_id) q ON true
-            WHERE j.tenant_id=%s AND j.workspace_id=%s AND j.kind=%s ORDER BY q.at DESC NULLS LAST, j.job_id DESC LIMIT 200""",
-                    (tenant, ws, kind))
+            WHERE j.tenant_id=%s AND j.workspace_id=%s AND j.kind=%s AND (%s::text IS NULL OR j.requested_by=%s) ORDER BY q.at DESC NULLS LAST, j.job_id DESC LIMIT 200""",
+                    (tenant, ws, kind, requested_by, requested_by))
         return [r[0] for r in cur.fetchall()]
 
 
@@ -255,7 +256,7 @@ def _stage(prop: dict, c: dict, notes: list[dict]) -> dict:
     return {"stage": "APPLIED", "label": "Applied", "waits": None}
 
 
-def _own_requests(store, tenant, ws, me, have_intent: set, drafts: list[dict]) -> list[dict]:
+def _own_requests(store, tenant, ws, me, have_intent: set, drafts: list[dict], truncated: list | None = None) -> list[dict]:
     """The caller's OWN requests that have not reached a proposal yet (chat -> confirm -> draft -> analysis): where to continue."""
     with store._tx() as cur:
         cur.execute("""SELECT conversation_id, status, intent_id, (SELECT text FROM v2_chat_turns t WHERE t.tenant_id=c.tenant_id AND t.workspace_id=c.workspace_id
@@ -263,8 +264,11 @@ def _own_requests(store, tenant, ws, me, have_intent: set, drafts: list[dict]) -
                          EXISTS (SELECT 1 FROM v2_chat_turns t WHERE t.tenant_id=c.tenant_id AND t.workspace_id=c.workspace_id
                          AND t.conversation_id=c.conversation_id AND t.role='assistant' AND t.text='' AND t.job_id IS NOT NULL)
             FROM v2_chat_conversations c WHERE tenant_id=%s AND workspace_id=%s AND created_by=%s AND purpose='change_request'
-              AND status IN ('OPEN','CONFIRMED') ORDER BY created_at DESC LIMIT 10""", (tenant, ws, me))
+              AND status IN ('OPEN','CONFIRMED') ORDER BY created_at DESC LIMIT %s""", (tenant, ws, me, OWN_CONVERSATION_LIMIT + 1))
         rows = cur.fetchall()
+    if len(rows) > OWN_CONVERSATION_LIMIT and truncated is not None:
+        truncated.append("change_request_conversation")              # one row beyond the limit: more exist than this list reads
+    rows = rows[:OWN_CONVERSATION_LIMIT]
     out = []
     for cid, status, intent_id, first, ai_pending in rows:
         if intent_id and intent_id in have_intent:
@@ -348,8 +352,13 @@ def work_inbox(request: Request, workspace_id: str):
         require(authority, "project.read")
         tenant, me = authority["tenant_id"], authority["account_id"]
         perms = permissions_for(authority.get("roles"))
-        by_kind = {k: [store.job_record(tenant, workspace_id, j) for j in _jobs(store, tenant, workspace_id, k)[:INBOX_LIMIT]]
+        truncated = []                                                   # candidate sources cut by their limit: the lists may miss requests (coverage, below)
+        proposals = _jobs(store, tenant, workspace_id, "proposal")
+        if len(proposals) > INBOX_LIMIT:
+            truncated.append("proposal")
+        by_kind = {k: [store.job_record(tenant, workspace_id, j) for j in (proposals if k == "proposal" else _jobs(store, tenant, workspace_id, k))[:INBOX_LIMIT]]
                    for k in ("proposal", "review", "approval", "apply")}
+        limits = {"proposal": INBOX_LIMIT, "business_change": INBOX_LIMIT}
         replaced = {(p.get("payload") or {}).get("previous_proposal_job_id") for p in by_kind["proposal"]}
         sections = {k: [] for k in rt.SECTIONS}
         unavailable = 0
@@ -391,7 +400,8 @@ def work_inbox(request: Request, workspace_id: str):
                                              "params": params, "mine": mine, "reviewer_notes": digest["total"], "open_change_requests": open_change_requests(digest["latest"])}, mine)
         if "intent.create" in perms:                                     # the caller's own requests that have not reached a proposal yet
             drafts = [store.job_record(tenant, workspace_id, j) for j in _jobs(store, tenant, workspace_id, "change.draft")[:INBOX_LIMIT]]
-            for item in _own_requests(store, tenant, workspace_id, me, seen_intents, drafts):
+            limits.update({"change_request_conversation": OWN_CONVERSATION_LIMIT, "own_intent": INBOX_LIMIT})
+            for item in _own_requests(store, tenant, workspace_id, me, seen_intents, drafts, truncated):
                 rid = item["params"].get("intent") or item["params"]["chat"]
                 keep = {k: item[k] for k in ("proposal_job_id", "title", "requested_by", "params", "mine", "open_change_requests", "reviewer_notes")}
                 place("intent_flow", rid, {**keep, "page": "changes"}, True)
@@ -399,12 +409,19 @@ def work_inbox(request: Request, workspace_id: str):
                     seen_intents.add(item["params"]["intent"])
             with store._tx() as cur:                                     # the caller's own requests stated without a conversation (no proposal yet)
                 cur.execute("""SELECT intent_id, raw_request FROM v2_intents WHERE tenant_id=%s AND workspace_id=%s AND created_by=%s AND status IN ('PARSED','CONFIRMED')
-                    ORDER BY created_at DESC LIMIT %s""", (tenant, workspace_id, me, INBOX_LIMIT))
-                own = [r for r in cur.fetchall() if r[0] not in seen_intents]
+                    ORDER BY created_at DESC LIMIT %s""", (tenant, workspace_id, me, INBOX_LIMIT + 1))
+                rows = cur.fetchall()
+            if len(rows) > INBOX_LIMIT:
+                truncated.append("own_intent")
+            own = [r for r in rows[:INBOX_LIMIT] if r[0] not in seen_intents]
             for iid, raw in own:
                 place("intent_flow", iid, {"proposal_job_id": iid, "title": (raw or iid)[:140], "requested_by": me, "page": "changes", "params": {"intent": iid},
                                            "mine": True, "open_change_requests": [], "reviewer_notes": 0}, True)
-        for jid in _jobs(store, tenant, workspace_id, "change.understand")[:INBOX_LIMIT]:   # business changes, under that family's own read rule
+        sees_all = bool({"knowledge.confirm", "change.approve"} & set(perms))  # the family's read rule: anyone else reads only their own changes, so only those are
+        changes = _jobs(store, tenant, workspace_id, "change.understand", None if sees_all else me)   # candidates (the cut and `truncated` never reflect unreadable ones)
+        if len(changes) > INBOX_LIMIT:
+            truncated.append("business_change")
+        for jid in changes[:INBOX_LIMIT]:                                 # business changes, under that family's own read rule
             try:
                 rec = store.job_record(tenant, workspace_id, jid)
             except TenantScopeError:
@@ -416,7 +433,9 @@ def work_inbox(request: Request, workspace_id: str):
         waiting = sections["waiting_human"] + sections["waiting_system"] + sections["blocked"]
         recent = sections["recent"]
         return JSONResponse({"workspace_id": workspace_id, "account_id": me, "todo": todo, "waiting": waiting, "recent": recent[:5],
-                             "sections": {k: (v[:5] if k == "recent" else v) for k, v in sections.items()}, "unavailable": unavailable}, headers=_NO_STORE)
+                             "sections": {k: (v[:5] if k == "recent" else v) for k, v in sections.items()}, "unavailable": unavailable,
+                             "coverage": {"scope": "loaded", "candidate_limits": limits, "truncated": truncated, "recent_loaded": len(recent), "recent_shown": min(len(recent), 5),
+                                          "complete": not truncated and unavailable == 0}}, headers=_NO_STORE)
     except IdentityDenied as exc:
         status = _identity_denied_status(exc)
         return _error("sign in required" if status == 401 else "permission denied", status)

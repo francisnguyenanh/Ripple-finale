@@ -14,7 +14,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import expect  # noqa: E402
 
-from tests.ai10ui.contract import goto_view, login, open_app, select_workspace, tid  # noqa: E402
+from tests.ai10ui.contract import open_account_menu, goto_view, login, open_app, select_workspace, tid  # noqa: E402
 from tests.ai10ui.harness import ServerThread  # noqa: E402
 from tests.pitch_brief.chain import build  # noqa: E402
 
@@ -131,6 +131,7 @@ def test_workspace_switch_and_sign_out_stop_the_polling_of_what_was_left(env, ch
         # sign out: nothing but the sign-in page is left asking
         goto_view(page, "Support")
         page.wait_for_timeout(2000)
+        open_account_menu(page)
         page.get_by_role("button", name="Sign out").click()
         expect(page.get_by_label("Account ID")).to_be_visible(timeout=WAIT)
         page.wait_for_timeout(1000)

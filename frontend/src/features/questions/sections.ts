@@ -41,3 +41,10 @@ export function selectedSection(param: string, available: SectionId[], link: Lin
 export function visible(selected: SectionId | null, id: SectionId): boolean {
   return selected === null || selected === id;
 }
+
+/** SCN-17: the page is opened deep on one item of the selected section (a change `chg` in "change", a business answer `q` in "ask", a finding in "findings", a
+ *  document answer `qa` in "source-ask"). Only then may the navigator fold into one line; the default section or a section chosen without such a link never does. */
+export function deepLinked(selected: SectionId | null, link: LinkTargets): boolean {
+  if (!selected) return false;
+  return (!!link.chg && selected === "change") || (!!link.q && selected === "ask") || (!!link.finding && selected === "findings") || (!!link.qa && selected === "source-ask");
+}

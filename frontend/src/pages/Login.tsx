@@ -38,11 +38,11 @@ export function Login({ message, onDone }: { message: string; onDone: () => void
         )}
         <label className="grid gap-1 text-sm font-medium">
           Account ID
-          <input className="border border-border rounded-sm bg-bg px-3 py-2 text-base font-normal" name="account" autoFocus autoComplete="username" required value={account} onChange={(e) => setAccount(e.target.value)} data-testid="login-account" />
+          <input className="border border-border-strong rounded-sm bg-bg px-3 py-2 text-base font-normal" name="account" autoFocus autoComplete="username" required value={account} onChange={(e) => setAccount(e.target.value)} data-testid="login-account" />
         </label>
         <label className="grid gap-1 text-sm font-medium">
           Credential
-          <input className="border border-border rounded-sm bg-bg px-3 py-2 text-base font-normal" name="credential" type="password" autoComplete="current-password" required value={credential} onChange={(e) => setCredential(e.target.value)} data-testid="login-credential" />
+          <input className="border border-border-strong rounded-sm bg-bg px-3 py-2 text-base font-normal" name="credential" type="password" autoComplete="current-password" required value={credential} onChange={(e) => setCredential(e.target.value)} data-testid="login-credential" />
         </label>
         <Button type="submit" variant="primary" disabled={pending} data-testid="login-submit">{pending ? "Signing in..." : "Sign in"}</Button>
         {error && <p role="alert" className="text-sm text-danger" data-testid="login-error">{error}</p>}

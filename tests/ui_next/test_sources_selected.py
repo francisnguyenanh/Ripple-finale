@@ -51,7 +51,8 @@ def test_details_open_a_selected_file_pane_that_starts_nothing_and_survives_a_re
         page, ctx = _open(pw_browser, server, env, env.admin, f"cred-a-{env.nonce}")
         assert tid(page, "sources-selected").count() == 0                                     # no selection: the page is the cards as before
         n_cards = tid(page, "artifact-row").count()
-        card = tid(page, "artifact-row").first
+        # the file that has not been analysed yet: its Analyze button carries the cost note (card order is not fixed between runs, so pick by state, not position)
+        card = tid(page, "artifact-row").filter(has=page.locator('[data-testid="stage-analysis"][data-state="not_analysed"]')).first
         aid = card.get_attribute("data-artifact-id")
         card.get_by_test_id("artifact-details").click()
         pane = tid(page, "sources-selected")

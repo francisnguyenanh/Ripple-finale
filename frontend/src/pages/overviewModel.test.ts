@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSummary, nextStep, type Summary } from "./overviewModel";
+import { buildSummary, ctaRepeatsFirstRow, nextStep, type Summary } from "./overviewModel";
 
 const recent = (t: string) => t === "DECISION_RECORDED";
 const head = { source_revision_id: "sr-1" };
@@ -52,5 +52,26 @@ describe("nextStep", () => {
   it("is loading until the summary and the work list have arrived", () => {
     expect(nextStep(null, none, "ready").kind).toBe("loading");
     expect(nextStep(ready, none, "loading").kind).toBe("loading");
+  });
+});
+
+describe("ctaRepeatsFirstRow (SCN-16)", () => {
+  const work = { kind: "work" as const, text: "", to: "changes", label: "Open the first item" };
+  const a = { family: "business_change", proposal_job_id: "chg-1" };
+  const list = { first: a, unavailable: 0, cut: false };
+  it("same request (family + id) in the first visible row of a complete list", () => {
+    expect(ctaRepeatsFirstRow(work, { ...a }, list)).toBe(true);
+  });
+  it("another request, or the same id in another family, is not a repeat", () => {
+    expect(ctaRepeatsFirstRow(work, { family: "business_change", proposal_job_id: "chg-2" }, list)).toBe(false);
+    expect(ctaRepeatsFirstRow(work, { family: "intent_flow", proposal_job_id: "chg-1" }, list)).toBe(false);
+  });
+  it("partial, cut or unread list, no first row, or a different next step keeps the full line", () => {
+    expect(ctaRepeatsFirstRow(work, a, { ...list, unavailable: 1 })).toBe(false);
+    expect(ctaRepeatsFirstRow(work, a, { ...list, cut: true })).toBe(false);
+    expect(ctaRepeatsFirstRow(work, a, null)).toBe(false);
+    expect(ctaRepeatsFirstRow(work, a, { ...list, first: undefined })).toBe(false);
+    expect(ctaRepeatsFirstRow({ ...work, kind: "questions" }, a, list)).toBe(false);
+    expect(ctaRepeatsFirstRow(work, undefined, list)).toBe(false);
   });
 });

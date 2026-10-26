@@ -130,7 +130,15 @@ def test_matrix(env, ch, monkeypatch, pw_browser):
     def opened_enabled(role):
         return {(b["id"] or b["t"]) for (r, pg), btns in opened.items() if r == role for b in btns if not b["off"]}
     print("\nOPENED\n" + json.dumps({r: sorted(opened_enabled(r)) for r in who}, indent=1))
-    toggles = ("qsec-", "ssec-", "explorer-", "expand-", "collapse-", "copy-request-link", "check-now", "stages-expand-all", "harbor-run")
+    toggles = ("qsec-", "ssec-", "explorer-", "expand-", "collapse-", "copy-request-link", "check-now", "stages-expand-all", "harbor-run",
+               # read-only view / navigation controls added since this list was written (D6 details pane, task frame views, assistant panel open / edit,
+               # plan 17 count filters, version details, table sorting, unlinked-item chips): they change what is shown, never a record
+               "artifact-details", "task-mode-", "assistant-launch", "assistant-suggestion-edit", "count-", "work-filter-clear", "history-version-",
+               "history-versions-table-sort-", "graph-loose-",
+               # plan 17 SCN-21 Sources Cards / Table switch: a URL view parameter, no request (test_scn_sources_table_browser)
+               "sources-view-",
+               # the viewer role holds request.assistant.ask (infra/adapters/v2_policy.py, RQA): asking the read-only assistant is within its permissions
+               "assistant-suggestion-ask")
     assert not {n for n in opened_enabled("viewer") if not n.endswith("-toggle") and not n.startswith(toggles) and not n.startswith(("Confirm this rule", "Evidence"))}, opened_enabled("viewer")
     assert acts(opened_enabled("viewer")) == set() and acts(opened_enabled("reviewer")) <= {"review-ready", "review-comment", "review-request-changes", "ask-start"}
     assert not {"action-approve", "action-reject"} & (opened_enabled("requester") | opened_enabled("reviewer") | opened_enabled("viewer"))

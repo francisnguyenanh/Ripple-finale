@@ -27,13 +27,6 @@
       "fingerprint": "E03|src/features/support/WorkspaceSection.tsx|<select",
       "count": 2,
       "note": "raw select with a different local class; migrate to Select with the owning package (Harbor: UX-09, shell: UX-03 follow-up)"
-    },
-    {
-      "rule": "E03",
-      "path": "src/shell/Shell.tsx",
-      "fingerprint": "E03|src/shell/Shell.tsx|<select",
-      "count": 1,
-      "note": "raw select with a different local class; migrate to Select with the owning package (Harbor: UX-09, shell: UX-03 follow-up)"
     }
   ],
   "exceptions": []

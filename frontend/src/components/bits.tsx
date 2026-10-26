@@ -1,6 +1,6 @@
 // Small shared building blocks: stage card, state pill, technical field with copy, labelled inputs.
 import * as React from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, CircleDashed, Copy, Lock, SearchX, TriangleAlert } from "lucide-react";
 import { useSession } from "@/session";
 import { cn } from "@/lib/cn";
 import { ruleLine, ruleTitle, valueText } from "@/lib/fmt";
@@ -9,19 +9,79 @@ import { useNotify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { PILL_LABEL_MAX, stateTone, TONE_CLASS } from "@/lib/stateDisplay";
 
-export function Card({ title, testid, children, className, aside, data }: { title?: React.ReactNode; testid?: string; children: React.ReactNode; className?: string; aside?: React.ReactNode; data?: Record<string, string> }) {
+/** Semantic left accent (SCN-01): a selective 4px marker on a neutral surface; always paired with text that says the same (colour is never the only carrier). */
+export type Accent = "primary" | "warning" | "danger" | "success" | "info";
+export const ACCENT_CLASS: Record<Accent, string> = {
+  primary: "border-l-4 border-l-primary", warning: "border-l-4 border-l-warning", danger: "border-l-4 border-l-danger", success: "border-l-4 border-l-success", info: "border-l-4 border-l-info",
+};
+
+/** A short kicker above a title, only when it adds information the title does not carry (12px floor; never the only label of a fact). */
+export const Eyebrow = ({ children, testid }: { children: React.ReactNode; testid?: string }) => (
+  <p data-testid={testid} className="text-xs font-semibold uppercase tracking-wider text-muted">{children}</p>
+);
+
+/** Panel (SCN-01, SCN-13). With a header (`title`, `aside`, `eyebrow`, `description` or `meta`, e.g. "read at ...") the panel is split: header strip
+ *  (`px-4 py-3`, bottom rule) and body (`p-4`); without one it is a single padded body. `flush` drops the body padding so a list, table or canvas meets the panel
+ *  edges (cells keep their own padding and focus ring; nothing is clipped); `accent` adds a semantic left marker; `level` picks the heading level so a panel inside a
+ *  page section keeps the outline. The panel never clips its content (no overflow hidden), so focus rings at the edge stay visible. */
+export function Card({ title, testid, children, className, aside, data, eyebrow, description, meta, flush, accent, level = 2, id }: {
+  title?: React.ReactNode; testid?: string; children: React.ReactNode; className?: string; aside?: React.ReactNode; data?: Record<string, string>;
+  eyebrow?: React.ReactNode; description?: React.ReactNode; meta?: React.ReactNode; flush?: boolean; accent?: Accent; level?: 2 | 3; id?: string;
+}) {
   const extra: Record<string, string> = {};
   for (const [k, v] of Object.entries(data ?? {})) extra[`data-${k}`] = v;
+  const H = level === 3 ? "h3" : "h2";
+  const rich = !!(eyebrow || description || meta);
+  const frame = cn("rounded-lg border border-border bg-surface shadow-card min-w-0", accent && ACCENT_CLASS[accent]);
+  if (!(title || aside || rich))
+    return <section data-testid={testid} {...extra} data-flush={flush ? "true" : undefined} className={cn(frame, flush ? "grid" : "grid gap-3 p-4", className)}>{children}</section>;
   return (
-    <section data-testid={testid} {...extra} className={cn("rounded-lg border border-border bg-surface p-4 md:p-5 grid gap-3 min-w-0", className)}>
-      {(title || aside) && (
-        <header className="flex flex-wrap items-center gap-2">
-          {title && <h2 className="text-lg font-semibold flex-1 min-w-0">{title}</h2>}
-          {aside}
-        </header>
-      )}
-      {children}
+    <section data-testid={testid} {...extra} data-flush={flush ? "true" : undefined} className={cn(frame, "grid content-start", className)}>
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-3">
+        {rich ? (
+          <div className="grid gap-0.5 min-w-0 flex-1">
+            {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
+            {title && <H id={id} className={cn("font-semibold break-words", level === 3 ? "text-base" : "text-lg")}>{title}</H>}
+            {description && <p className="text-sm text-muted">{description}</p>}
+          </div>
+        ) : title && <H id={id} className={cn("font-semibold flex-1 min-w-0", level === 3 ? "text-base" : "text-lg")}>{title}</H>}
+        {meta && <span className="text-xs text-muted">{meta}</span>}
+        {aside}
+      </header>
+      <div className={flush ? "min-w-0" : "grid gap-3 p-4 min-w-0"}>{children}</div>
     </section>
+  );
+}
+
+/** SCN-11: a state with no rows, said for what it is. `kind`: none (nothing exists yet, as far as this read shows), no-match (a filter hides everything: offer to
+ *  clear it), error (the read failed: never "nothing here"; offer a retry when the route allows), partial (some parts could not be read), denied (says nothing about
+ *  whether the item exists). The reason must come from what is known; `action` is an allowed next step owned by the feature (no mutation or paid call here). */
+export type EmptyKind = "none" | "no-match" | "error" | "partial" | "denied";
+export function EmptyState({ kind, title, children, action, testid, compact }: { kind: EmptyKind; title: React.ReactNode; children?: React.ReactNode; action?: React.ReactNode; testid?: string; compact?: boolean }) {
+  const Icon = { none: CircleDashed, "no-match": SearchX, error: TriangleAlert, partial: TriangleAlert, denied: Lock }[kind];
+  const warn = kind === "error" || kind === "partial";
+  return (
+    <div data-testid={testid} data-empty={kind} role={warn ? "status" : undefined}
+      className={cn("grid gap-2 rounded-lg border bg-surface", compact ? "p-3" : "p-5", warn ? "border-warning border-l-4" : "border-border")}>
+      <p className="flex items-start gap-2 font-medium"><Icon size={18} aria-hidden="true" className={cn("mt-0.5 shrink-0", warn ? "text-warning" : "text-muted")} /><span>{title}</span></p>
+      {children ? <div className="text-sm text-muted grid gap-1">{children}</div> : null}
+      {action ? <div className="flex flex-wrap gap-2">{action}</div> : null}
+    </div>
+  );
+}
+
+/** One labelled fact, value first in weight (SCN-01 summary datum). A missing value reads `unknown` ("Not recorded" by default), never 0 or blank; the label is never
+ *  dropped. Spans only, so it can sit inside a button or a list row. */
+export function Datum({ label, value, hint, testid, unknown = "Not recorded", size = "md", className }: {
+  label: React.ReactNode; value: React.ReactNode | null | undefined; hint?: React.ReactNode; testid?: string; unknown?: string; size?: "md" | "lg"; className?: string;
+}) {
+  const missing = value === null || value === undefined || value === "";
+  return (
+    <span data-testid={testid} data-state={missing ? "unknown" : "known"} className={cn("grid gap-0.5 min-w-0 content-start", className)}>
+      <span className="text-xs font-semibold uppercase tracking-wider text-muted">{label}</span>
+      <span className={cn("font-semibold break-words", size === "lg" ? "text-2xl tnum" : "text-base", missing && "text-muted font-medium")}>{missing ? unknown : value}</span>
+      {hint ? <span className="text-sm text-muted">{hint}</span> : null}
+    </span>
   );
 }
 
@@ -30,7 +90,8 @@ export const Muted = ({ children, testid, className, id }: { children: React.Rea
 );
 
 export function Callout({ tone = "info", children, testid, role }: { tone?: "info" | "warn" | "danger" | "wait"; children: React.ReactNode; testid?: string; role?: string }) {
-  const border = { info: "border-border", warn: "border-warning", danger: "border-danger", wait: "border-info" }[tone];
+  // SCN-01: attention tones carry a 4px left marker on the neutral surface (the text still says what it is); info stays a plain 1px frame.
+  const border = { info: "border-border", warn: "border-warning border-l-4", danger: "border-danger border-l-4", wait: "border-info border-l-4" }[tone];
   return <div role={role} data-testid={testid} className={cn("rounded-md border bg-surface-2 px-3 py-2 text-sm grid gap-1", border)}>{children}</div>;
 }
 
@@ -99,7 +160,7 @@ export function Tech({ children }: { children: React.ReactNode }) {
   return mode === "technical" ? <>{children}</> : null;
 }
 
-const inputCls = "border border-border rounded-sm bg-bg px-3 py-2 text-base font-normal w-full min-h-10";
+const inputCls = "border border-border-strong rounded-sm bg-bg px-3 py-2 text-base font-normal w-full min-h-10";
 
 export function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -118,7 +179,7 @@ export const TextArea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTML
   return <textarea ref={ref} {...p} className={cn(inputCls, "resize-y", p.className)} />;
 });
 
-const selectCls = "border border-border rounded-sm bg-bg px-3 py-2 min-h-10 max-w-full min-w-0";
+const selectCls = "border border-border-strong rounded-sm bg-bg px-3 py-2 min-h-10 max-w-full min-w-0";
 /** The shared native select: same look as the text controls; label it with `Field` or an `aria-label`. */
 export const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(function Select(p, ref) {
   return <select ref={ref} {...p} className={cn(selectCls, p.className)} />;

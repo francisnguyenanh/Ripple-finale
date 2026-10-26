@@ -23,7 +23,7 @@ import { AwaitingRuns } from "./RunHold";
 import { BusinessRules } from "./BusinessRules";
 import { BusinessUnlinked } from "./BusinessUnlinked";
 import { SectionNav } from "@/components/SectionNav";
-import { ALL_SECTIONS, GROUP_LABEL, SECTIONS, selectedSection, visible, type SectionId } from "./sections";
+import { ALL_SECTIONS, deepLinked, GROUP_LABEL, SECTIONS, selectedSection, visible, type SectionId } from "./sections";
 
 const q = encodeURIComponent;
 
@@ -314,8 +314,9 @@ export function QuestionsPage() {
   const openFindings = ((data.overview.findings ?? []) as Rec[]).filter((f) => !f.decision).length;
   return (
     <>
-      <PageHeader id="questions" next={data.items.length ? "Open a question, check the evidence, then confirm or answer." : "Nothing is waiting for a person right now."} />
-      <SectionNav ariaLabel="Questions sections" testid="questions-sections" prefix="qsec" groupLabels={GROUP_LABEL} selected={sel} onSelect={choose}
+      {/* SCN-02: with one change request open, its task frame is the next step; the open-questions line would contradict it (it counts questions, not this request) */}
+      <PageHeader id="questions" next={chg && sel === "change" ? undefined : data.items.length ? "Open a question, check the evidence, then confirm or answer." : "No open question is waiting for a person right now."} />
+      <SectionNav ariaLabel="Questions sections" testid="questions-sections" prefix="qsec" groupLabels={GROUP_LABEL} selected={sel} onSelect={choose} compact={deepLinked(sel, { chg, q: bq, finding, qa })}
         sections={SECTIONS.filter((x) => available.includes(x.id)).map((x) => ({ id: x.id, group: x.group, label: x.label, badge: x.id === "open" ? `(${data.items.length})` : x.id === "findings" ? `(${openFindings})` : undefined }))} />
       <div className="grid gap-8">
         <AwaitingRuns ws={ws} />
@@ -325,7 +326,7 @@ export function QuestionsPage() {
           <BusinessAsk ws={ws} />
         </section>
         <section aria-labelledby="q-change-biz" hidden={!visible(sel, "change")} data-testid="qsection-change" className="grid gap-4">
-          <h2 id="q-change-biz" className="text-lg font-semibold">Ask for a change to a business rule</h2>
+          <h2 id="q-change-biz" className="text-lg font-semibold">{chg ? "Change request to a business rule" : "Ask for a change to a business rule"}</h2>
           <BusinessChange ws={ws} />
         </section>
         <section aria-labelledby="q-rules" hidden={!visible(sel, "rules")} data-testid="qsection-rules" className="grid gap-4">

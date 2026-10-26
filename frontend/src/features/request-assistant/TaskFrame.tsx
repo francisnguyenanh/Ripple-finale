@@ -6,14 +6,16 @@
 // The assistant launcher opens the private request assistant (no model call on open).
 import * as React from "react";
 import { Button } from "@/components/ui/button";
-import { Callout, Muted } from "@/components/bits";
+import { ACCENT_CLASS, Callout, Datum, Eyebrow, Muted } from "@/components/bits";
+import { cn } from "@/lib/cn";
 import { StatusBadge, type Status } from "@/components/StatusBadge";
 import { useSession } from "@/session";
 import { useParam } from "@/lib/param";
 import { RequestAssistant } from "./RequestAssistant";
-import { useTaskView } from "./taskView";
+import { taskSummary, useTaskView } from "./taskView";
 
 type Rec = Record<string, unknown>;
+const FAMILY_LABEL = { intent_flow: "Change request", business_change: "Business knowledge change" } as const;
 const STEP: Record<string, { status: Status; label: string }> = {
   done: { status: "success", label: "Done" }, current: { status: "info", label: "Now" }, waiting: { status: "waiting", label: "Waiting" }, blocked: { status: "partial", label: "Blocked" },
   failed: { status: "failed", label: "Failed" }, future: { status: "empty", label: "Later" }, not_applicable: { status: "empty", label: "Not needed" },
@@ -27,9 +29,10 @@ const PHASE: Record<string, { status: Status; label: string }> = {
 };
 
 /** `shared` = the page already read the projection (Changes shares it with its journey and next-step text); otherwise the frame reads it itself. `detail` = the
- *  owning page's how-to / waiting controls for the current step, shown inside "What to do" so the page has one responsibility summary. */
-export function TaskFrame({ ws, family, id, refreshKey, shared, detail }: { ws: string; family: "intent_flow" | "business_change"; id: string; refreshKey?: unknown;
-  shared?: { tv: Rec | null; err: string | null }; detail?: React.ReactNode }) {
+ *  owning page's how-to / waiting controls for the current step, shown inside "What to do" so the page has one responsibility summary; as a function it receives
+ *  the codes of the obligations this person is asked to do NOW (state current, from the projection), so the page can point at its own matching control (SCN-17). */
+export function TaskFrame({ ws, family, id, refreshKey, shared, detail, fallbackTitle }: { ws: string; family: "intent_flow" | "business_change"; id: string; refreshKey?: unknown;
+  shared?: { tv: Rec | null; err: string | null }; detail?: React.ReactNode | ((askedNow: string[]) => React.ReactNode); fallbackTitle?: string }) {
   const own = useTaskView(ws, family, shared ? null : id, refreshKey);
   const { tv, err } = shared ?? own;
   const [view, setView] = useParam("task");
@@ -53,53 +56,76 @@ export function TaskFrame({ ws, family, id, refreshKey, shared, detail }: { ws: 
   const stage = (tv.stage ?? {}) as Rec;
   const ref = ((tv.request_ref as Rec)?.canonical_ref ?? tv.request_ref) as Rec;
   const railOn = askOpen && ((tv.features as Rec | undefined)?.request_assistant ?? "on") !== "off";   // EUI-01/02: the assistant beside the task on wide screens, below it otherwise
+  const sum = taskSummary(tv);
+  const asOf = String(tv.as_of ?? "");
+  const asOfDate = asOf ? new Date(asOf) : null;
+  const assistantOn = ((tv.features as Rec | undefined)?.request_assistant ?? "on") !== "off";
+  const deliverables = (tv.expected_deliverables ?? []) as Rec[];
   return (
-    <section data-testid="task-frame" data-family={family} data-stage={String(stage.code)} data-mode={mode} aria-label="Your task on this request"
-      className="rounded-lg border border-border bg-surface p-4 grid gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-lg font-semibold mr-2">{String(tv.title ?? "This request")}</h2>
-        <StatusBadge status={blockers.length ? "partial" : "info"} label={String(stage.label ?? "")} />
-        <span className="text-xs text-muted">as of {new Date(String(tv.as_of)).toLocaleString()}</span>
-        <div className="ml-auto flex gap-2" role="group" aria-label="View">
-          <Button size="sm" variant={mode === "task" ? "primary" : "ghost"} aria-pressed={mode === "task"} data-testid="task-mode-task" onClick={() => setMode("task")}>My task</Button>
-          <Button size="sm" variant={mode === "map" ? "primary" : "ghost"} aria-pressed={mode === "map"} data-testid="task-mode-map" onClick={() => setMode("map")}>Whole request</Button>
-          {((tv.features as Rec | undefined)?.request_assistant ?? "on") !== "off" && (
-            <Button size="sm" variant="secondary" data-testid="assistant-launch" aria-expanded={askOpen} onClick={() => setAskOpen(!askOpen)}>Ask about this request</Button>)}
+    <section data-testid="task-frame" data-family={family} data-stage={String(stage.code)} data-mode={mode} data-asked={String(sum.heldByYou)} aria-label="Your task on this request"
+      className={cn("rounded-lg border border-border bg-surface grid min-w-0", blockers.length ? ACCENT_CLASS.warning : sum.heldByYou ? ACCENT_CLASS.primary : undefined)}>
+      {/* SCN-02 header: what the request is, the step now, who holds it and the reader's part, all from the projection (never from a role name). */}
+      <header className="grid gap-3 px-4 py-3 border-b border-border">          {/* the panel header contract of SCN-13 (header strip, body p-4) */}
+        <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+          <div className="grid gap-1 min-w-0 flex-1">
+            <Eyebrow testid="task-family">{FAMILY_LABEL[family]}</Eyebrow>
+            <h2 className="text-xl font-semibold break-words" data-testid="task-title">{String(tv.title ?? (fallbackTitle || "This request"))}</h2>
+          </div>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="View">
+            <Button size="sm" variant={mode === "task" ? "primary" : "ghost"} aria-pressed={mode === "task"} data-testid="task-mode-task" onClick={() => setMode("task")}>My task</Button>
+            <Button size="sm" variant={mode === "map" ? "primary" : "ghost"} aria-pressed={mode === "map"} data-testid="task-mode-map" onClick={() => setMode("map")}>Whole request</Button>
+            {assistantOn && (
+              <Button size="sm" variant="secondary" data-testid="assistant-launch" aria-expanded={askOpen} onClick={() => setAskOpen(!askOpen)}>Ask about this request</Button>)}
+          </div>
         </div>
-      </div>
+        <div className="grid gap-x-6 gap-y-3 grid-cols-2 sm:grid-cols-3" data-testid="task-summary">
+          <Datum label="Step now" value={String(stage.label ?? "") || null} testid="task-stage" className="col-span-2 sm:col-span-1" />
+          <Datum label="Held by" value={sum.held} testid="task-holder" />
+          <Datum label="Your part" value={sum.partText} testid="task-your-part" />
+        </div>
+        {asOfDate && !Number.isNaN(asOfDate.getTime()) && (
+          <p className="text-xs text-muted" data-testid="task-as-of">
+            {/* as_of is when this task status was read from the record, not when a source last changed (plan 17 section 9.3) */}
+            Task status read <time dateTime={asOf} title={asOfDate.toISOString()}>{asOfDate.toLocaleString()}</time>
+          </p>
+        )}
+      </header>
       {blockers.length > 0 && (
-        <Callout tone="warn" testid="task-blockers">
-          <strong>What blocks this request</strong>
-          <ul className="list-disc pl-5">{blockers.map((b, i) => <li key={i}>{String(b.text)}</li>)}</ul>
-        </Callout>
+        <div className="px-4 pt-4">
+          <Callout tone="warn" testid="task-blockers">
+            <strong>What blocks this request</strong>
+            <ul className="list-disc pl-5">{blockers.map((b, i) => <li key={i}>{String(b.text)}</li>)}</ul>
+          </Callout>
+        </div>
       )}
-      <div className={railOn ? "grid gap-3 items-start xl:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)]" : "grid gap-3"} data-testid="task-workspace" data-rail={String(railOn)}>
+      <div className={cn("p-4 min-w-0", railOn ? "grid gap-4 items-start xl:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)]" : "grid gap-4")} data-testid="task-workspace" data-rail={String(railOn)}>
       <div className="grid gap-3 min-w-0">
       {mode === "task" ? (
-        <div className={railOn ? "grid gap-3 lg:grid-cols-3 xl:grid-cols-2" : "grid gap-3 lg:grid-cols-3"} data-testid="task-blocks">
-          <div className="grid gap-1 content-start" data-testid="task-input">
+        <div className={railOn ? "grid gap-4 lg:grid-cols-2" : "grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_minmax(0,1fr)]"} data-testid="task-blocks">
+          {/* DOM order puts the action first (read first, and first on a narrow screen); on a wide screen it sits between input and hand-over. */}
+          <div className={cn("grid gap-2 content-start rounded-md bg-surface-2 p-3 min-w-0", railOn ? "lg:col-span-2" : "lg:order-2", sum.heldByYou && ACCENT_CLASS.primary)} data-testid="task-action">
+            <h3 className="font-semibold text-sm">What to do{sum.askedCount > 1 ? ` (${sum.askedCount} steps for you)` : ""}</h3>
+            {mine.length ? (
+              <ul className="grid gap-1">{mine.map((o, i) => (
+                <li key={i} data-testid="task-my-obligation" data-code={String(o.code)} data-required={String(o.required)}>
+                  {o.state === "future" ? <span className="text-sm">{String(o.label)} <span className="text-muted">(later, after the step before it)</span></span> : <strong className="text-base">{String(o.label)}</strong>}
+                  <span className="text-sm">{o.required ? "" : " (optional)"}{o.state === "blocked" ? " - blocked, see above" : ""}</span>
+                </li>))}
+              </ul>
+            ) : <p className="text-sm" data-testid="task-not-yours">Not waiting for you{waiting.length ? `: waiting on ${[...new Set(waiting.map((w) => String(w.holder_label)))].join(", ")}` : "."}</p>}
+            {others.filter((o) => o.eligible_me && o.state === "current").map((o, i) => <Muted key={i} testid="task-eligible-not-asked">{String(o.label)}: {String(o.reason ?? "you may do this, but you are not asked to")}</Muted>)}
+            {typeof detail === "function" ? detail(mine.filter((o) => o.state === "current").map((o) => String(o.code))) : detail}
+          </div>
+          <div className={cn("grid gap-1 content-start min-w-0", !railOn && "lg:order-1")} data-testid="task-input">
             <h3 className="font-semibold text-sm">Input</h3>
             {((tv.input_refs ?? []) as Rec[]).length ? <ul className="list-disc pl-5 text-sm">{((tv.input_refs ?? []) as Rec[]).map((r, i) => <li key={i}>{String(r.label)}</li>)}</ul>
               : <Muted>Nothing to read yet.</Muted>}
           </div>
-          <div className="grid gap-1 content-start" data-testid="task-action">
-            <h3 className="font-semibold text-sm">What to do</h3>
-            {mine.length ? (
-              <ul className="grid gap-1 text-sm">{mine.map((o, i) => (
-                <li key={i} data-testid="task-my-obligation" data-code={String(o.code)} data-required={String(o.required)}>
-                  {o.state === "future" ? <span>{String(o.label)} <span className="text-muted">(later, after the step before it)</span></span> : <strong>{String(o.label)}</strong>}
-                  {o.required ? "" : " (optional)"}{o.state === "blocked" ? " - blocked, see above" : ""}
-                </li>))}
-              </ul>
-            ) : <p className="text-sm" data-testid="task-not-yours">Not waiting for you{waiting.length ? `: waiting on ${waiting.map((w) => String(w.holder_label)).join(", ")}` : "."}</p>}
-            {others.filter((o) => o.eligible_me && o.state === "current").map((o, i) => <Muted key={i} testid="task-eligible-not-asked">{String(o.label)}: {String(o.reason ?? "you may do this, but you are not asked to")}</Muted>)}
-            {detail}
-          </div>
-          <div className="grid gap-1 content-start" data-testid="task-handoff">
+          <div className={cn("grid gap-1 content-start min-w-0", !railOn && "lg:order-3")} data-testid="task-handoff">
             <h3 className="font-semibold text-sm">Result to hand over</h3>
-            <ul className="list-disc pl-5 text-sm" data-testid="task-deliverables">{((tv.expected_deliverables ?? []) as Rec[]).filter((d) => !d.later).map((d, i) => <li key={i} data-code={String(d.code)}>{String(d.label)}</li>)}</ul>
-            {((tv.expected_deliverables ?? []) as Rec[]).filter((d) => d.later).map((d, i) => <Muted key={i} testid="task-deliverable-later">{String(d.label)}</Muted>)}
-            {!((tv.expected_deliverables ?? []) as Rec[]).some((d) => d.later) && others.filter((o) => o.state === "future").length > 0 && <Muted testid="task-then">Then: {others.filter((o) => o.state === "future").map((o) => `${String(o.label)} (${String(o.holder_label)})`).join("; ")}.</Muted>}
+            <ul className="list-disc pl-5 text-sm" data-testid="task-deliverables">{deliverables.filter((d) => !d.later).map((d, i) => <li key={i} data-code={String(d.code)}>{String(d.label)}</li>)}</ul>
+            {deliverables.filter((d) => d.later).map((d, i) => <Muted key={i} testid="task-deliverable-later">{String(d.label)}</Muted>)}
+            {!deliverables.some((d) => d.later) && others.filter((o) => o.state === "future").length > 0 && <Muted testid="task-then">Then: {others.filter((o) => o.state === "future").map((o) => `${String(o.label)} (${String(o.holder_label)})`).join("; ")}.</Muted>}
           </div>
         </div>
       ) : (

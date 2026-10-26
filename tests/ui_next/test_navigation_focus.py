@@ -8,7 +8,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import expect  # noqa: E402
 
-from tests.ai10ui.contract import goto_view, login, open_app, select_workspace, tid  # noqa: E402
+from tests.ai10ui.contract import open_account_menu, goto_view, login, open_app, select_workspace, tid  # noqa: E402
 from tests.ai10ui.harness import ServerThread  # noqa: E402
 from tests.pitch_brief.chain import APPROVAL, build, cand_id  # noqa: E402
 
@@ -51,6 +51,7 @@ def test_the_sign_in_form_works_by_keyboard_from_the_first_keystroke(env, ch, pw
         page.keyboard.press("Enter")
         expect(tid(page, "session-account")).to_have_text(env.admin, timeout=WAIT)
         # a wrong credential keeps focus inside the form and says so
+        open_account_menu(page)
         page.get_by_role("button", name="Sign out").click()
         expect(page.get_by_label("Account ID")).to_be_visible()
         page.get_by_label("Account ID").fill(env.admin)

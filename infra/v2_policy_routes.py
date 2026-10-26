@@ -1835,6 +1835,48 @@ def get_intent(request: Request, intent_id: str, workspace_id: str):
         return _error("intent not found", 404)
 
 
+def _readable_audit(store, tenant: str, workspace_id: str, events: list[dict], me: str, perms) -> list[dict]:
+    """SCN-12: the workspace audit keeps each request family's read rule. An event bound to a business change (`chg-…` as its job, intent or change id, or a job whose
+    payload names that change as `change_id` or `intent_id`) is shown only to the person who asked, or to holders of `knowledge.confirm` / `change.approve` (`v2_business_routes._change_record_for`);
+    an event of a private request-assistant job (`request.qa`) only to the person who asked it. A binding that cannot be resolved is withheld (fail closed)."""
+    sees_changes = bool({"knowledge.confirm", "change.approve"} & set(perms))
+    jids = sorted({str((e.get("payload") or {}).get("job_id")) for e in events if (e.get("payload") or {}).get("job_id")})
+    jobs: dict[str, tuple] = {}
+    if jids:
+        with store._tx() as cur:
+            cur.execute("SELECT job_id, kind, requested_by, COALESCE(payload->>'change_id', payload->>'intent_id') FROM v2_jobs WHERE tenant_id=%s AND workspace_id=%s AND job_id = ANY(%s)",
+                        (tenant, workspace_id, jids))
+            jobs = {r[0]: r[1:] for r in cur.fetchall()}
+
+    def change_of(payload: dict) -> str | None:
+        for key in ("change_id", "intent_id", "job_id"):
+            v = payload.get(key)
+            if isinstance(v, str) and v.startswith("chg-"):
+                return v
+        job = jobs.get(str(payload.get("job_id")))
+        return job[2] if job and isinstance(job[2], str) and job[2].startswith("chg-") else None
+
+    bound = {e["id"] if e.get("id") is not None else idx: change_of(e.get("payload") or {}) for idx, e in enumerate(events)}
+    askers: dict[str, str | None] = {}
+    wanted = sorted({c for c in bound.values() if c})
+    if wanted and not sees_changes:
+        with store._tx() as cur:
+            cur.execute("SELECT job_id, requested_by FROM v2_jobs WHERE tenant_id=%s AND workspace_id=%s AND kind='change.understand' AND job_id = ANY(%s)",
+                        (tenant, workspace_id, wanted))
+            askers = {r[0]: r[1] for r in cur.fetchall()}
+    out = []
+    for idx, e in enumerate(events):
+        payload = e.get("payload") or {}
+        change = bound[e["id"] if e.get("id") is not None else idx]
+        if change and not sees_changes and askers.get(change) != me:
+            continue
+        job = jobs.get(str(payload.get("job_id")))
+        if (job and job[0] == "request.qa" or payload.get("kind") == "request.qa") and (not job or job[1] != me):
+            continue
+        out.append(e)
+    return out
+
+
 @router.get("/v2/audit/{workspace_id}")
 def workspace_audit(request: Request, workspace_id: str):
     identity, store = _identity_store(), _v2_store()
@@ -1843,7 +1885,8 @@ def workspace_audit(request: Request, workspace_id: str):
     try:
         authority = _authority(identity, request, workspace_id)
         require(authority, "project.read")
-        events = store.audit_events(authority["tenant_id"], workspace_id)
+        events = _readable_audit(store, authority["tenant_id"], workspace_id, store.audit_events(authority["tenant_id"], workspace_id),
+                                 authority["account_id"], permissions_for(authority.get("roles")))
         membership_events = identity.audit_events(authority["tenant_id"], workspace_id)
         combined = sorted(events + [{"id": None, **event} for event in membership_events],
                           key=lambda e: (e["id"] is None, e["id"]))

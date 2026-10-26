@@ -5,9 +5,11 @@
 
 /* Token source of truth (see docs/design-system/DESIGN_TOKENS.md). Light default; dark via prefers-color-scheme and [data-theme]. */
 :root {
-  --bg: #F7F8FA; --surface: #FFFFFF; --surface-2: #F0F2F5; --border: #D9DEE5;
-  --text: #141A22; --text-muted: #566170; --primary: #2557D6; --on-primary: #FFFFFF;
-  --success: #137A3F; --warning: #A15C00; --danger: #B3261E; --info: #0B6E8A; --sim: #6B3FA0; --focus: #0B57D0;
+  --bg: #F4F3F0; --surface: #FFFFFF; --surface-2: #EFECE6; --border: #DCD8D0; --border-strong: #8A857C;
+  --text: #141A22; --text-muted: #566170; --primary: #1A63BC; --on-primary: #FFFFFF;
+  --nav-bg: #EEECE8; --nav-hover: #E2DFDA;
+  --header-bg: #0B2545; --header-surface: #143A63; --header-border: #061829; --header-text: #FFFFFF; --header-muted: #C9C6C1; --header-focus: #8AB4FF;
+  --success: #137A3F; --warning: #965500; --danger: #B3261E; --info: #0B6E8A; --sim: #6B3FA0; --focus: #0B57D0;
   --on-danger: #FFFFFF; --overlay-backdrop: rgb(0 0 0 / 0.4);
   --origin-ai: #9A2C67; --origin-ai-surface: #FBF0F6; --origin-evidence: #3E5266; --origin-evidence-surface: #EFF3F7;
   --z-sticky: 20; --z-menu: 40; --z-tooltip: 50; --z-skip: 60;
@@ -15,14 +17,18 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0E1116; --surface: #151A21; --surface-2: #1B222B; --border: #2A3340;
+    --bg: #0E1116; --surface: #151A21; --surface-2: #1B222B; --border: #2A3340; --border-strong: #647081;
+    --nav-bg: #12171E; --nav-hover: #1E2630;
+    --header-bg: #0A1628; --header-surface: #132742; --header-border: #1E324D; --header-text: #E8ECF1; --header-muted: #9AA6B5; --header-focus: #8AB4FF;
     --text: #E8ECF1; --text-muted: #9AA6B5; --primary: #6D95F5; --on-primary: #0E1116;
     --success: #4CC58A; --warning: #F0B35A; --danger: #FF8A80; --info: #5CC7E0; --sim: #B79CFF; --focus: #8AB4FF; --on-danger: #0E1116; --overlay-backdrop: rgb(0 0 0 / 0.6);
     --origin-ai: #F29AC9; --origin-ai-surface: #2A1B24; --origin-evidence: #AFC0D2; --origin-evidence-surface: #18212B;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0E1116; --surface: #151A21; --surface-2: #1B222B; --border: #2A3340;
+  --bg: #0E1116; --surface: #151A21; --surface-2: #1B222B; --border: #2A3340; --border-strong: #647081;
+  --nav-bg: #12171E; --nav-hover: #1E2630;
+  --header-bg: #0A1628; --header-surface: #132742; --header-border: #1E324D; --header-text: #E8ECF1; --header-muted: #9AA6B5; --header-focus: #8AB4FF;
   --text: #E8ECF1; --text-muted: #9AA6B5; --primary: #6D95F5; --on-primary: #0E1116;
   --success: #4CC58A; --warning: #F0B35A; --danger: #FF8A80; --info: #5CC7E0; --sim: #B79CFF; --focus: #8AB4FF; --on-danger: #0E1116; --overlay-backdrop: rgb(0 0 0 / 0.6);
   --origin-ai: #F29AC9; --origin-ai-surface: #2A1B24; --origin-evidence: #AFC0D2; --origin-evidence-surface: #18212B;
@@ -32,19 +38,26 @@
   --font-sans: "Inter Variable", system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
   --color-bg: var(--bg); --color-surface: var(--surface); --color-surface-2: var(--surface-2);
-  --color-border: var(--border); --color-text: var(--text); --color-muted: var(--text-muted);
+  --color-border: var(--border); --color-border-strong: var(--border-strong); --color-text: var(--text); --color-muted: var(--text-muted);
+  --color-nav-bg: var(--nav-bg); --color-nav-hover: var(--nav-hover);
+  --color-header-bg: var(--header-bg); --color-header-surface: var(--header-surface); --color-header-border: var(--header-border);
+  --color-header-text: var(--header-text); --color-header-muted: var(--header-muted); --color-header-focus: var(--header-focus);
   --color-primary: var(--primary); --color-on-primary: var(--on-primary); --color-on-danger: var(--on-danger);
   --color-success: var(--success); --color-warning: var(--warning); --color-danger: var(--danger);
   --color-info: var(--info); --color-sim: var(--sim);
   --color-origin-ai: var(--origin-ai); --color-origin-ai-surface: var(--origin-ai-surface);
   --color-origin-evidence: var(--origin-evidence); --color-origin-evidence-surface: var(--origin-evidence-surface);
-  --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px;
+  --radius-sm: 4px; --radius-md: 5px; --radius-lg: 6px;
   --shadow-card: var(--shadow-1); --shadow-pop: var(--shadow-2);
 }
 
 html, body, #root { height: 100%; }
 body { background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: 16px; line-height: 24px; margin: 0; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* SCN-13: on the navy command bar --focus is below 3:1, so its controls use --header-focus; a popover opened from it is an ordinary surface again (.rp-pop). */
+.rp-cmd :focus-visible { outline-color: var(--header-focus); }
+.rp-cmd .rp-pop :focus-visible { outline-color: var(--focus); }
+.rp-cmd select option { background: var(--surface); color: var(--text); }
 code, kbd, .mono { font-family: var(--font-mono); font-size: 13px; }
 .tnum { font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: no-preference) {
@@ -53,7 +66,7 @@ code, kbd, .mono { font-family: var(--font-mono); font-size: 13px; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
-.react-flow { --xy-background-color: var(--surface); --xy-node-border-radius: 8px; }
+.react-flow { --xy-background-color: var(--surface); --xy-node-border-radius: 5px; }
 
 body.modal-open { overflow: hidden; }
 .rp-dialog::backdrop { background: var(--overlay-backdrop); }
@@ -69,6 +82,26 @@ body.modal-open { overflow: hidden; }
 .rp-meter::-webkit-meter-bar { background: var(--surface-2); border: none; border-radius: 4px; }
 .rp-meter::-webkit-meter-optimum-value, .rp-meter::-webkit-meter-suboptimum-value, .rp-meter::-webkit-meter-even-less-good-value { background: var(--text-muted); border-radius: 4px; }
 .rp-meter::-moz-meter-bar { background: var(--text-muted); border-radius: 4px; }
+
+/* SCN-09 DataTable: under 768 px every row becomes a labelled stack (each cell shows its column header), so no column is dropped and nothing scrolls sideways. */
+@media (max-width: 767px) {
+  .rp-stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .rp-stack, .rp-stack tbody, .rp-stack tr, .rp-stack td { display: block; width: 100%; }
+  .rp-stack tr { padding: 8px 0; }
+  .rp-stack td { padding-top: 4px; padding-bottom: 4px; text-align: left; }
+  .rp-stack td[data-label]::before { content: attr(data-label); display: block; font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); }
+}
+
+/* SCN-21: the selected file in a table row (the row also carries data-selected and its Details button aria-pressed / "Hide details"). */
+.rp-stack tbody tr[data-selected="true"] { background: var(--surface-2); box-shadow: inset 4px 0 0 var(--primary); }
+
+/* SCN-20 clause marks: the tag word is generated content (read by screen readers, not part of the clause text), so the clause stays the server's exact words. */
+.rp-clause[data-mark="changed"]::after, .rp-clause[data-mark="added"]::after, .rp-clause[data-mark="removed"]::after {
+  display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid var(--border-strong); border-radius: 4px; font-size: 12px; line-height: 18px;
+  font-weight: 600; color: var(--text); background: var(--surface); text-decoration: none; }
+.rp-clause[data-mark="changed"]::after { content: "changed"; }
+.rp-clause[data-mark="added"]::after { content: "added"; }
+.rp-clause[data-mark="removed"]::after { content: "removed"; }
 
 /* EUI-07 typed link target: rows a selected AI statement cites (set by reference, never by text match). Colour plus outline; the statement names the count. */
 [data-highlight="true"] { outline: 2px solid var(--origin-ai); outline-offset: 2px; background: var(--origin-ai-surface); }

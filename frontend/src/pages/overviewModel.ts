@@ -49,3 +49,15 @@ export function nextStep(sum: Summary | null, work: { count: number; first?: str
   if (inbox === "failed") return unknown;
   return { kind: "change", text: "Describe what you want to change in your own words. Ripple asks if anything is unclear, then follows it through review.", to: "changes", label: "Start a change" };
 }
+
+/** One row of the work list, as far as identity goes. */
+export interface RowRef { family?: string; proposal_job_id: string }
+export interface ListRef { first: RowRef | undefined; unavailable: number; cut: boolean }
+
+/** SCN-16: the next-step line may shrink to a reminder only when its action provably opens the request in the first visible row of "Waiting for you" (same
+ *  family and request id, never compared by text), and the list itself is complete: a partial or cut list, a failed read or another action keeps the full line. */
+export function ctaRepeatsFirstRow(next: Next, target: RowRef | undefined, list: ListRef | null): boolean {
+  if (next.kind !== "work" || !target || !list || !list.first) return false;
+  if (list.unavailable > 0 || list.cut) return false;
+  return (list.first.family ?? "") === (target.family ?? "") && list.first.proposal_job_id === target.proposal_job_id;
+}
