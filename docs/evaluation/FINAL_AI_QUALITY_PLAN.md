@@ -7,8 +7,8 @@ Status (updated 2026-10-25): every Final AI role has a live rated run on its cur
 | Layer | Role (job kind) | Fixed input set | Metric (units) | Dev / held-out | Baseline to beat | Status |
 |---|---|---|---|---|---|---|
 | Extraction | `extraction` | 5 Harbor sources (sha-pinned in `tests/fixtures/final_knowledge_loop/sources.json`) + 1 unseen bundle (to be sealed) | rule precision / recall by semantic id; actor, condition, exception field accuracy; bogus-quote rate (must be 0); truncated rate | dev = fixtures; held-out = sealed bundle | legacy regex candidates (D0) | live: CORE-V5-S3 met (agent-authored); held-out 2026-10-02 on an older build did not meet target |
-| Candidate generation (semantic expand) | `retrieval.semantic` expand | Q-set 12 + validation 8 + >= 10 unseen | required rules in candidates before ranking | as QRY-02 | lexicon only | live: QRY02B-V5 pack 0.905 (agent-authored); defect F-1 open |
-| Ranking / context coverage | `retrieval.semantic` rank + lexical | same | required in top 4; forbidden absent; counter-evidence present | same | tf-cosine | live: QRY02B-V5 window 0.905, recall 1.0, counter dropped 0; lexical 0.571 / 0.429; QRY-02 history: dev 10/12, validation 4/8 (lexical) |
+| Candidate generation (semantic expand) | `retrieval.semantic` expand | Q-set 12 + validation 8 + >= 10 unseen | required rules in candidates before ranking | as QRY-02 | lexicon only | live, current code (2026-10-26, QRY02B-V6, new agent-authored set, not independent): pack 0.952, recall 0.962; lexical baseline 0.476 (history: QRY02B-V5 pack 0.905 on the earlier selection; F-1 closed 2026-10-25) |
+| Ranking / context coverage | `retrieval.semantic` rank + lexical | same | required in top 4; forbidden absent; counter-evidence present | same | tf-cosine | live, current code (2026-10-26, QRY02B-V6): window 0.952, recall 0.962, counter dropped 0; lexical 0.476 / 0.429; history: QRY02B-V5 window 0.905 (earlier selection), QRY-02 dev 10/12, validation 4/8 (lexical) |
 | Grounded answer / abstain | `knowledge.qa` | Q-set + 4 no-evidence + unseen | claim grounding 100% after validation; unsupported claims 0; false abstention <= 0.20; conflicts disclosed 100%; omission (rule in pack that should be cited and is not) | sealed | server-only = ABSTAINED | live: QRY02B-V5 met (n 24); agent set v2 18/21 (agent-authored); F-1 false abstention open |
 | Intent parsing | `change.understand` | C-set 7 + 5 unseen paraphrases | operation kind / rule / value exact; dropped sub-request 0 (validator); invented value 0; remap-to-decided-version asked, never silent | sealed | none | live: UNDERSTAND-V14 met (n 22, agent-authored) |
 | Dependency proposals | `change.impact_deps` | 3 change scenarios | precision of PROPOSED vs human label; recall of fixture `depends_on` | sealed | graph only | live: CORE-V8-S3 met (agent-authored) |
@@ -45,7 +45,7 @@ Omission is measured for every role, not only validator-caught errors: for extra
 | change.draft | config/change_draft.json | 872b920ba52010fe5956ab16bcc2c558e73ca5d200e8481f705bb30b63539db7 | Pitch live runs (see docs/evaluation/HELD_OUT_EVALUATION.md, older build) |
 | extraction | infra/worker/extraction.py | 9f96c4404ca2a53516a785d36a20427ca6924a02413d43d4e14185ff936e79b5 | CORE-V5-S3-20261024 on this pin (run after the AH-04 change; n 23 expected rules, agent-authored by a separate builder session, not independent): recall 0.957, precision 1.0, zero tolerance 0 — thresholds met; journey V9 J1 (2026-10-22, older pin 7f07f816…, self-check) |
 | retrieval.lexicon | config/business_lexicon.json | cd6214ac52a5ee53b4ab7bf989aaf975144ab10155f31e7b5e9bd23acbda9475 | QRY-02 measured limits (lexical, dev 10/12, validation 4/8) |
-| retrieval.semantic | infra/adapters/semantic_vertex.py | 3a94b81f06a9310db65637c6dc50c33fb0f3042c3d9da7feb4d400eeed46eebc | AIQ-FIN-QA-20261025 on this pin (selection policy v2 in semantic_retrieval.py; agent-authored by a separate builder session, oracle-reviewed by a second agent session, not independent): expand, rank and judge applied on 12 / 12 questions (36 / 36 layers, no output-limit cut, no token or call cap; 2 malformed search terms dropped, ids kept); rank / judge 13-20 candidates, counter-evidence and expansion finds never omitted; the judge's verdict was not applied as a veto on any pack because each pack also held items or source passages it did not receive (stated per answer). History: AIQ-ACC-QA-20261025 rank cut at the output limit 10 / 12, judge never ran; QRY02B-V5-20261024 pack 0.905 / window 0.905 / recall 1.0 |
+| retrieval.semantic | infra/adapters/semantic_vertex.py | 3a94b81f06a9310db65637c6dc50c33fb0f3042c3d9da7feb4d400eeed46eebc | PC05-QRY02B-V6-20261026 on this pin (2026-10-26, NEW set `qry02b_v6` by a separate builder session, agent-authored, not independent; 24 items, 7 paraphrase-only, 5 two-hop): retrieval pack pass 0.952, window 0.952, required recall 0.962, counter-evidence dropped 0; QA rows met; lexical baseline pack 0.476 — and before that AIQ-FIN-QA-20261025 on this pin (selection policy v2 in semantic_retrieval.py; agent-authored by a separate builder session, oracle-reviewed by a second agent session, not independent): expand, rank and judge applied on 12 / 12 questions (36 / 36 layers, no output-limit cut, no token or call cap; 2 malformed search terms dropped, ids kept); rank / judge 13-20 candidates, counter-evidence and expansion finds never omitted; the judge's verdict was not applied as a veto on any pack because each pack also held items or source passages it did not receive (stated per answer). History: AIQ-ACC-QA-20261025 rank cut at the output limit 10 / 12, judge never ran; QRY02B-V5-20261024 pack 0.905 / window 0.905 / recall 1.0 |
 
 ## 3. Regression when a prompt, model or schema changes
 
@@ -76,3 +76,33 @@ changed the code, never used for tuning); a mechanical scorer ran them live on G
 required citation; 2 abstentions failed a wording check; run-to-run variance of 3 items), change requests 6/8 (one wrong role slug, one three-part request not understood). Section 4
 requires a set written by the owner or a second person: these sets are pending that review, so no row of section 1 moves and no threshold is declared met or failed. Details and costs
 are in the development evidence (REL-03), not shipped.
+
+## 7. Hackathon solo profile (owner decision 2026-10-27): agent acceptance evaluation in place of an independent reviewer
+
+The owner works on the hackathon alone and authorised agent evaluation in place of the human / independent rows of section 4, with every threshold unchanged.
+**This is agent evaluation, not independent validation and not a human rating.**
+
+**How the acceptance sets were run:**
+- Two acceptance sets were each built by a separate session: one that read only the protocol, contracts and scorer, never the product's prompts, source or earlier sets.
+- Each set uses a new fictional organisation.
+- Hashes were committed before the run.
+- The operator did not open the answers before the outputs were frozen.
+- Scoring was mechanical, using the frozen thresholds of the evaluation runner (kept in the development records).
+- Pins were the production limits (Flash-Lite; per-job cap 0.16; at most 4 calls; no retry).
+
+| Role | Result on the acceptance set | Note |
+|---|---|---|
+| knowledge.qa | n 17: status 1.0, required citations 0.94, wrong rule as applying 0 | the "does not apply" reading of the established scorer; the original check counted two verified not-applying citations |
+| change.understand | n 17 (second set, after three fixes found by the first): exact 0.89, status 0.94, dropped 0, invented 0 | the first set (n 12) did not meet; the defects were fixed: a reversal proposed, a person described but not named, a source-label year asked about |
+| gap.answer_interpret | n 12: status 0.92, exact 1.0, uncovered parts recall 1.0, invented 0 | — |
+| change.impact_deps | n 13: required links 0.88, forbidden 0 | second set |
+| change.draft_guidance | n 10: hold false positive 0; usefulness rated by a separate evaluator session 4.36 / 5 (n 14) | the v5 guidance sheet rated the same way: 4.04 / 5 (n 27) |
+| knowledge.gap_proposals | n 6: planted recall 0.67, precision 0.80 | — |
+| extraction | n 23: rule recall 1.0, precision 1.0, no invented quote / unit / value | after a scorer correction (the actor written as a role id); the original scorer gave 0.48 |
+| e2e change chain | n 6: false complete 0, silent drop 0, knowledge written by the model 0 | — |
+
+**Not re-run:** the extension roles. They keep their earlier agent-authored results.
+**Limits:**
+- Small sets.
+- The same model family builds, runs and rates.
+- A decided conflict cannot be planted in these sets.

@@ -2,38 +2,34 @@
   "schema": "ripple-public-preview-provenance/1",
   "source_repository": "private development repository (not named here)",
   "source_branch": "final-dev",
-  "source_commit": "87115f7be58a79d2afee656df8bf0a6ea76d4133",
+  "source_commit": "a762e017defcaff9bc016f3fe8ed3c966f83d9a3",
   "export_manifest": "SUBMISSION_MANIFEST.json",
-  "export_manifest_sha256": "e77e00c4f9f6fc6af3c4d5e6d5b68df6bedbaf046d93a3a4bd61347835d72cb1",
-  "export_manifest_sha256_git": "aa0efc2872e65b84e85640d963ecee912db6a454629ade2e6093fd1967fd9428",
+  "export_manifest_sha256": "0f91ad9acffa889b7985d74b165dcca00273095a316a451dcaf7722b94d10974",
+  "export_manifest_sha256_git": "1ebc638629216c6c0f0ac688f25e12123c4463983e71f3e0e03fd3c0dd83247c",
   "export_manifest_hash_note": "export_manifest_sha256 is the manifest file as written on disk by the export (CRLF). Under the shipped .gitattributes (text=auto eol=lf) Git stores and checks it out with LF, so a downloaded or checked-out manifest hashes to export_manifest_sha256_git. Same content; the manifest is unchanged. The manifest does not list itself.",
-  "export_overall_sha256": "0476ca7dbee5a1d26db103530b8738381c77fc85f8db0fb602c21a8544e8c339",
-  "export_file_count": 1543,
+  "export_overall_sha256": "49a0032f9c7f3f7d34741e6224aa7203ce04edaa9ce957043ebaefdc89a894c2",
+  "export_file_count": 1555,
   "export_tool": {
     "tool_sha256": "e4a43fea5048b4386b80742f763ef0be87ca96c187b46d0f2e822ba3a3121923",
     "policy_sha256": "21ae01f53daef2eb60c35d1acd6b0008729aa40e321c73ba2f23e53a01da3f48",
     "note": "equal to the export tool and policy files at the source commit"
   },
   "eol_policy": "Shipped .gitattributes: '* text=auto eol=lf'; reference_system/** and the Harbor sample input '-text' (exact bytes); Harbor sample data 'text eol=crlf'. Manifest hashes are raw bytes.",
-  "approval": "The owner approved source 87115f7b as the preview source and authorised this publication (2026-10-26). Not a production go-ahead, not a release or submission, and not confirmation that the interface plan met all of its human acceptance criteria. The full SHA equals the manifest's source_commit.",
+  "approval": "The owner approved source a762e017 as the preview source and authorised this publication (2026-10-27). Not a production go-ahead, not a release or submission. The full SHA equals the manifest's source_commit.",
   "previous_public": {
-    "commit": "bd2884225f7f71d401a79035b56283450b33eb4f",
-    "source_commit": "6447f03ce77d7f69e01e2c5897d37f464d5afb59",
-    "export_overall_sha256": "9a4c6ffae99434b96e226fc4f9351c17f589b32dea2d3ce84ea283d6bd63cb0a",
-    "readme_sha256_published": "7952902655c4e7d469909b6773d41a2379f978b00f1c106c3e38e872f95c7bcc",
-    "note": "The provenance record of that commit describes that tree and remains in its history. Earlier public commits: 6e6de87, 5b7007e, 03b2ba6, 34b05ef, c72d700, 8dcbba2, 20f5de6 (tag preview-3), 0aff169 (preview-2), 840ca8b (preview-1)."
+    "commit": "370ad0dcee5afe0efb5b7194af6f0023a14f2f4a",
+    "source_commit": "87115f7be58a79d2afee656df8bf0a6ea76d4133",
+    "export_overall_sha256": "0476ca7dbee5a1d26db103530b8738381c77fc85f8db0fb602c21a8544e8c339",
+    "readme_sha256_published": "c9a775e0c1d2674e885eace7290b1771c61d751880398df2a7b615c30852c718",
+    "note": "The provenance record of that commit describes that tree and remains in its history. Earlier public commits: bd28842, 6e6de87, 5b7007e, 03b2ba6, 34b05ef, c72d700, 8dcbba2, 20f5de6 (tag preview-3), 0aff169 (preview-2), 840ca8b (preview-1)."
   },
   "update_from_previous_public": {
     "method": "snapshot synchronisation from the manifest-listed files of the clean export of the source commit (nothing executed inside the export); no history from the development repository was merged",
-    "product_files_added": 26,
-    "product_files_changed": 47,
-    "product_files_removed": 3,
-    "product_files_note": "76 product files, equal file by file to the development repository's diff between the previous and this source commit outside the development folder (20 product commits); the built bundle is replaced (index-Dnp3qfV0.js, vendor-jrBj6edc.js, style-VwxZSbpB.css; index sha256 26154e7725f454886eaca7f2943e947a7d0e9fd402ed6e892fd1d2d280cbe1c1, built by the development process, not rebuilt here); README.md is overlaid (public_changes)",
-    "files_removed": [
-      "app/ui_next/assets/index-Dm9Hue2s.js",
-      "app/ui_next/assets/style-C6Ino6rs.css",
-      "app/ui_next/assets/vendor-DE6nbGDD.js"
-    ],
+    "product_files_added": 12,
+    "product_files_changed": 18,
+    "product_files_removed": 0,
+    "product_files_note": "30 product files, equal file by file to the development repository's diff between the previous and this source commit outside the development folder, apart from README.md (31 files in that diff, 19 product commits); the built bundle is unchanged (index-Dnp3qfV0.js); README.md stays an overlay (public_changes)",
+    "files_removed": [],
     "replaced_from_export": [
       "SUBMISSION_MANIFEST.json"
     ]
@@ -41,10 +37,11 @@
   "public_changes": [
     {
       "path": "README.md",
-      "reason": "preview-specific statements: snapshot; a new section on clearer work screens (request task header and My work, inbox counts and coverage, navy shell and responsive side navigation, shared tables, inspector, graph list and empty states, structured Before / After, Sources Cards or Table with one selected-file pane) and two read-rule fixes; evidence as self-check browser runs on the committed bundles, the revoked-access journey through the real routes and identity store without a realtime claim, the candidate equal to an earlier development version except a new test file; owner acceptance of the phase 3 checklist as presented, phase 2 kept in its scope, recognition test and action journey pending, plan not done; known failing and intermittent browser tests not counted as passes; deferred timeline read model and server pagination; AI core, configuration and worker unchanged, no new AI quality result, the previous snapshot's AI evidence kept with its versions; no production go-ahead, deployment or readiness",
-      "sha256_in_export": "fba80299f2fe90184ce4abf9335bb5e47702bb47b2f079fd67ad4011471a6a93",
-      "sha256_published": "c9a775e0c1d2674e885eace7290b1771c61d751880398df2a7b615c30852c718",
-      "sha256_published_scope": "README.md as committed in the public commit that contains this file (LF bytes, identical to the Git blob)"
+      "reason": "preview-specific statements: snapshot; the source README's corrected current-state statements carried into the overlay (no human rating or usability study, owner acceptance of outputs and screens as presented, agent acceptance evaluation not independent, cloud staging rehearsed in separate removed projects, one sandbox pull request accepted and not merged, published extension scope, synthetic ROI); a new section on the hackathon solo profile: synthetic data and agent evaluation replacing outside reviewers, human raters and real data with thresholds unchanged; extraction and Q&A original and corrected scores with the corrections made after viewing the results; understanding and dependency results with their misses, U-16 covered only by a regression test after the run; guidance agent rubric with its weaknesses; extension evidence inherited, not re-run; agent / automated work-screen check, not human usability; ROI as a simulation on synthetic data; MON-CI on a public synthetic sandbox with an operator-posted status, no automated CI pipeline; cloud rehearsal of the same code passed, production not deployed, no smoke and no go-ahead; the previous snapshot's sections kept with their versions; the earlier failing browser tests described with their causes found in the tests; no human-rated, independently validated, real-data ROI or enterprise production readiness claim",
+      "sha256_in_export": "8a8ea72f5ee7a7f374d2c05b63ab625a3ec7d3cae8e78c39bc9e63667b3989ea",
+      "sha256_published": "907282cb279630ae42e8d136bd5fc4fcacf9826f213ee9968653a7566bea748c",
+      "sha256_published_scope": "README.md as committed in the public commit that contains this file (LF bytes, identical to the Git blob)",
+      "export_readme_note": "the README in this export differs from the earlier export README (fba80299...6a93) in nine lines (the five corrected current-state sentences, two extension rows and two limit statements); their content is carried into the overlay, worded for this preview"
     }
   ],
   "added_files": [
@@ -54,24 +51,24 @@
   "manifest_scope": "SUBMISSION_MANIFEST.json describes the export of the source commit and is kept unchanged. README.md was rewritten after export (public_changes) and this file was added; every other listed file is reproduced byte for byte by a checkout (checks_for_this_tree).",
   "evidence_policy": "This repository is for reading source, README and progress. Product verification is done in the development repository; results quoted in the README come from its record for the version named there. For this update only packaging and content checks were made; no tests, build, database, server or browser were run.",
   "checks_for_this_tree": {
-    "date": "2026-10-26",
-    "export_verified_at": "2026-10-26T21:39:59+09:00",
+    "date": "2026-10-27",
+    "export_verified_at": "2026-10-27T10:01:20+09:00",
     "runs": [
       {
         "check": "export tool of the source commit: verify on the export directory (no bytecode written)",
-        "result": "exit 0; files=1544 problems=0 broken_relative_links=0; publication scan of the final tree including the manifest exit 0"
+        "result": "exit 0; files=1556 (1555 payload + manifest) problems=0 broken_relative_links=0; publication scan of the final tree including the manifest exit 0"
       },
       {
         "check": "export tool of the source commit: eol-check on the export directory",
-        "result": "exit 0; 1543 files, 2 checkouts (autocrlf true and false), problems 0"
+        "result": "exit 0; 1555 files, 2 checkouts (autocrlf true and false), problems 0"
       },
       {
-        "check": "cache residue in the export directory before and after these checks (__pycache__, .pyc, .pytest_cache, node_modules)",
+        "check": "cache and runtime residue in the export directory before and after these checks (__pycache__, .pyc, .pytest_cache, node_modules, .git, .env, development folder)",
         "result": "0 before, 0 after; the export directory was not modified"
       },
       {
         "check": "delta cross-check: files changed between the previous and this source commit outside the development folder, against the staged diff",
-        "result": "76 files and 20 product commits; identical file lists"
+        "result": "30 product files and 19 product commits; identical file lists (README.md is the overlay)"
       },
       {
         "check": "content of the copy against the manifest: raw bytes of every listed file, checked out with core.autocrlf=true and with core.autocrlf=false",
@@ -82,12 +79,12 @@
         "result": "none found"
       },
       {
-        "check": "bundle: app/ui_next/index.html points to index-Dnp3qfV0.js, rolldown-runtime-CbXtAM7H.js, vendor-jrBj6edc.js, style-VwxZSbpB.css; index sha256 equals the one recorded by the development process; every hashed chunk and font they reference (17) is present",
+        "check": "bundle: unchanged by this update; app/ui_next/index.html points to index-Dnp3qfV0.js, rolldown-runtime-CbXtAM7H.js, vendor-jrBj6edc.js, style-VwxZSbpB.css; index sha256 26154e7725f454886eaca7f2943e947a7d0e9fd402ed6e892fd1d2d280cbe1c1; every hashed chunk and font they reference (17) is present",
         "result": "ok"
       },
       {
-        "check": "README relative links and in-page anchors; no internal references, machine paths or ledger detail",
-        "result": "195 links, 0 missing targets, 0 unknown anchors"
+        "check": "README relative links, in-page anchors and table cell counts; no internal references, machine paths or ledger detail",
+        "result": "209 links, 0 missing targets, 0 unknown anchors; every table row has its table's cell count"
       },
       {
         "check": "publication scan of the committed tree: python -B -m tools.pitch_pack.scan <checkout> --allowlist tools/pitch_pack/scan_allowlist.json (the tree's scanner and allow-list, unchanged)",
@@ -95,10 +92,10 @@
       },
       {
         "check": "diff review against the previous public commit before commit and push",
-        "result": "76 product files, README.md, SUBMISSION_MANIFEST.json and this file"
+        "result": "30 product files, README.md, SUBMISSION_MANIFEST.json and this file"
       }
     ],
-    "raw_byte_result": "1542 of 1543 listed files equal the manifest sha256 byte for byte under both settings; README.md differs (public_changes); extra files: PUBLIC_PREVIEW_PROVENANCE.json and SUBMISSION_MANIFEST.json",
+    "raw_byte_result": "1554 of 1555 listed files equal the manifest sha256 byte for byte under both settings; README.md differs (public_changes); extra files: PUBLIC_PREVIEW_PROVENANCE.json and SUBMISSION_MANIFEST.json",
     "scan_result": "exit 0 on the tree including SUBMISSION_MANIFEST.json, README.md and this file; allow-list unchanged",
     "not_run": "pytest, frontend build and tests, database, rehearsal server and browser (not part of the preview process; the built bundle was not rebuilt)",
     "note": "Self-check on one machine, not independent validation."
@@ -106,7 +103,8 @@
   "corrections": [
     {
       "path": "README.md",
-      "correction": "in section 4b, three owner-acceptance rows with three columns (journey V9 AI quality, change guidance v3 and v5, journey close-out) stood in the two-column interface evidence table, so their 'does not cover' column was not displayed; they are moved to the owner-acceptance table. Present since earlier updates; wording of the rows unchanged."
+      "correction": "in section 5, the request assistant's 'Release cohort V12' row had four cells in a three-column table, so its 'self-authored set, not independent' label was not displayed; the label is now in the result cell. Present since the aadecba publication."
     }
-  ]
+  ],
+  "export_file_count_note": "1555 listed payload files; with SUBMISSION_MANIFEST.json the export holds 1556 files"
 }

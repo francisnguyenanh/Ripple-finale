@@ -552,3 +552,46 @@ def test_after_understand_v13_indefinite_actors_unit_qualifiers_and_attempted_va
     req16 = "Discount approval by the sales director should start at 25 percent."                                                                  # U13-16
     assert B._ambiguous_target("rule-general", {"rule-general": general, "rule-agency": agency}, B._norm(req16), None, derived) == ["rule-agency"]  # a derived edge settles nothing
     assert B._ambiguous_target("rule-general", {"rule-general": general, "rule-agency": agency}, B._norm(req16), None, [dict(derived[0], status="CONFIRMED")]) == []
+
+
+def test_hk_aev_a_reversal_a_person_described_not_named_and_a_source_label_year():
+    """HK-AEV (2026-10-27, agent acceptance run, items U-10 / U-09 / U-08), the model answers as observed: the server asks instead of proposing a rule reversal or
+    a role for "someone from finance", and does not ask about a heading that names the edited rule by the year in its own title."""
+    cold = _rule("rule-cold", "Cold-chain deliveries that arrive warmer than 8 C are rejected", {"field": "delivery.arrival_temp_c", "op": "gt", "value": 8, "unit": "C"})
+    req10 = "Keep rejecting cold-chain deliveries that arrive warmer than 8 degrees C."
+    flip = {"kind": "add_or_change_condition", "rule_id": "rule-cold", "candidate_rule_ids": [], "desired": None, "parts": ["P1"], "user_quote": req10.rstrip("."),
+            "condition": {"not": {"field": "delivery.arrival_temp_c", "op": "gt", "value": 8, "unit": "C"}}}
+    out10 = _c8(cold, req10, [flip])
+    assert out10["status"] == "CLARIFY" and not out10["operations"] and out10["rejected"][0]["reason"] == "desired_not_supported:reverses_the_rule"
+    assert any("exactly the opposite cases" in q for q in out10["questions"])
+    tighter = dict(flip, condition={"field": "delivery.arrival_temp_c", "op": "gt", "value": 6, "unit": "C"}, user_quote="Reject cold-chain deliveries warmer than 6 C")
+    assert _c8(cold, "Reject cold-chain deliveries warmer than 6 C.", [tighter])["status"] == "READY"           # an ordinary condition change still reads
+    catering = dict(_rule("rule-catering", "Catering orders are approved by the catering manager", {"field": "order.category", "op": "eq", "value": "CATERING"}),
+                    actor_ref="role-catering-manager")
+    req9 = "Let someone from finance approve catering orders instead of the catering manager."
+    vague = {"kind": "set_actor", "rule_id": "rule-catering", "candidate_rule_ids": [], "desired": "role-finance", "parts": ["P1"], "user_quote": req9.rstrip(".")}
+    out9 = _c8(catering, req9, [vague])
+    assert out9["status"] == "CLARIFY" and out9["rejected"][0]["reason"] == "desired_not_supported:actor_not_named"
+    named = dict(vague, user_quote="Let the finance controller approve catering orders instead of the catering manager", desired="role-finance-controller")
+    assert _c8(catering, "Let the finance controller approve catering orders instead of the catering manager.", [named])["status"] == "READY"
+    linen = _rule("rule-linen-circular", "Linen service contracts of 1,200,000 JPY or more a year need the hotel services manager (2025 services circular)",
+                  {"field": "contract.annual_value_jpy", "op": "gte", "value": 1200000, "unit": "JPY"})
+    req8 = "In the 2025 services circular, raise the linen contract threshold from 1,200,000 to 1,500,000 JPY."
+    assert list(B.request_parts(req8)) == ["P1", "P2"]
+    raise_op = {"kind": "set_value", "rule_id": "rule-linen-circular", "candidate_rule_ids": [], "desired": {"value": 1500000, "unit": "JPY"}, "parts": ["P2"],
+                "user_quote": "raise the linen contract threshold from 1,200,000 to 1,500,000 JPY"}
+    out8 = _c8(linen, req8, [raise_op], parts=[{"part": "P1", "kind": "heading", "rule_id": "rule-linen-circular"}])
+    assert out8["status"] == "READY" and not out8["part_issues"], (out8["status"], out8["part_issues"], out8["questions"])
+    other_year = _c8(linen, req8.replace("2025", "2019"), [raise_op], parts=[{"part": "P1", "kind": "heading", "rule_id": "rule-linen-circular"}])
+    assert other_year["status"] == "CLARIFY" and other_year["part_issues"][0]["reason"] == "number_not_grounded"   # a year the edited rule does not carry is asked
+
+
+def test_hk_aev2_a_reversal_is_asked_when_the_model_writes_the_boolean_as_text():
+    """HK-AEV2 U-16 (2026-10-27): "required only when the excavation is NOT on a public road" was written as NOT(on_public_road eq "true") for a rule stored with
+    the boolean true; the reversal check compared types and let it through."""
+    permit = _rule("rule-permit", "Road excavation needs a permit on a public road", {"field": "work_order.on_public_road", "op": "eq", "value": True})
+    req = "The road excavation permit should be required only when the excavation is not on a public road."
+    op = {"kind": "add_or_change_condition", "rule_id": "rule-permit", "candidate_rule_ids": [], "desired": None, "parts": ["P1"], "user_quote": req.rstrip("."),
+          "condition": {"not": {"field": "work_order.on_public_road", "op": "eq", "value": "true"}}}
+    out = _c8(permit, req, [op])
+    assert out["status"] == "CLARIFY" and out["rejected"][0]["reason"] == "desired_not_supported:reverses_the_rule"

@@ -50,12 +50,20 @@ def _pump(page, env, until=None):
                 return
             time.sleep(1)
         raise AssertionError("approved job did not run through the pump")
-    for _ in range(25):
+    # `busy` means another pump holds the workspace lock right now (the page with a live job asks the pump itself): wait for it to finish
+    # instead of counting it as a round (PC-01: 25 immediate retries within ~1.5 s gave up while that pump was still running one job).
+    # Bounded by the server's own pump bound (`pump_seconds`, 60) plus a margin; rounds that processed jobs keep their limit of 25.
+    rounds, deadline = 0, time.monotonic() + 90
+    while rounds < 25 and time.monotonic() < deadline:
         out = page.evaluate(PUMP_JS, env.ws)
         assert out["status"] in (200, 202), out
-        if out["body"].get("processed", 0) == 0 and not out["body"].get("busy"):
+        if out["body"].get("busy"):
+            time.sleep(1)
+            continue
+        if out["body"].get("processed", 0) == 0:
             return
-    raise AssertionError("pump never settled")
+        rounds += 1
+    raise AssertionError(f"pump never settled (rounds with work: {rounds}; last answer: {out})")
 
 
 def _open(page, url):

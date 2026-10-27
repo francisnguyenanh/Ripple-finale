@@ -64,3 +64,21 @@ def test_a_private_assistant_job_is_shown_only_to_its_asker(rq_ui):
     assert all(_naming(_events(approver, q.env), j) for j in jobs)                                              # the asker sees their own question's job
     assert all(not _naming(_events(q.req, q.env), j) for j in jobs)                                             # the requester may read the change, not this thread
     assert all(not _naming(_events(q.admin, q.env), j) for j in jobs)                                           # nor an administrator
+
+
+def test_membership_events_are_listed_once_with_their_id_and_time(qa_env):
+    """PC-06 (2026-10-26): the route merged the identity store's membership list, which reads the same audit rows, so every grant and revocation was listed
+    twice, the copy without id or recorded time (History hides grants but showed a revocation twice)."""
+    from infra.adapters.v2_identity import PostgresIdentityStore
+    q = qa_env
+    viewer = login(q, f"viewer-mem-{q.env.nonce}", ("viewer",))
+    gone = f"gone-mem-{q.env.nonce}"
+    login(q, gone, ("requester",))
+    PostgresIdentityStore(q.env.dsn).revoke_membership(q.env.tenant, q.env.tenant.replace("t-", "p-"), q.env.ws, gone)
+    for client in (q.admin, viewer):
+        events = _events(client, q.env)
+        assert all(e.get("id") is not None and isinstance(e.get("created_at"), str) for e in events), [e for e in events if e.get("id") is None][:2]
+        assert len({e["id"] for e in events}) == len(events)                                                     # no event listed twice
+        mine = [e for e in events if e["event_type"].startswith("membership.") and (e.get("payload") or {}).get("account_id") == gone]
+        assert sorted(e["event_type"] for e in mine) == ["membership.grant", "membership.revoke"]               # each exactly once
+        assert not any("credential" in json.dumps(e) for e in events)

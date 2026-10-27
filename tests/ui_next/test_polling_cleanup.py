@@ -61,18 +61,21 @@ def test_an_idle_page_settles_to_zero_requests_on_every_page(env, ch, pw_browser
         page, ctx = _page(pw_browser, server, (env.admin, f"cred-a-{env.nonce}"))
         select_workspace(page, env.ws)
         for label, ready in PAGES:
+            opened = time.monotonic()
             goto_view(page, label)
             expect(tid(page, ready).first).to_be_visible(timeout=WAIT)
             page.wait_for_timeout(2500)                                  # let the first load finish
             mark = time.monotonic()
-            first = len([x for x in page._log if x[0] < mark])
+            # the requests of THIS page's opening (PC-03 correction 2026-10-26: this used to count every request since sign-in, so the eighth page reached the
+            # limit with 6 requests of its own; the threshold is unchanged)
+            first = len([x for x in page._log if opened <= x[0] < mark])
             page.wait_for_timeout(7000)                                  # longer than every polling interval of the app (2 s, 6 s)
             later = _since(page, mark)
             reads = [x for x in later if x[1] == "GET"]
             assert not [x for x in later if x[1] != "GET"], (label, "an idle page wrote something", later[:3])
             # nothing is running or waiting here, so nothing may keep asking; allow one stray refresh at most
             assert len(reads) <= 2, (label, "idle page keeps requesting", [(m, _path(u)) for _, m, u in reads][:10])
-            assert first < 60, (label, "too many requests to open one page", first)
+            assert first < 60, (label, "too many requests to open one page", first, [(m, _path(u)) for t, m, u in page._log if opened <= t < mark][:20])
         assert not page._errors, page._errors
         ctx.close()
     finally:

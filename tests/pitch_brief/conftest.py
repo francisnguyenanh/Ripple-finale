@@ -197,7 +197,7 @@ class LiveWorker:
         while not self._stop.is_set():
             try:
                 if claim_and_admit_one(self.env.store, self.env.tenant, self.env.ws, "live-worker") is None:
-                    time.sleep(0.3)
+                    self._stop.wait(0.3)
             except Exception:
                 time.sleep(0.5)
 
@@ -207,5 +207,22 @@ class LiveWorker:
 
     @property
     def stop(self):
-        return self._stop
+        """`worker.stop.set()` returns only once the loop has ended: a job still in flight would otherwise keep querying while the next test's
+        `store.migrate()` takes its table locks (seen as `deadlock detected` and a fixture error in the next test)."""
+        return _Stop(self._stop, self._t)
+
+
+class _Stop:
+    def __init__(self, event, thread):
+        self._event, self._thread = event, thread
+
+    def is_set(self):
+        return self._event.is_set()
+
+    def set(self, timeout=60):
+        import threading
+        self._event.set()
+        if self._thread.is_alive() and self._thread is not threading.current_thread():
+            self._thread.join(timeout)
+            assert not self._thread.is_alive(), f"live worker still running {timeout} s after stop"
 

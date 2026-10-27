@@ -27,6 +27,17 @@ _AMOUNT_A = re.compile(r"(?<![\w.])(\d[\d,]*(?:\.\d+)?)\s*(million|thousand|m\b|
 _AMOUNT_B = re.compile(r"(?:jpy|\u00a5|\uffe5)\s*(\d[\d,]*(?:\.\d+)?)\s*(million|thousand|m\b|k\b)?", re.I)
 _FOREIGN_AMOUNT = re.compile(r"(?:\d[\d,]*(?:\.\d+)?\s*(?:million|thousand|m\b|k\b)?\s*(?:usd|us dollars?|dollars?|eur|euros?|gbp|pounds?|cny|rmb|yuan)\b)|(?:[$\u20ac\u00a3]\s*\d)|(?:\b(?:usd|eur|gbp)\s*\d)", re.I)
 FOREIGN_QUESTION = "What is the amount in JPY? The rules are written in JPY and an amount in another currency is never converted."
+AMOUNT_UNCHECKED_NOTE = "The amount in the question was not checked against the rules by the server: it reads case amounts in JPY only and never converts a currency."
+
+
+def pack_amount_units(pack: Mapping) -> set:
+    """The currency units the pack's rules compare amounts in (upper case; rules without a unit on an amount comparison add nothing)."""
+    out = set()
+    for it in pack.get("items") or []:
+        for _field, unit in _amount_leaves(it.get("condition")):
+            if isinstance(unit, str) and unit.strip():
+                out.add(unit.strip().upper())
+    return out
 _MULT = {"million": 1_000_000, "m": 1_000_000, "thousand": 1_000, "k": 1_000, None: 1, "": 1}
 FACT_WORDS = {
     # sealed-set v2 finding (2026-10-23): hyphenated spellings ("operating-expense", "capital-equipment"), "non-emergency" / "ordinary", and a stated NORMAL risk
@@ -645,14 +656,26 @@ def finalize(model: Mapping, kept: list, dropped: list, pack: Mapping, frozen: M
                         applicability_questions.append(q)
     if misapplied:
         reasons.append("claims_not_applicable_dropped")
+    amount_unchecked = False
     if qf.get("foreign_amount") and not qf.get("amounts") and status in ("ANSWERED", "PARTIAL"):
-        # contract (units): an amount in another currency is never converted to JPY; without a JPY amount no case can be decided (live finding 2026-10-17)
-        status = "NEEDS_CLARIFICATION"
-        reasons.append("amount_not_in_jpy")
-        applicability_questions.insert(0, FOREIGN_QUESTION)
+        units = pack_amount_units(pack)
+        if units and not units & set(_JPY_UNITS):
+            # the pack's rules compare amounts in that other currency themselves, so the question's amount is not foreign to them; the case reader reads JPY amounts
+            # only, so the server did not check it against the rules: at most PARTIAL, said in the answer, nothing converted (PC-05, 2026-10-26: QRY02B-V6 q04 was
+            # asked for "the amount in JPY" although the rules were written in dollars)
+            status = "PARTIAL" if status == "ANSWERED" else status
+            reasons.append("amount_currency_not_checked")
+            amount_unchecked = True
+        else:
+            # contract (units): an amount in another currency is never converted to JPY; without a JPY amount no case can be decided (live finding 2026-10-17)
+            status = "NEEDS_CLARIFICATION"
+            reasons.append("amount_not_in_jpy")
+            applicability_questions.insert(0, FOREIGN_QUESTION)
     if applicability_questions:
         questions = (applicability_questions + [q for q in questions if q not in applicability_questions])[: lim["max_questions"]]
     uncertainty = _safe_text(model["uncertainty"], lim["max_uncertainty_chars"]) or ""
+    if amount_unchecked:
+        uncertainty = (uncertainty + " " if uncertainty else "") + AMOUNT_UNCHECKED_NOTE
     if assumed:
         words = [FACT_ASSUMPTION_WORDS.get(a.split("=")[0], {}).get(a.split("=")[1], a) for a in assumed]
         uncertainty = (uncertainty + " " if uncertainty else "") + "Assumed: " + ", ".join(words) + "."

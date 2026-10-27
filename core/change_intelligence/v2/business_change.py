@@ -391,7 +391,13 @@ def resolve(obj: Mapping, request: str, rules: Mapping[str, Mapping], relations:
             before, desired = _check_desired(kind, desired, rule, req_numbers, req_norm)
         except ValueError as exc:
             rejected.append({"reason": f"desired_not_supported:{exc}", "kind": kind, "rule_id": rid, "desired_shape": _shape(desired), **_given(given)})
-            questions.append(f"I could not safely read what should change for “{rule['title']}” (“{quote}”). Please say it again with the exact new value.")
+            if str(exc) == "reverses_the_rule":
+                questions.append(f"“{quote}” was read as making “{rule['title']}” apply in exactly the opposite cases. Is that what you want, or is the rule already "
+                                 "as it should be?")
+            elif str(exc) == "actor_not_named":
+                questions.append(f"“{quote}” does not name who should do it. Which role should it be?")
+            else:
+                questions.append(f"I could not safely read what should change for “{rule['title']}” (“{quote}”). Please say it again with the exact new value.")
             continue
         if before is None:
             questions.append(f"“{rule['title']}” has more than one value or none: which one do you want to change?")
@@ -781,6 +787,9 @@ def _part_grounding(text: str, kind: str, rule_id, rules: Mapping, ops: list, re
     scope = {rule_id: rules[rule_id]} if kind == "current_state" else rules
     allowed_numbers = set().union(*(_rule_numbers(r) for r in scope.values())) | set().union(*(_op_numbers(o) for o in ops)) if scope or ops else set()
     allowed_numbers |= attempted
+    if kind != "current_state":
+        # HK-AEV U-08 (2026-10-27): "In the 2025 services circular, raise ..." names the edited rule by its source label; the year is in that rule's own title
+        allowed_numbers |= set().union(*(numbers_in(_DATE.sub(" ", str(rules[o["rule_id"]].get("title") or ""))) for o in ops if o["rule_id"] in rules)) if ops else set()
     written = numbers_in(_DATE.sub(" ", text)) | ({0.0} if re.search(r"\bzero\b", text, re.I) else set())
     if written - allowed_numbers:
         return "number_not_grounded"
@@ -839,6 +848,26 @@ def _vague_actor(role: str) -> bool:
     words = [w for w in role.replace("role-", "").split("-") if w not in ("a", "an", "the", "else")]
     # an indefinite pronoun anywhere ("someone senior", "somebody from finance") names no one; a role is a title, not a description of a person
     return not words or any(w in _VAGUE_ACTOR for w in words)
+
+
+def _cond_key(cond):
+    """A condition with every leaf value read as its written text (True / "true", 1 / "1" alike), for comparing two conditions' meaning."""
+    if isinstance(cond, Mapping):
+        return {k: (_cond_key(v) if k != "value" else str(v).strip().lower().replace(",", "")) for k, v in cond.items()}
+    if isinstance(cond, list):
+        return [_cond_key(c) for c in cond]
+    return cond
+
+
+def _vague_before(role: str, req_norm: str) -> bool:
+    """HK-AEV U-09 (2026-10-27): "let someone from finance approve" was written as role-finance. An indefinite word followed by a preposition right before the
+    role's words in the request ("someone from finance", "anybody in procurement") describes a person, not a role: asked, never accepted."""
+    phrase = _words(role.replace("role-", "")).strip()
+    for m in re.finditer(r"(?:^| )" + re.escape(phrase) + r"(?= |$)", _words(req_norm).strip()):
+        before = _words(req_norm).strip()[: m.start()].split()[-3:]
+        if len(before) >= 2 and before[-1] in ("from", "in", "at", "of", "within") and any(w in _VAGUE_ACTOR for w in before[:-1]):
+            return True
+    return False
 
 
 def _unit_key(unit, rule_unit=None) -> Optional[str]:
@@ -988,13 +1017,20 @@ def _check_desired(kind, desired, rule, req_numbers, req_norm):
         # (live finding SUR08-V1 item 03, 2026-10-23: a readable actor was held as unreadable)
         if role is None or _words(role.replace("role-", "")) not in _words(req_norm):
             raise ValueError("actor_not_in_request")
-        if _vague_actor(role):
+        if _vague_actor(role) or _vague_before(role, req_norm):
             raise ValueError("actor_not_named")
         return rule["actor_ref"], role
     if kind == "add_or_change_condition":
         bk.validate_condition(desired)
         if numbers_in(desired) - (req_numbers | numbers_in(rule["condition"])):
             raise ValueError("number_not_in_request")
+        # HK-AEV U-10 (2026-10-27): "keep rejecting deliveries warmer than 8 C" was written as NOT(the current condition), which makes the rule apply in exactly
+        # the opposite cases; a reversal is asked about, never proposed (the person states it again if a reversal is really meant)
+        current = rule.get("condition")
+        # compared as written values (HK-AEV2 U-16: the model wrote "true" for the stored boolean true)
+        if current is not None and (_cond_key(desired) == _cond_key({"not": current})
+                                    or (isinstance(current, Mapping) and set(current) == {"not"} and _cond_key(desired) == _cond_key(current["not"]))):
+            raise ValueError("reverses_the_rule")
         return rule["condition"], desired
     if kind == "set_exception":
         if not isinstance(desired, list):

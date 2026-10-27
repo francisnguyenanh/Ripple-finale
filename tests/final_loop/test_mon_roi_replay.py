@@ -46,6 +46,9 @@ def test_hand_calculable_fixture_counts_reconcile_and_the_effort_is_a_declared_a
     assert rep["cost"] == "not_estimated" and rep["risk"]["payment_delay"] == "not_estimated"                               # no hourly cost declared: never 0
     assert rep["coverage"]["baseline"]["rules_not_evaluated"] == [{"rule_id": "rule-emergency-routing", "reason": "rule_condition_unknown"}]  # a rule without a condition decides nothing here
     assert rep["denominators"]["unsupported"] == 0                                                                           # the EMERGENCY row meets no evaluable rule: ALLOW on both sides
+    tc = rep["coverage"]["target"]                                                                                           # the decided TARGET replaces the OBSERVED rule: only it is listed as evaluated
+    assert "rule-standard-manager-review-target" in tc["rules_evaluated"] and "rule-standard-manager-review" not in tc["rules_evaluated"]
+    assert tc["rules_superseded_by_target"] == ["rule-standard-manager-review"] and rep["coverage"]["baseline"]["rules_superseded_by_target"] == []
     with_cost = roi.replay(HAND, BASELINE, _target(), assumptions={**ASSUMPTIONS, "hourly_cost": 6000}, dataset_label="hand")
     assert with_cost["cost"]["delta_cost_range"] == ["-2000.00", "-6000.00"] and "NOT a net ROI" in with_cost["cost"]["basis"]
     assert all(r["amount_jpy"] for r in rep["unsupported_rows"]) and rep["unsupported_value_jpy"] == str(sum(Decimal(u["amount_jpy"]) for u in rep["unsupported_rows"]))

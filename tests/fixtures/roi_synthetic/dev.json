@@ -1,0 +1,3422 @@
+{
+ "schema": "ripple-roi-synthetic/1",
+ "split": "dev",
+ "seed": 20261027,
+ "synthetic": true,
+ "window": {
+  "from": "2026-04-01T00:00:00Z",
+  "to": "2026-10-01T00:00:00Z"
+ },
+ "records": [
+  {
+   "id": "D-00000",
+   "time": "2026-07-26T05:08:12Z",
+   "amount_jpy": 847000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00001",
+   "time": "2026-04-16T05:27:19Z",
+   "amount_jpy": 1862000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00002",
+   "time": "2026-05-04T13:50:34Z",
+   "amount_jpy": 3072000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00003",
+   "time": "2026-09-10T13:03:02Z",
+   "amount_jpy": 3337000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00004",
+   "time": "2026-05-07T15:59:27Z",
+   "amount_jpy": 678320,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00005",
+   "time": "2026-04-19T17:37:03Z",
+   "amount_jpy": 1744773,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00006",
+   "time": "2026-06-08T16:01:24Z",
+   "amount_jpy": 1342089,
+   "currency": "EUR",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00007",
+   "time": "2026-05-29T02:56:20Z",
+   "amount_jpy": 4162655,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00008",
+   "time": "2026-04-26T11:47:41Z",
+   "amount_jpy": 1231000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00009",
+   "time": "2026-05-14T15:10:49Z",
+   "amount_jpy": 9465011,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00010",
+   "time": "2026-06-14T08:07:37Z",
+   "amount_jpy": 1870533,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00011",
+   "time": "2026-09-17T02:15:00Z",
+   "amount_jpy": 366000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00012",
+   "time": "2026-07-02T00:19:48Z",
+   "amount_jpy": 1540000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00013",
+   "time": "2026-05-16T01:18:41Z",
+   "amount_jpy": 76559,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00014",
+   "time": "2026-07-15T10:22:21Z",
+   "amount_jpy": 2572739,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00015",
+   "time": "2026-09-25T03:44:06Z",
+   "amount_jpy": 1804384,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00016",
+   "time": "2026-09-08T04:06:23Z",
+   "amount_jpy": 902000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00017",
+   "time": "2026-08-03T02:50:16Z",
+   "amount_jpy": 1615000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00018",
+   "time": "2026-07-10T22:23:35Z",
+   "amount_jpy": 340000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00019",
+   "time": "2026-08-10T04:46:38Z",
+   "amount_jpy": 3086000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00020",
+   "time": "2026-09-01T18:11:22Z",
+   "amount_jpy": 411000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00021",
+   "time": "2026-06-01T13:16:40Z",
+   "amount_jpy": 16000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00022",
+   "time": "2026-05-10T05:58:08Z",
+   "amount_jpy": 442014,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00023",
+   "time": "2026-05-01T14:18:56Z",
+   "amount_jpy": 493107,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00024",
+   "time": "2026-07-06T01:28:58Z",
+   "amount_jpy": 595069,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00025",
+   "time": "2026-06-03T03:53:44Z",
+   "amount_jpy": 1844851,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00026",
+   "time": "2026-07-21T18:15:50Z",
+   "amount_jpy": 1686000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00027",
+   "time": "2026-06-24T11:48:04Z",
+   "amount_jpy": 3447961,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00028",
+   "time": "2026-07-05T19:02:18Z",
+   "amount_jpy": 1190916,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "URGENT",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00029",
+   "time": "2026-05-03T05:49:24Z",
+   "amount_jpy": 3913000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00030",
+   "time": "2026-03-31T05:38:17Z",
+   "amount_jpy": 362000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00031",
+   "time": "2026-03-24T21:11:41Z",
+   "amount_jpy": 725718,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00032",
+   "time": "2026-08-15T16:04:09Z",
+   "amount_jpy": 1193000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00033",
+   "time": "2026-06-15T17:47:00Z",
+   "amount_jpy": 1566620,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00034",
+   "time": "2026-07-22T20:16:13Z",
+   "amount_jpy": 17519000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00035",
+   "time": "2026-07-09T01:59:58Z",
+   "amount_jpy": 246000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00036",
+   "time": "2026-05-08T19:44:11Z",
+   "amount_jpy": 8582830,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00037",
+   "time": "2026-04-10T20:06:59Z",
+   "amount_jpy": 166000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00038",
+   "time": "2026-04-07T15:05:09Z",
+   "amount_jpy": 1198206,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00039",
+   "time": "2026-09-24T08:02:02Z",
+   "amount_jpy": 909000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00040",
+   "time": "2026-04-21T03:50:23Z",
+   "amount_jpy": 12218000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00041",
+   "time": "2026-09-17T04:45:33Z",
+   "amount_jpy": 1637000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00042",
+   "time": "2026-06-23T05:03:50Z",
+   "amount_jpy": 1612000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00043",
+   "time": "2026-09-28T03:33:55Z",
+   "amount_jpy": 436000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00044",
+   "time": "2026-03-26T13:22:53Z",
+   "amount_jpy": 452320,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00045",
+   "time": "2026-04-04T21:35:39Z",
+   "amount_jpy": 266776,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00046",
+   "time": "2026-09-18T12:37:16Z",
+   "amount_jpy": 1692701,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00047",
+   "time": "2026-08-02T11:41:16Z",
+   "amount_jpy": 1897855,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00048",
+   "time": "2026-04-19T01:33:14Z",
+   "amount_jpy": "12O0000",
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00049",
+   "time": "2026-07-08T09:14:37Z",
+   "amount_jpy": 1968674,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00050",
+   "time": "2026-06-28T08:36:09Z",
+   "amount_jpy": 1701000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00051",
+   "time": "2026-06-10T13:42:17Z",
+   "amount_jpy": 907000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00052",
+   "time": "2026-08-26T23:26:41Z",
+   "amount_jpy": 155762,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00053",
+   "time": "2026-06-08T08:58:43Z",
+   "amount_jpy": 1961000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00054",
+   "time": "2026-09-24T08:11:01Z",
+   "amount_jpy": 1381893,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00055",
+   "time": "2026-03-26T19:10:45Z",
+   "amount_jpy": 433000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00056",
+   "time": "2026-06-09T04:26:50Z",
+   "amount_jpy": 254775,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00057",
+   "time": "2026-09-29T22:54:12Z",
+   "amount_jpy": 2410610,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "URGENT",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00058",
+   "time": "2026-08-16T19:35:48Z",
+   "amount_jpy": 1040033,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00059",
+   "time": "2026-03-18T21:31:22Z",
+   "amount_jpy": 2036000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00060",
+   "time": "2026-09-07T22:03:47Z",
+   "amount_jpy": 1843021,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "URGENT",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00061",
+   "time": "2026-04-05T14:19:52Z",
+   "amount_jpy": 133000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00062",
+   "time": "2026-05-18T01:07:08Z",
+   "amount_jpy": 1922682,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00063",
+   "time": "2026-06-15T14:18:42Z",
+   "amount_jpy": 945260,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00064",
+   "time": "2026-05-31T12:36:52Z",
+   "amount_jpy": 398690,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00065",
+   "time": "2026-06-08T05:26:10Z",
+   "amount_jpy": 1361000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00066",
+   "time": "2026-03-15T06:52:52Z",
+   "amount_jpy": 981793,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00067",
+   "time": "2026-09-28T13:36:13Z",
+   "amount_jpy": 1673000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00068",
+   "time": "2026-04-11T12:14:49Z",
+   "amount_jpy": 1978000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00069",
+   "time": "2026-07-10T13:46:23Z",
+   "amount_jpy": 919000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00070",
+   "time": "2026-03-19T11:15:13Z",
+   "amount_jpy": 1063000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00071",
+   "time": "2026-09-12T08:51:03Z",
+   "amount_jpy": 133759,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00072",
+   "time": "2026-06-01T23:18:40Z",
+   "amount_jpy": 4227000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00073",
+   "time": "2026-08-14T02:02:49Z",
+   "amount_jpy": 2336000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00074",
+   "time": "2026-09-17T20:29:26Z",
+   "amount_jpy": 671479,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00075",
+   "time": "2026-09-20T20:09:08Z",
+   "amount_jpy": 983686,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00076",
+   "time": "2026-09-05T17:02:17Z",
+   "amount_jpy": 680716,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00077",
+   "time": "2026-06-10T10:57:06Z",
+   "amount_jpy": 1838000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00078",
+   "time": "2026-04-26T10:32:52Z",
+   "amount_jpy": 1580732,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00079",
+   "time": "2026-09-11T17:04:24Z",
+   "amount_jpy": 208000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00080",
+   "time": "2026-07-05T11:34:37Z",
+   "amount_jpy": 1401000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00081",
+   "time": "2026-05-10T18:30:06Z",
+   "amount_jpy": 16195000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00082",
+   "time": "2026-07-26T06:11:32Z",
+   "amount_jpy": 295498,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00083",
+   "time": "2026-05-01T10:53:19Z",
+   "amount_jpy": 4928000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00084",
+   "time": "2026-06-28T02:14:37Z",
+   "amount_jpy": 3510453,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00085",
+   "time": "2026-08-21T05:55:01Z",
+   "amount_jpy": 4399965,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00086",
+   "time": "2026-07-16T16:03:40Z",
+   "amount_jpy": 1731416,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00087",
+   "time": "2026-08-01T22:56:51Z",
+   "amount_jpy": 300000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "EMERGENCY",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00088",
+   "time": "2026-04-26T20:55:36Z",
+   "amount_jpy": 424000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00089",
+   "time": "2026-08-12T21:06:49Z",
+   "amount_jpy": 1842000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00090",
+   "time": "2026-04-30T16:31:24Z",
+   "amount_jpy": 525000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00091",
+   "time": "2026-04-01T04:48:27Z",
+   "amount_jpy": 1161000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00092",
+   "time": "2026-08-03T15:21:04Z",
+   "amount_jpy": 608000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00093",
+   "time": "2026-04-23T13:02:48Z",
+   "amount_jpy": 2078685,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00094",
+   "time": "2026-05-08T21:30:48Z",
+   "amount_jpy": 943867,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00095",
+   "time": "2026-05-03T00:37:25Z",
+   "amount_jpy": 1402000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00096",
+   "time": "2026-07-10T18:05:17Z",
+   "amount_jpy": 77000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00097",
+   "time": "2026-04-03T23:11:08Z",
+   "amount_jpy": 3402000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00098",
+   "time": "2026-05-19T05:12:45Z",
+   "amount_jpy": 1869000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00099",
+   "time": "2026-07-28T20:52:56Z",
+   "amount_jpy": 81028,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00100",
+   "time": "2026-07-10T21:00:06Z",
+   "amount_jpy": 11366000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00101",
+   "time": "2026-09-28T09:08:33Z",
+   "amount_jpy": 218000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00102",
+   "time": "2026-05-07T05:11:27Z",
+   "amount_jpy": 5231276,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00103",
+   "time": "2026-05-23T16:16:41Z",
+   "amount_jpy": 1528000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00104",
+   "time": "2026-07-19T02:49:45Z",
+   "amount_jpy": 16871000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00105",
+   "time": "2026-06-26T01:38:03Z",
+   "amount_jpy": 1177789,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00106",
+   "time": "2026-08-04T20:47:01Z",
+   "amount_jpy": 1551000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00107",
+   "time": "2026-04-15T16:33:42Z",
+   "amount_jpy": 25000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00108",
+   "time": "2026-03-30T10:15:13Z",
+   "amount_jpy": 1089819,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00109",
+   "time": "2026-08-13T16:18:30Z",
+   "amount_jpy": 1550127,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00110",
+   "time": "2026-09-12T10:32:15Z",
+   "amount_jpy": 1943000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00111",
+   "time": "2026-06-16T06:26:21Z",
+   "amount_jpy": 1614464,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00112",
+   "time": "2026-09-16T14:42:30Z",
+   "amount_jpy": 648280,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00113",
+   "time": "2026-05-01T14:46:56Z",
+   "amount_jpy": 2236393,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00114",
+   "time": "2026-08-24T16:55:10Z",
+   "amount_jpy": 1394000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00115",
+   "time": "2026-06-11T08:44:54Z",
+   "amount_jpy": 188000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00116",
+   "time": "2026-06-04T12:07:54Z",
+   "amount_jpy": 2356156,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00117",
+   "time": "2026-06-16T16:34:43Z",
+   "amount_jpy": 11553000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00118",
+   "time": "2026-09-14T08:08:12Z",
+   "amount_jpy": 18961000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00119",
+   "time": "2026-06-07T03:07:33Z",
+   "amount_jpy": 1137595,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00120",
+   "time": "2026-06-05T07:39:43Z",
+   "amount_jpy": 1482588,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00121",
+   "time": "2026-06-26T05:26:58Z",
+   "amount_jpy": 812394,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00122",
+   "time": "2026-05-18T04:58:02Z",
+   "amount_jpy": 1449549,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00123",
+   "time": "2026-07-30T14:19:58Z",
+   "amount_jpy": 382000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00124",
+   "time": "2026-09-27T07:14:58Z",
+   "amount_jpy": 3081019,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00125",
+   "time": "2026-09-29T04:23:52Z",
+   "amount_jpy": 2583000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00126",
+   "time": "2026-03-18T02:44:02Z",
+   "amount_jpy": 1150000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00127",
+   "time": "2026-06-21T12:27:07Z",
+   "amount_jpy": 11809000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00128",
+   "time": "2026-08-24T09:45:25Z",
+   "amount_jpy": 267549,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00129",
+   "time": "2026-09-13T00:28:40Z",
+   "amount_jpy": 2809000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00130",
+   "time": "2026-05-20T21:27:55Z",
+   "amount_jpy": 1087549,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00131",
+   "time": "2026-09-02T16:36:04Z",
+   "amount_jpy": 605253,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00132",
+   "time": "2026-08-08T22:39:52Z",
+   "amount_jpy": 88000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00133",
+   "time": "2026-08-04T22:19:58Z",
+   "amount_jpy": 485865,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00134",
+   "time": "2026-06-29T11:31:30Z",
+   "amount_jpy": 1540000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00135",
+   "time": "2026-03-13T06:29:14Z",
+   "amount_jpy": 3447793,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00136",
+   "time": "2026-05-27T05:00:06Z",
+   "amount_jpy": 1004523,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00137",
+   "time": "2026-05-28T20:07:43Z",
+   "amount_jpy": 810000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00138",
+   "time": "2026-07-07T22:02:29Z",
+   "amount_jpy": 426000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00139",
+   "time": "2026-04-29T09:12:05Z",
+   "amount_jpy": 361806,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00140",
+   "time": "2026-04-13T11:20:33Z",
+   "amount_jpy": 3604122,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00141",
+   "time": "2026-05-17T21:31:17Z",
+   "amount_jpy": 1377000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00142",
+   "time": "2026-05-09T04:11:04Z",
+   "amount_jpy": 1438228,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00143",
+   "time": "2026-09-14T06:47:26Z",
+   "amount_jpy": 1947000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00144",
+   "time": "2026-04-28T03:35:41Z",
+   "amount_jpy": 4036000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00145",
+   "time": "2026-07-10T14:03:40Z",
+   "amount_jpy": 4881244,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00146",
+   "time": "2026-04-17T22:11:00Z",
+   "amount_jpy": 613000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00147",
+   "time": "2026-08-06T00:45:09Z",
+   "amount_jpy": 3749000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00148",
+   "time": "2026-05-21T18:45:36Z",
+   "amount_jpy": 1757393,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00149",
+   "time": "2026-09-02T19:12:58Z",
+   "amount_jpy": 3055881,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00150",
+   "time": "2026-06-04T22:29:22Z",
+   "amount_jpy": 4462394,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00151",
+   "time": "2026-06-27T13:07:18Z",
+   "amount_jpy": 1000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00152",
+   "time": "2026-08-28T10:47:27Z",
+   "amount_jpy": 1617000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00153",
+   "time": "2026-06-10T04:09:51Z",
+   "amount_jpy": 17438217,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00154",
+   "time": "2026-06-05T02:16:51Z",
+   "amount_jpy": 3268324,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00155",
+   "time": "2026-05-19T04:46:27Z",
+   "amount_jpy": 981501,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00156",
+   "time": "2026-09-12T07:35:06Z",
+   "amount_jpy": -9488,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00157",
+   "time": "2026-03-24T17:26:35Z",
+   "amount_jpy": 456637,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00158",
+   "time": "2026-04-26T11:27:42Z",
+   "amount_jpy": 1112000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00159",
+   "time": "2026-08-06T20:57:52Z",
+   "amount_jpy": 8542656,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00160",
+   "time": "2026-04-24T22:28:51Z",
+   "amount_jpy": 2989000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00161",
+   "time": "2026-08-06T13:49:41Z",
+   "amount_jpy": 660178,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00162",
+   "time": "2026-06-09T01:08:37Z",
+   "amount_jpy": 1248773,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00163",
+   "time": "2026-05-03T13:02:40Z",
+   "amount_jpy": 898000,
+   "currency": "EUR",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00164",
+   "time": "2026-04-30T15:40:41Z",
+   "amount_jpy": 1003637,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00165",
+   "time": "2026-05-09T00:50:26Z",
+   "amount_jpy": 609211,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00166",
+   "time": "2026-05-13T04:50:36Z",
+   "amount_jpy": 2188238,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00167",
+   "time": "2026-06-16T00:02:44Z",
+   "amount_jpy": 10525612,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00168",
+   "time": "2026-05-01T04:14:50Z",
+   "amount_jpy": 14690000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00169",
+   "time": "2026-06-16T16:50:52Z",
+   "amount_jpy": 1173956,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00170",
+   "time": "2026-03-30T15:26:30Z",
+   "amount_jpy": 529848,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00171",
+   "time": "2026-05-29T23:27:28Z",
+   "amount_jpy": 822000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00172",
+   "time": "2026-05-30T18:20:02Z",
+   "amount_jpy": 1307000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00173",
+   "time": "2026-08-09T21:00:14Z",
+   "amount_jpy": 1567738,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00174",
+   "time": "2026-07-10T04:40:32Z",
+   "amount_jpy": 518000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00175",
+   "time": "2026-06-12T16:34:16Z",
+   "amount_jpy": 4082000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00176",
+   "time": "2026-06-08T19:52:41Z",
+   "amount_jpy": 541965,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00177",
+   "time": "2026-08-04T13:28:44Z",
+   "amount_jpy": 315890,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00178",
+   "time": "2026-04-24T08:02:22Z",
+   "amount_jpy": 1434811,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00179",
+   "time": "2026-07-04T04:15:02Z",
+   "amount_jpy": 12920000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00180",
+   "time": "2026-07-29T14:00:13Z",
+   "amount_jpy": 685000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00181",
+   "time": "2026-08-25T00:21:45Z",
+   "amount_jpy": 1121646,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00182",
+   "time": "2026-04-20T09:44:43Z",
+   "amount_jpy": 3980000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "URGENT",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00183",
+   "time": "2026-07-24T17:27:05Z",
+   "amount_jpy": 4227000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "URGENT",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00184",
+   "time": "2026-08-01T02:27:16Z",
+   "amount_jpy": 2266000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00185",
+   "time": "2026-06-19T20:13:43Z",
+   "amount_jpy": 1644787,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00186",
+   "time": "2026-04-24T22:40:45Z",
+   "amount_jpy": 1477000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00187",
+   "time": "2026-09-20T17:02:09Z",
+   "amount_jpy": 12741339,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00188",
+   "time": "2026-05-19T11:13:11Z",
+   "amount_jpy": -6195,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00189",
+   "time": "2026-06-17T00:55:03Z",
+   "amount_jpy": 8161000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00190",
+   "time": "2026-05-01T18:03:54Z",
+   "amount_jpy": 6924000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00191",
+   "time": "2026-06-09T04:57:54Z",
+   "amount_jpy": 735555,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00192",
+   "time": "2026-09-05T12:40:34Z",
+   "amount_jpy": 1496000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00193",
+   "time": "2026-07-26T03:12:30Z",
+   "amount_jpy": 708000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00194",
+   "time": "2026-08-23T10:08:10Z",
+   "amount_jpy": 1999000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00195",
+   "time": "2026-08-03T22:33:55Z",
+   "amount_jpy": 9679,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00196",
+   "time": "2026-03-17T21:47:34Z",
+   "amount_jpy": 112602,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00197",
+   "time": "2026-09-13T11:43:40Z",
+   "amount_jpy": 485000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00198",
+   "time": "2026-07-02T23:01:38Z",
+   "amount_jpy": 1025000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00199",
+   "time": "2026-05-06T02:35:12Z",
+   "amount_jpy": 1685963,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00200",
+   "time": "2026-05-29T22:35:17Z",
+   "amount_jpy": 3014087,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00201",
+   "time": "2026-06-23T18:53:02Z",
+   "amount_jpy": 65531,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00202",
+   "time": "2026-04-24T12:53:44Z",
+   "amount_jpy": 1523224,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00203",
+   "time": "2026-06-20T05:41:18Z",
+   "amount_jpy": 733000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00204",
+   "time": "2026-09-16T16:18:32Z",
+   "amount_jpy": 145195,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00205",
+   "time": "2026-06-05T22:00:38Z",
+   "amount_jpy": 12863304,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00206",
+   "time": "2026-05-29T21:33:12Z",
+   "amount_jpy": 1913405,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00207",
+   "time": "2026-07-30T11:24:47Z",
+   "amount_jpy": 1255000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00208",
+   "time": "2026-09-28T05:15:25Z",
+   "amount_jpy": 694986,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00209",
+   "time": "2026-04-04T16:23:11Z",
+   "amount_jpy": 3078211,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00210",
+   "time": "2026-06-06T19:27:02Z",
+   "amount_jpy": 187000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00211",
+   "time": "2026-05-04T08:23:17Z",
+   "amount_jpy": 4496652,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00212",
+   "time": "2026-06-14T01:21:26Z",
+   "amount_jpy": 1215000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00213",
+   "time": "2026-07-15T02:42:21Z",
+   "amount_jpy": 18084000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00214",
+   "time": "2026-09-05T05:54:17Z",
+   "amount_jpy": 19017936,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00215",
+   "time": "2026-09-14T17:57:18Z",
+   "amount_jpy": 4986552,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00216",
+   "time": "2026-04-25T02:42:16Z",
+   "amount_jpy": 322000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00217",
+   "time": "2026-05-16T00:52:53Z",
+   "amount_jpy": 1644237,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00218",
+   "time": "2026-04-02T18:56:28Z",
+   "amount_jpy": 532666,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00219",
+   "time": "2026-09-24T03:14:54Z",
+   "amount_jpy": 953092,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "URGENT",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00220",
+   "time": "2026-04-07T05:00:48Z",
+   "amount_jpy": 3000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00221",
+   "time": "2026-09-22T23:31:33Z",
+   "amount_jpy": 11174000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00222",
+   "time": "2026-07-04T23:13:38Z",
+   "amount_jpy": 399000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00223",
+   "time": "2026-06-13T12:29:09Z",
+   "amount_jpy": 3569000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00224",
+   "time": "2026-05-11T13:26:21Z",
+   "amount_jpy": 769000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00225",
+   "time": "2026-04-13T07:08:49Z",
+   "amount_jpy": 1344000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00226",
+   "time": "2026-07-15T11:24:10Z",
+   "amount_jpy": 1427000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00227",
+   "time": "2026-08-25T20:11:45Z",
+   "amount_jpy": 3591570,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00228",
+   "time": "2026-04-16T19:46:31Z",
+   "amount_jpy": 1899236,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00229",
+   "time": "2026-06-23T07:42:14Z",
+   "amount_jpy": 130986,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00230",
+   "time": "2026-05-16T17:00:12Z",
+   "amount_jpy": 771777,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00231",
+   "time": "2026-06-12T23:28:47Z",
+   "amount_jpy": 924680,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00232",
+   "time": "2026-08-06T23:43:29Z",
+   "amount_jpy": 1057000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00233",
+   "time": "2026-09-15T18:36:50Z",
+   "amount_jpy": 206551,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00234",
+   "time": "2026-09-10T22:16:12Z",
+   "amount_jpy": 1166000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00235",
+   "time": "2026-06-11T01:16:46Z",
+   "amount_jpy": 321000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00236",
+   "time": "2026-04-29T22:16:04Z",
+   "amount_jpy": 1645000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00237",
+   "time": "2026-09-02T21:12:10Z",
+   "amount_jpy": 386000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00238",
+   "time": "2026-06-18T21:26:07Z",
+   "amount_jpy": 374000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00239",
+   "time": "2026-06-15T05:36:24Z",
+   "amount_jpy": 378000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00240",
+   "time": "2026-07-10T12:03:39Z",
+   "amount_jpy": 468000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00241",
+   "time": "2026-05-28T16:01:07Z",
+   "amount_jpy": 423000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00242",
+   "time": "2026-07-11T08:09:33Z",
+   "amount_jpy": 19206000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00243",
+   "time": "2026-05-20T14:29:17Z",
+   "amount_jpy": 914249,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00244",
+   "time": "2026-04-05T21:44:35Z",
+   "amount_jpy": 1831000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00245",
+   "time": "2026-07-16T01:39:05Z",
+   "amount_jpy": 1083637,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00246",
+   "time": "2026-04-09T10:28:33Z",
+   "amount_jpy": 1985000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00247",
+   "time": "2026-09-13T04:57:39Z",
+   "amount_jpy": 74000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "URGENT",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00248",
+   "time": "2026-08-26T08:44:32Z",
+   "amount_jpy": 1804366,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00249",
+   "time": "2026-09-01T03:06:55Z",
+   "amount_jpy": 10082000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00250",
+   "time": "2026-05-25T21:53:27Z",
+   "amount_jpy": 1239000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "URGENT",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00251",
+   "time": "2026-09-11T14:18:17Z",
+   "amount_jpy": 1269644,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00252",
+   "time": "2026-07-23T08:20:22Z",
+   "amount_jpy": 4417381,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00253",
+   "time": "2026-06-20T03:30:54Z",
+   "amount_jpy": 4482000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00254",
+   "time": "2026-05-08T14:24:59Z",
+   "amount_jpy": 2524516,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00255",
+   "time": "2026-05-27T22:04:02Z",
+   "amount_jpy": 10633000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00256",
+   "time": "2026-05-26T17:34:02Z",
+   "amount_jpy": 1740208,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00257",
+   "time": "2026-05-18T04:43:03Z",
+   "amount_jpy": 2587000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00258",
+   "time": "2026-06-20T08:49:37Z",
+   "amount_jpy": 1404846,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "URGENT",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00259",
+   "time": "2026-09-18T03:07:55Z",
+   "amount_jpy": 1898199,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00260",
+   "time": "2026-07-15T01:44:29Z",
+   "amount_jpy": 141908,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00261",
+   "time": "2026-08-21T06:17:34Z",
+   "amount_jpy": 3185480,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00262",
+   "time": "2026-04-02T09:48:34Z",
+   "amount_jpy": 516000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00263",
+   "time": "2026-06-16T00:09:26Z",
+   "amount_jpy": 3644306,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00264",
+   "time": "2026-04-26T01:33:02Z",
+   "amount_jpy": 1679000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00265",
+   "time": "2026-06-28T10:33:13Z",
+   "amount_jpy": 266149,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00266",
+   "time": "2026-09-18T18:10:48Z",
+   "amount_jpy": 1773643,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00267",
+   "time": "2026-06-03T22:39:16Z",
+   "amount_jpy": 1827000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00268",
+   "time": "2026-03-15T07:13:28Z",
+   "amount_jpy": 1461000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00269",
+   "time": "2026-09-05T09:54:56Z",
+   "amount_jpy": 105000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00270",
+   "time": "2026-07-09T22:48:48Z",
+   "amount_jpy": 330558,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00271",
+   "time": "2026-06-27T16:13:05Z",
+   "amount_jpy": 117717,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00272",
+   "time": "2026-07-11T08:59:54Z",
+   "amount_jpy": 865976,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00273",
+   "time": "2026-07-10T03:33:00Z",
+   "amount_jpy": 483436,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00274",
+   "time": "2026-04-04T06:39:22Z",
+   "amount_jpy": 1038000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00275",
+   "time": "2026-07-12T15:42:48Z",
+   "amount_jpy": 263549,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00276",
+   "time": "2026-07-31T11:23:26Z",
+   "amount_jpy": 2846362,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00277",
+   "time": "2026-05-08T22:57:28Z",
+   "amount_jpy": 18642622,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00278",
+   "time": "2026-09-17T19:18:12Z",
+   "amount_jpy": 4091599,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00279",
+   "time": "2026-05-10T03:29:09Z",
+   "amount_jpy": 2211,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00280",
+   "time": "2026-04-13T10:46:13Z",
+   "amount_jpy": 865000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00281",
+   "time": "2026-08-28T00:42:56Z",
+   "amount_jpy": 1460296,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00282",
+   "time": "2026-06-13T06:06:08Z",
+   "amount_jpy": 273000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00283",
+   "time": "2026-07-01T18:54:25Z",
+   "amount_jpy": 1532000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00284",
+   "time": "2026-09-12T05:54:25Z",
+   "amount_jpy": 175000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00285",
+   "time": "2026-04-29T15:32:31Z",
+   "amount_jpy": 218894,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00286",
+   "time": "2026-04-04T18:25:23Z",
+   "amount_jpy": 628000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00287",
+   "time": "2026-09-03T18:35:05Z",
+   "amount_jpy": 1942837,
+   "currency": "JPY",
+   "category": null,
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00288",
+   "time": "2026-09-18T21:11:09Z",
+   "amount_jpy": 4220725,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00289",
+   "time": "2026-08-16T22:51:50Z",
+   "amount_jpy": 820305,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00290",
+   "time": "2026-04-17T19:04:03Z",
+   "amount_jpy": 3237891,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00291",
+   "time": "2026-04-20T22:00:48Z",
+   "amount_jpy": 432741,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00292",
+   "time": "2026-09-22T14:29:21Z",
+   "amount_jpy": 3061798,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "EMERGENCY",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00293",
+   "time": "2026-06-21T10:03:21Z",
+   "amount_jpy": 451719,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-00294",
+   "time": "2026-05-23T03:43:56Z",
+   "amount_jpy": 10320000,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00295",
+   "time": "2026-09-18T03:47:04Z",
+   "amount_jpy": -3487,
+   "currency": "JPY",
+   "category": "OPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00296",
+   "time": "2026-04-09T15:24:08Z",
+   "amount_jpy": 2796000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-00297",
+   "time": "2026-07-20T06:31:50Z",
+   "amount_jpy": 436000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00298",
+   "time": "2026-09-02T19:48:52Z",
+   "amount_jpy": 1419000,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "URGENT",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-00299",
+   "time": "2026-05-29T01:56:46Z",
+   "amount_jpy": 544714,
+   "currency": "JPY",
+   "category": "IT",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E000",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 999999,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E001",
+   "time": "2026-05-12T11:00:01Z",
+   "amount_jpy": 1000000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E002",
+   "time": "2026-05-12T12:00:02Z",
+   "amount_jpy": 1499999,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E003",
+   "time": "2026-05-12T13:00:03Z",
+   "amount_jpy": 1500000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E004",
+   "time": "2026-05-12T14:00:04Z",
+   "amount_jpy": 1999999,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E005",
+   "time": "2026-05-12T15:00:05Z",
+   "amount_jpy": 2000000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E006",
+   "time": "2026-05-12T16:00:06Z",
+   "amount_jpy": 4999999,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E007",
+   "time": "2026-05-12T17:00:07Z",
+   "amount_jpy": 5000000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E008",
+   "time": "2026-05-12T18:00:08Z",
+   "amount_jpy": 0,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E020",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": "1,700,000",
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E021",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": "1499999.99",
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E022",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 1500000.0,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E023",
+   "time": "2026-04-01T00:00:00Z",
+   "amount_jpy": 1200000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E024",
+   "time": "2026-10-01T08:59:59+09:00",
+   "amount_jpy": 1200000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E025",
+   "time": "2026-10-01T00:00:00Z",
+   "amount_jpy": 1200000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E026",
+   "time": "2026-04-01T08:59:59+09:00",
+   "amount_jpy": 1200000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 1200000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 1200000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E032",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 1200000,
+   "currency": "JPY",
+   "category": null,
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E033",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 1200000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": ""
+  },
+  {
+   "id": "D-E034",
+   "amount_jpy": 1200000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E040",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 1300000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E040",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 3300000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E041",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 800000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E041",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 800000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E050",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 1600000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E051",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 2000000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E052",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 1800000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "URGENT",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E053",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 1100000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "MEDIUM"
+  },
+  {
+   "id": "D-E054",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 6000000,
+   "currency": "JPY",
+   "category": "CAPEX",
+   "process": "EMERGENCY",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-E055",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 300000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "EMERGENCY",
+   "supplier_risk": "HIGH"
+  },
+  {
+   "id": "D-E060",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": -1,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E061",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": "abc",
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E062",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": true,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E063",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": "NaN",
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E064",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": "Infinity",
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E065",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 1200000,
+   "currency": "USD",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E066",
+   "time": "2026-05-12T10:00:00Z",
+   "amount_jpy": 1200000,
+   "currency": "EUR",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E067",
+   "time": "2026-02-30T00:00:00Z",
+   "amount_jpy": 1200000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E068",
+   "time": "yesterday",
+   "amount_jpy": 1200000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  },
+  {
+   "id": "D-E069",
+   "time": 20260601,
+   "amount_jpy": 1200000,
+   "currency": "JPY",
+   "category": "OFFICE",
+   "process": "STANDARD",
+   "supplier_risk": "LOW"
+  }
+ ],
+ "cases": [
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "invalid",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "outside_window",
+  "outside_window",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "outside_window",
+  "normal",
+  "normal",
+  "normal",
+  "invalid",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "outside_window",
+  "normal",
+  "normal",
+  "normal",
+  "outside_window",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "outside_window",
+  "normal",
+  "normal",
+  "normal",
+  "outside_window",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "outside_window",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "outside_window",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "outside_window",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "invalid",
+  "outside_window",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "invalid",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "outside_window",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "invalid",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "outside_window",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "outside_window",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "missing",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "invalid",
+  "normal",
+  "normal",
+  "normal",
+  "normal",
+  "boundary",
+  "boundary",
+  "boundary",
+  "boundary",
+  "boundary",
+  "boundary",
+  "boundary",
+  "boundary",
+  "boundary",
+  "boundary",
+  "boundary",
+  "boundary",
+  "boundary",
+  "boundary",
+  "boundary",
+  "boundary",
+  "missing",
+  "missing",
+  "missing",
+  "missing",
+  "missing",
+  "contradictory",
+  "contradictory",
+  "contradictory",
+  "contradictory",
+  "exception",
+  "exception",
+  "exception",
+  "exception",
+  "exception",
+  "exception",
+  "invalid",
+  "invalid",
+  "invalid",
+  "invalid",
+  "invalid",
+  "invalid",
+  "invalid",
+  "invalid",
+  "invalid",
+  "invalid"
+ ]
+}

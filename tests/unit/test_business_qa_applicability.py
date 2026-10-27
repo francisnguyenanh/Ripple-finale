@@ -284,3 +284,23 @@ def test_an_answer_that_needs_the_pinned_default_is_partial_and_asks_for_the_fac
 def test_a_fact_or_hypothetical_the_question_states_is_not_an_assumption_and_the_answer_stays_complete(question):
     final, kept, _ = run(question, MANAGER_ONLY, "rule-standard-manager-review")
     assert kept[0]["assumptions"] == [] and final["status"] == "ANSWERED" and "assumed_default_needs_fact" not in final["reasons"]
+
+
+def test_rules_written_in_another_currency_are_not_asked_about_in_jpy_and_the_amount_is_said_to_be_unchecked():
+    """PC-05 (2026-10-26, QRY02B-V6 q04): the rules compare amounts in USD and the question states USD; the server asked for "the amount in JPY ... the rules are
+    written in JPY" (false for this pack). Now: no JPY question, at most PARTIAL, the answer says the server did not check the amount, nothing converted."""
+    usd = dict(RULES["rule-standard-manager-review"], rule_id="rule-usd-bond", title="Contractors on works valued above 250000 dollars lodge a performance bond.",
+               condition={"field": "contract.value_usd", "op": "gt", "value": 250000, "unit": "USD"})
+    question = "An outside firm wins a $300k pipe-laying job. What financial guarantee must they put up?"
+    p = pack(question)
+    p["items"] = [item(usd)]
+    claims = [{"text": "Contractors on works valued above 250000 dollars lodge a performance bond.", "refs": ["rule-usd-bond"], "basis": "observed"}]
+    m = model("ANSWERED", claims)
+    kept, dropped = qa.judge_claims(m["claims"], p, question, FROZEN, can_read_evidence=True)
+    out = qa.finalize(m, kept, dropped, p, FROZEN)
+    assert kept and out["status"] == "PARTIAL" and "amount_currency_not_checked" in out["reasons"] and "amount_not_in_jpy" not in out["reasons"]
+    assert qa.FOREIGN_QUESTION not in out["clarifying_questions"] and qa.AMOUNT_UNCHECKED_NOTE in out["uncertainty"]
+    assert qa.pack_amount_units(p) == {"USD"}
+    # a pack whose amount rules are in JPY keeps the contract: a USD question is asked for the JPY amount (the test above), nothing converted
+    jp = pack("Does a purchase of 12,000 USD need manager approval?", "rule-standard-manager-review")
+    assert "JPY" in qa.pack_amount_units(jp)

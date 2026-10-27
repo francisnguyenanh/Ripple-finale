@@ -176,7 +176,7 @@ def _summary(values: list) -> Optional[dict]:
 
 def simulate(rules: Iterable[Mapping], gaps: Iterable[Mapping], scenario: Mapping, *, seed: int) -> dict:
     """One scenario over its replications. The scenario must already be validated."""
-    from core.change_intelligence.v2.roi_replay import evaluable_rules
+    from core.change_intelligence.v2.roi_replay import coverage_of, evaluable_rules
     rules, not_evaluated = evaluable_rules(list(rules), FACT_KEYS)                  # only rules the engine's facts can decide route anything; the rest is coverage, never a silent clear
     reps = [_replication(rules, list(gaps), scenario, seed, r) for r in range(scenario["replications"])]
     roles = sorted({a for k in reps for a in k["roles"]})
@@ -188,7 +188,7 @@ def simulate(rules: Iterable[Mapping], gaps: Iterable[Mapping], scenario: Mappin
                     "routes": sorted({r for k in reps for r in k["routes"]})},
            "checks": {"conservation_ok": all(k["conservation_ok"] for k in reps), "replications_agree_on_routes": len({tuple(sorted(k["routes"])) for k in reps}) == 1},
            "scenario": dict(scenario), "rules_hash": canonical_hash(rules), "engine_version": ENGINE_VERSION,
-           "coverage": {"rules_evaluated": sorted(r["rule_id"] for r in rules), "rules_not_evaluated": not_evaluated, "facts": list(FACT_KEYS)}}
+           "coverage": {**coverage_of(rules, not_evaluated), "facts": list(FACT_KEYS)}}
     out["result_hash"] = canonical_hash({k: v for k, v in out.items() if k != "result_hash"})
     return out
 

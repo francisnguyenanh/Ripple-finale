@@ -104,6 +104,10 @@ def test_conflict_scan_starts_only_on_click_and_a_hypothesis_is_dismissed_and_an
     hyp_.get_by_test_id("mining-dismiss-reason").fill("The finance review follows the manager review in practice.")
     hyp_.get_by_test_id("mining-dismiss").click()
     expect(scan.locator('[data-testid="mining-hypothesis"][data-status="DISMISSED"]')).to_have_count(1, timeout=WAIT)
+    # The scan compares its rule groups in the background (one worker job each); the first hypothesis can show while later groups still run. Wait until the scan
+    # says it is finished before the interview's no-model-call window below (PC-04, 2026-10-26: a late group call landed in that window, 8 vs 7; reproduced by
+    # delaying the group calls: the interview then started at "2 of 6 rule groups compared").
+    expect(scan.locator('[data-testid="mining-rescan"], [data-testid="mining-continue"]').first).to_be_visible(timeout=90000)
     card = page.locator('[data-testid="business-gap"][data-kind="missing_actor"]').first
     before = counts(env)
     card.get_by_test_id("interview-start").click()

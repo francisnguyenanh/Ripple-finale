@@ -1885,11 +1885,10 @@ def workspace_audit(request: Request, workspace_id: str):
     try:
         authority = _authority(identity, request, workspace_id)
         require(authority, "project.read")
-        events = _readable_audit(store, authority["tenant_id"], workspace_id, store.audit_events(authority["tenant_id"], workspace_id),
-                                 authority["account_id"], permissions_for(authority.get("roles")))
-        membership_events = identity.audit_events(authority["tenant_id"], workspace_id)
-        combined = sorted(events + [{"id": None, **event} for event in membership_events],
-                          key=lambda e: (e["id"] is None, e["id"]))
+        # Every event of the workspace, membership grants / revocations included, comes from the one `v2_audit` table with its id and recorded time. The identity
+        # store's `membership.*` list reads the same rows; merging it listed each membership event twice, the copy without id or time (PC-06, 2026-10-26).
+        combined = _readable_audit(store, authority["tenant_id"], workspace_id, store.audit_events(authority["tenant_id"], workspace_id),
+                                   authority["account_id"], permissions_for(authority.get("roles")))
         # Defense in depth: never surface raw secrets even if a future event
         # type accidentally carried one.
         for event in combined:

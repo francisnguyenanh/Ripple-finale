@@ -68,7 +68,7 @@ def stub(prompt):
 
 
 @pytest.fixture
-def ui(env, ws, monkeypatch, tmp_path):                   # noqa: F811
+def ui(env, ws, monkeypatch, tmp_path, request):          # noqa: F811
     cfg = REAL_BUDGET_PATH.read_text(encoding="utf-8").replace("  intent.explain: gemini-3.5-flash-lite", "  intent.explain: gemini-3.5-flash-lite\n  knowledge.qa: gemini-3.8-flash\n  change.understand: gemini-3.8-flash")
     path = tmp_path / "budget_ui.yaml"
     path.write_text(cfg, encoding="utf-8")
@@ -76,8 +76,13 @@ def ui(env, ws, monkeypatch, tmp_path):                   # noqa: F811
     monkeypatch.setattr(explain, "_assert_global_endpoint", lambda: None)
     model = Model(stub)
     monkeypatch.setattr(explain, "_client_for_model", lambda m: model)
+    # The markup-title rule tests safe rendering. By default it decides on another measured field, so it is a different rule; with `twin` (indirect parameter) it keeps
+    # the same field, actor, outcome and source place as rule-standard-manager-review: an indistinguishable sibling (contract 8). PC-02 (2026-10-26): the plain
+    # copy made the happy path below that duplicate case without saying so, and the server rightly asked which rule was meant.
     evil = copy.deepcopy(KNOWLEDGE["observed_rules"][0])
     evil.update(rule_id="rule-evil-title", title=EVIL_TITLE, concept_ids=["concept-evil"])
+    if not getattr(request, "param", {}).get("twin"):          # another measured field: a different rule, no disagreement with the manager rule
+        evil.update(condition={"field": "request.line_item_count", "op": "gte", "value": 50, "unit": "items"})
     seed(env, ws, rules=bind(KNOWLEDGE["observed_rules"] + DISTRACTORS + [evil], ws.source_revision_id))
     admin = env.admin_client()
     assert admin.post("/v2/business/analyse", json={"workspace_id": env.ws}).status_code == 200
@@ -199,4 +204,27 @@ def test_change_request_is_understood_shown_and_confirmed_without_changing_a_rul
     page.get_by_test_id("chg-confirm").click()
     expect(page.get_by_test_id("chg-confirmed")).to_contain_text("No rule has been changed", timeout=WAIT)
     assert admin.get("/v2/business/knowledge", params={"workspace_id": env.ws}).json()["accepted"] == before
+    assert not page._errors, page._errors
+
+
+@pytest.mark.parametrize("ui", [{"twin": True}], indirect=True)
+def test_an_indistinguishable_sibling_rule_is_asked_about_never_picked(ui, pw_browser):
+    """Contract 8 through the real caller: the model names one of two rules with the same field, actor, outcome and source place; the server asks which one is
+    meant (both named, markup shown as text), offers no confirmation, and changes nothing."""
+    env, admin, model, server = ui
+    page = sign_in(pw_browser, server, env.ws, env.req, f"cred-r-{env.nonce}")
+    page.get_by_test_id("chg-input").fill("Raise the standard manager approval threshold from 1,000,000 to 1,500,000 JPY.")
+    page.get_by_test_id("chg-submit").click()
+    box = page.get_by_test_id("chg-understanding")
+    expect(box).to_have_attribute("data-status", "CLARIFY", timeout=WAIT)
+    expect(box).to_contain_text("more than one rule fits")
+    expect(box).to_contain_text("Purchases of 1,000,000 JPY or more need manager approval")
+    expect(box).to_contain_text("<b id='xss-b'>bold</b>")                                       # the other rule's title, as text
+    expect(page.locator("#xss-b")).to_have_count(0)
+    expect(page.get_by_test_id("chg-confirm")).to_have_count(0)                                    # nothing to confirm until the person chooses
+    before = admin.get("/v2/business/knowledge", params={"workspace_id": env.ws}).json()["accepted"]
+    assert model.calls == 1
+    page.reload()
+    expect(page.get_by_test_id("chg-understanding")).to_have_attribute("data-status", "CLARIFY", timeout=WAIT)
+    assert model.calls == 1 and admin.get("/v2/business/knowledge", params={"workspace_id": env.ws}).json()["accepted"] == before
     assert not page._errors, page._errors

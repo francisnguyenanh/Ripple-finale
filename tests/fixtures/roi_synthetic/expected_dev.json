@@ -1,0 +1,1134 @@
+{
+ "schema": "ripple-roi-synthetic/1",
+ "split": "dev",
+ "computed_by": "oracle.py (independent of the engine)",
+ "scenarios": {
+  "S1": {
+   "denominators": {
+    "records_in": 341,
+    "cohort": 301,
+    "replayed": 301,
+    "unsupported": 0
+   },
+   "baseline": {
+    "approvals": 218,
+    "director_required": 31,
+    "requires_approval": 184,
+    "deny": 0,
+    "allow": 117
+   },
+   "target": {
+    "approvals": 177,
+    "director_required": 31,
+    "requires_approval": 146,
+    "deny": 0,
+    "allow": 155
+   },
+   "changes": {
+    "count": 41,
+    "value_jpy": "51168903.99",
+    "by_band": {
+     "1m_to_2m": {
+      "count": 41,
+      "value_jpy": "51168903.99"
+     }
+    },
+    "director_delta": 0,
+    "approvals_delta": -41
+   },
+   "effort": {
+    "baseline_hours": "72.67",
+    "target_hours": "59.00",
+    "delta_hours": "-13.67",
+    "delta_hours_range": [
+     "-6.83",
+     "-20.50"
+    ]
+   },
+   "unsupported_ids": [],
+   "unsupported_value_jpy": "0",
+   "excluded": [
+    [
+     "D-00006",
+     "unsupported_currency"
+    ],
+    [
+     "D-00030",
+     "outside_window"
+    ],
+    [
+     "D-00031",
+     "outside_window"
+    ],
+    [
+     "D-00044",
+     "outside_window"
+    ],
+    [
+     "D-00048",
+     "bad_amount"
+    ],
+    [
+     "D-00055",
+     "outside_window"
+    ],
+    [
+     "D-00059",
+     "outside_window"
+    ],
+    [
+     "D-00066",
+     "outside_window"
+    ],
+    [
+     "D-00070",
+     "outside_window"
+    ],
+    [
+     "D-00108",
+     "outside_window"
+    ],
+    [
+     "D-00126",
+     "outside_window"
+    ],
+    [
+     "D-00135",
+     "outside_window"
+    ],
+    [
+     "D-00156",
+     "bad_amount"
+    ],
+    [
+     "D-00157",
+     "outside_window"
+    ],
+    [
+     "D-00163",
+     "unsupported_currency"
+    ],
+    [
+     "D-00170",
+     "outside_window"
+    ],
+    [
+     "D-00188",
+     "bad_amount"
+    ],
+    [
+     "D-00196",
+     "outside_window"
+    ],
+    [
+     "D-00268",
+     "outside_window"
+    ],
+    [
+     "D-00287",
+     "missing_fields"
+    ],
+    [
+     "D-00295",
+     "bad_amount"
+    ],
+    [
+     "D-E025",
+     "outside_window"
+    ],
+    [
+     "D-E026",
+     "outside_window"
+    ],
+    [
+     null,
+     "missing_id"
+    ],
+    [
+     null,
+     "missing_id"
+    ],
+    [
+     "D-E032",
+     "missing_fields"
+    ],
+    [
+     "D-E033",
+     "missing_fields"
+    ],
+    [
+     "D-E034",
+     "missing_fields"
+    ],
+    [
+     "D-E040",
+     "duplicate_id"
+    ],
+    [
+     "D-E041",
+     "duplicate_id"
+    ],
+    [
+     "D-E060",
+     "bad_amount"
+    ],
+    [
+     "D-E061",
+     "bad_amount"
+    ],
+    [
+     "D-E062",
+     "bad_amount"
+    ],
+    [
+     "D-E063",
+     "bad_amount"
+    ],
+    [
+     "D-E064",
+     "bad_amount"
+    ],
+    [
+     "D-E065",
+     "unsupported_currency"
+    ],
+    [
+     "D-E066",
+     "unsupported_currency"
+    ],
+    [
+     "D-E067",
+     "bad_date"
+    ],
+    [
+     "D-E068",
+     "bad_date"
+    ],
+    [
+     "D-E069",
+     "bad_date"
+    ]
+   ],
+   "changed_ids": [
+    "D-00008",
+    "D-00032",
+    "D-00038",
+    "D-00054",
+    "D-00058",
+    "D-00065",
+    "D-00080",
+    "D-00091",
+    "D-00105",
+    "D-00114",
+    "D-00119",
+    "D-00120",
+    "D-00122",
+    "D-00130",
+    "D-00136",
+    "D-00141",
+    "D-00142",
+    "D-00158",
+    "D-00162",
+    "D-00164",
+    "D-00169",
+    "D-00172",
+    "D-00181",
+    "D-00186",
+    "D-00192",
+    "D-00198",
+    "D-00207",
+    "D-00212",
+    "D-00226",
+    "D-00232",
+    "D-00234",
+    "D-00251",
+    "D-00274",
+    "D-00281",
+    "D-E001",
+    "D-E002",
+    "D-E021",
+    "D-E023",
+    "D-E024",
+    "D-E040",
+    "D-E053"
+   ],
+   "coverage": {
+    "baseline": [
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy",
+     "rule-high-risk-director",
+     "rule-standard-manager-review"
+    ],
+    "target": [
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy",
+     "rule-high-risk-director",
+     "rule-standard-manager-review-target"
+    ],
+    "baseline_superseded": [],
+    "target_superseded": [
+     "rule-standard-manager-review"
+    ],
+    "baseline_not_evaluated": [
+     [
+      "rule-emergency-routing",
+      "rule_condition_unknown"
+     ]
+    ],
+    "target_not_evaluated": [
+     [
+      "rule-emergency-routing",
+      "rule_condition_unknown"
+     ]
+    ]
+   },
+   "cost": {
+    "delta_cost_range": [
+     "-41000.00",
+     "-123000.00"
+    ]
+   }
+  },
+  "S2": {
+   "denominators": {
+    "records_in": 341,
+    "cohort": 301,
+    "replayed": 301,
+    "unsupported": 0
+   },
+   "baseline": {
+    "approvals": 218,
+    "director_required": 31,
+    "requires_approval": 184,
+    "deny": 0,
+    "allow": 117
+   },
+   "target": {
+    "approvals": 151,
+    "director_required": 31,
+    "requires_approval": 121,
+    "deny": 0,
+    "allow": 180
+   },
+   "changes": {
+    "count": 67,
+    "value_jpy": "96700263.99",
+    "by_band": {
+     "1m_to_2m": {
+      "count": 67,
+      "value_jpy": "96700263.99"
+     }
+    },
+    "director_delta": 0,
+    "approvals_delta": -67
+   },
+   "effort": {
+    "baseline_hours": "72.67",
+    "target_hours": "50.33",
+    "delta_hours": "-22.33",
+    "delta_hours_range": [
+     "-11.17",
+     "-33.50"
+    ]
+   },
+   "unsupported_ids": [],
+   "unsupported_value_jpy": "0",
+   "excluded": [
+    [
+     "D-00006",
+     "unsupported_currency"
+    ],
+    [
+     "D-00030",
+     "outside_window"
+    ],
+    [
+     "D-00031",
+     "outside_window"
+    ],
+    [
+     "D-00044",
+     "outside_window"
+    ],
+    [
+     "D-00048",
+     "bad_amount"
+    ],
+    [
+     "D-00055",
+     "outside_window"
+    ],
+    [
+     "D-00059",
+     "outside_window"
+    ],
+    [
+     "D-00066",
+     "outside_window"
+    ],
+    [
+     "D-00070",
+     "outside_window"
+    ],
+    [
+     "D-00108",
+     "outside_window"
+    ],
+    [
+     "D-00126",
+     "outside_window"
+    ],
+    [
+     "D-00135",
+     "outside_window"
+    ],
+    [
+     "D-00156",
+     "bad_amount"
+    ],
+    [
+     "D-00157",
+     "outside_window"
+    ],
+    [
+     "D-00163",
+     "unsupported_currency"
+    ],
+    [
+     "D-00170",
+     "outside_window"
+    ],
+    [
+     "D-00188",
+     "bad_amount"
+    ],
+    [
+     "D-00196",
+     "outside_window"
+    ],
+    [
+     "D-00268",
+     "outside_window"
+    ],
+    [
+     "D-00287",
+     "missing_fields"
+    ],
+    [
+     "D-00295",
+     "bad_amount"
+    ],
+    [
+     "D-E025",
+     "outside_window"
+    ],
+    [
+     "D-E026",
+     "outside_window"
+    ],
+    [
+     null,
+     "missing_id"
+    ],
+    [
+     null,
+     "missing_id"
+    ],
+    [
+     "D-E032",
+     "missing_fields"
+    ],
+    [
+     "D-E033",
+     "missing_fields"
+    ],
+    [
+     "D-E034",
+     "missing_fields"
+    ],
+    [
+     "D-E040",
+     "duplicate_id"
+    ],
+    [
+     "D-E041",
+     "duplicate_id"
+    ],
+    [
+     "D-E060",
+     "bad_amount"
+    ],
+    [
+     "D-E061",
+     "bad_amount"
+    ],
+    [
+     "D-E062",
+     "bad_amount"
+    ],
+    [
+     "D-E063",
+     "bad_amount"
+    ],
+    [
+     "D-E064",
+     "bad_amount"
+    ],
+    [
+     "D-E065",
+     "unsupported_currency"
+    ],
+    [
+     "D-E066",
+     "unsupported_currency"
+    ],
+    [
+     "D-E067",
+     "bad_date"
+    ],
+    [
+     "D-E068",
+     "bad_date"
+    ],
+    [
+     "D-E069",
+     "bad_date"
+    ]
+   ],
+   "changed_ids": [
+    "D-00005",
+    "D-00008",
+    "D-00012",
+    "D-00015",
+    "D-00017",
+    "D-00032",
+    "D-00033",
+    "D-00038",
+    "D-00049",
+    "D-00053",
+    "D-00054",
+    "D-00058",
+    "D-00062",
+    "D-00065",
+    "D-00067",
+    "D-00068",
+    "D-00080",
+    "D-00086",
+    "D-00091",
+    "D-00098",
+    "D-00103",
+    "D-00105",
+    "D-00106",
+    "D-00110",
+    "D-00114",
+    "D-00119",
+    "D-00120",
+    "D-00122",
+    "D-00130",
+    "D-00136",
+    "D-00141",
+    "D-00142",
+    "D-00143",
+    "D-00152",
+    "D-00158",
+    "D-00162",
+    "D-00164",
+    "D-00169",
+    "D-00172",
+    "D-00181",
+    "D-00186",
+    "D-00192",
+    "D-00198",
+    "D-00199",
+    "D-00206",
+    "D-00207",
+    "D-00212",
+    "D-00226",
+    "D-00228",
+    "D-00232",
+    "D-00234",
+    "D-00251",
+    "D-00256",
+    "D-00274",
+    "D-00281",
+    "D-00283",
+    "D-E001",
+    "D-E002",
+    "D-E004",
+    "D-E020",
+    "D-E021",
+    "D-E022",
+    "D-E023",
+    "D-E024",
+    "D-E040",
+    "D-E050",
+    "D-E053"
+   ],
+   "coverage": {
+    "baseline": [
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy",
+     "rule-high-risk-director",
+     "rule-standard-manager-review"
+    ],
+    "target": [
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy",
+     "rule-high-risk-director",
+     "rule-standard-manager-review-target"
+    ],
+    "baseline_superseded": [],
+    "target_superseded": [
+     "rule-standard-manager-review"
+    ],
+    "baseline_not_evaluated": [
+     [
+      "rule-emergency-routing",
+      "rule_condition_unknown"
+     ]
+    ],
+    "target_not_evaluated": [
+     [
+      "rule-emergency-routing",
+      "rule_condition_unknown"
+     ],
+     [
+      "rule-vendor-country-review",
+      "fields_not_in_dataset"
+     ]
+    ]
+   },
+   "cost": {
+    "delta_cost_range": [
+     "-67000.00",
+     "-201000.00"
+    ]
+   }
+  },
+  "S3": {
+   "denominators": {
+    "records_in": 341,
+    "cohort": 301,
+    "replayed": 11,
+    "unsupported": 290
+   },
+   "baseline": {
+    "approvals": 0,
+    "director_required": 0,
+    "requires_approval": 0,
+    "deny": 0,
+    "allow": 11
+   },
+   "target": {
+    "approvals": 0,
+    "director_required": 0,
+    "requires_approval": 0,
+    "deny": 0,
+    "allow": 11
+   },
+   "changes": {
+    "count": 0,
+    "value_jpy": "0",
+    "by_band": {},
+    "director_delta": 0,
+    "approvals_delta": 0
+   },
+   "effort": {
+    "baseline_hours": "0.00",
+    "target_hours": "0.00",
+    "delta_hours": "0.00",
+    "delta_hours_range": [
+     "0.00",
+     "0.00"
+    ]
+   },
+   "unsupported_ids": [
+    "D-00000",
+    "D-00001",
+    "D-00002",
+    "D-00003",
+    "D-00004",
+    "D-00005",
+    "D-00007",
+    "D-00008",
+    "D-00009",
+    "D-00010",
+    "D-00011",
+    "D-00012",
+    "D-00013",
+    "D-00014",
+    "D-00015",
+    "D-00016",
+    "D-00017",
+    "D-00018",
+    "D-00019",
+    "D-00020",
+    "D-00021",
+    "D-00022",
+    "D-00023",
+    "D-00024",
+    "D-00025",
+    "D-00026",
+    "D-00027",
+    "D-00029",
+    "D-00032",
+    "D-00033",
+    "D-00034",
+    "D-00035",
+    "D-00036",
+    "D-00037",
+    "D-00038",
+    "D-00039",
+    "D-00040",
+    "D-00041",
+    "D-00042",
+    "D-00043",
+    "D-00045",
+    "D-00046",
+    "D-00047",
+    "D-00049",
+    "D-00050",
+    "D-00051",
+    "D-00052",
+    "D-00053",
+    "D-00054",
+    "D-00056",
+    "D-00058",
+    "D-00061",
+    "D-00062",
+    "D-00063",
+    "D-00064",
+    "D-00065",
+    "D-00067",
+    "D-00068",
+    "D-00069",
+    "D-00071",
+    "D-00072",
+    "D-00073",
+    "D-00074",
+    "D-00075",
+    "D-00076",
+    "D-00077",
+    "D-00078",
+    "D-00079",
+    "D-00080",
+    "D-00081",
+    "D-00082",
+    "D-00083",
+    "D-00084",
+    "D-00085",
+    "D-00086",
+    "D-00087",
+    "D-00088",
+    "D-00089",
+    "D-00090",
+    "D-00091",
+    "D-00092",
+    "D-00093",
+    "D-00094",
+    "D-00095",
+    "D-00096",
+    "D-00097",
+    "D-00098",
+    "D-00099",
+    "D-00100",
+    "D-00101",
+    "D-00102",
+    "D-00103",
+    "D-00104",
+    "D-00105",
+    "D-00106",
+    "D-00107",
+    "D-00109",
+    "D-00110",
+    "D-00111",
+    "D-00112",
+    "D-00113",
+    "D-00114",
+    "D-00115",
+    "D-00116",
+    "D-00117",
+    "D-00118",
+    "D-00119",
+    "D-00120",
+    "D-00121",
+    "D-00122",
+    "D-00123",
+    "D-00124",
+    "D-00125",
+    "D-00127",
+    "D-00128",
+    "D-00129",
+    "D-00130",
+    "D-00131",
+    "D-00132",
+    "D-00133",
+    "D-00134",
+    "D-00136",
+    "D-00137",
+    "D-00138",
+    "D-00139",
+    "D-00140",
+    "D-00141",
+    "D-00142",
+    "D-00143",
+    "D-00144",
+    "D-00145",
+    "D-00146",
+    "D-00147",
+    "D-00148",
+    "D-00149",
+    "D-00150",
+    "D-00151",
+    "D-00152",
+    "D-00153",
+    "D-00154",
+    "D-00155",
+    "D-00158",
+    "D-00159",
+    "D-00160",
+    "D-00161",
+    "D-00162",
+    "D-00164",
+    "D-00165",
+    "D-00166",
+    "D-00167",
+    "D-00168",
+    "D-00169",
+    "D-00171",
+    "D-00172",
+    "D-00173",
+    "D-00174",
+    "D-00175",
+    "D-00176",
+    "D-00177",
+    "D-00178",
+    "D-00179",
+    "D-00180",
+    "D-00181",
+    "D-00184",
+    "D-00185",
+    "D-00186",
+    "D-00187",
+    "D-00189",
+    "D-00190",
+    "D-00191",
+    "D-00192",
+    "D-00193",
+    "D-00194",
+    "D-00195",
+    "D-00197",
+    "D-00198",
+    "D-00199",
+    "D-00200",
+    "D-00201",
+    "D-00202",
+    "D-00203",
+    "D-00204",
+    "D-00205",
+    "D-00206",
+    "D-00207",
+    "D-00208",
+    "D-00209",
+    "D-00210",
+    "D-00211",
+    "D-00212",
+    "D-00213",
+    "D-00214",
+    "D-00215",
+    "D-00216",
+    "D-00217",
+    "D-00218",
+    "D-00220",
+    "D-00221",
+    "D-00222",
+    "D-00223",
+    "D-00224",
+    "D-00225",
+    "D-00226",
+    "D-00227",
+    "D-00228",
+    "D-00229",
+    "D-00230",
+    "D-00231",
+    "D-00232",
+    "D-00233",
+    "D-00234",
+    "D-00235",
+    "D-00236",
+    "D-00237",
+    "D-00238",
+    "D-00239",
+    "D-00240",
+    "D-00241",
+    "D-00242",
+    "D-00243",
+    "D-00244",
+    "D-00245",
+    "D-00246",
+    "D-00248",
+    "D-00249",
+    "D-00251",
+    "D-00252",
+    "D-00253",
+    "D-00254",
+    "D-00255",
+    "D-00256",
+    "D-00257",
+    "D-00259",
+    "D-00260",
+    "D-00261",
+    "D-00262",
+    "D-00263",
+    "D-00264",
+    "D-00265",
+    "D-00266",
+    "D-00267",
+    "D-00269",
+    "D-00270",
+    "D-00271",
+    "D-00272",
+    "D-00273",
+    "D-00274",
+    "D-00275",
+    "D-00276",
+    "D-00277",
+    "D-00278",
+    "D-00279",
+    "D-00280",
+    "D-00281",
+    "D-00282",
+    "D-00283",
+    "D-00284",
+    "D-00285",
+    "D-00286",
+    "D-00288",
+    "D-00289",
+    "D-00290",
+    "D-00291",
+    "D-00292",
+    "D-00293",
+    "D-00294",
+    "D-00296",
+    "D-00297",
+    "D-00299",
+    "D-E000",
+    "D-E001",
+    "D-E002",
+    "D-E003",
+    "D-E004",
+    "D-E005",
+    "D-E006",
+    "D-E007",
+    "D-E008",
+    "D-E020",
+    "D-E021",
+    "D-E022",
+    "D-E023",
+    "D-E024",
+    "D-E040",
+    "D-E041",
+    "D-E050",
+    "D-E051",
+    "D-E053",
+    "D-E054",
+    "D-E055"
+   ],
+   "unsupported_value_jpy": "748530710.99",
+   "excluded": [
+    [
+     "D-00006",
+     "unsupported_currency"
+    ],
+    [
+     "D-00030",
+     "outside_window"
+    ],
+    [
+     "D-00031",
+     "outside_window"
+    ],
+    [
+     "D-00044",
+     "outside_window"
+    ],
+    [
+     "D-00048",
+     "bad_amount"
+    ],
+    [
+     "D-00055",
+     "outside_window"
+    ],
+    [
+     "D-00059",
+     "outside_window"
+    ],
+    [
+     "D-00066",
+     "outside_window"
+    ],
+    [
+     "D-00070",
+     "outside_window"
+    ],
+    [
+     "D-00108",
+     "outside_window"
+    ],
+    [
+     "D-00126",
+     "outside_window"
+    ],
+    [
+     "D-00135",
+     "outside_window"
+    ],
+    [
+     "D-00156",
+     "bad_amount"
+    ],
+    [
+     "D-00157",
+     "outside_window"
+    ],
+    [
+     "D-00163",
+     "unsupported_currency"
+    ],
+    [
+     "D-00170",
+     "outside_window"
+    ],
+    [
+     "D-00188",
+     "bad_amount"
+    ],
+    [
+     "D-00196",
+     "outside_window"
+    ],
+    [
+     "D-00268",
+     "outside_window"
+    ],
+    [
+     "D-00287",
+     "missing_fields"
+    ],
+    [
+     "D-00295",
+     "bad_amount"
+    ],
+    [
+     "D-E025",
+     "outside_window"
+    ],
+    [
+     "D-E026",
+     "outside_window"
+    ],
+    [
+     null,
+     "missing_id"
+    ],
+    [
+     null,
+     "missing_id"
+    ],
+    [
+     "D-E032",
+     "missing_fields"
+    ],
+    [
+     "D-E033",
+     "missing_fields"
+    ],
+    [
+     "D-E034",
+     "missing_fields"
+    ],
+    [
+     "D-E040",
+     "duplicate_id"
+    ],
+    [
+     "D-E041",
+     "duplicate_id"
+    ],
+    [
+     "D-E060",
+     "bad_amount"
+    ],
+    [
+     "D-E061",
+     "bad_amount"
+    ],
+    [
+     "D-E062",
+     "bad_amount"
+    ],
+    [
+     "D-E063",
+     "bad_amount"
+    ],
+    [
+     "D-E064",
+     "bad_amount"
+    ],
+    [
+     "D-E065",
+     "unsupported_currency"
+    ],
+    [
+     "D-E066",
+     "unsupported_currency"
+    ],
+    [
+     "D-E067",
+     "bad_date"
+    ],
+    [
+     "D-E068",
+     "bad_date"
+    ],
+    [
+     "D-E069",
+     "bad_date"
+    ]
+   ],
+   "changed_ids": [],
+   "coverage": {
+    "baseline": [
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy",
+     "rule-high-risk-director",
+     "rule-standard-manager-review"
+    ],
+    "target": [
+     "rule-capex-finance-config",
+     "rule-capex-finance-policy",
+     "rule-high-risk-director",
+     "rule-standard-manager-review-target"
+    ],
+    "baseline_superseded": [],
+    "target_superseded": [
+     "rule-standard-manager-review"
+    ],
+    "baseline_not_evaluated": [
+     [
+      "rule-emergency-routing",
+      "rule_condition_unknown"
+     ]
+    ],
+    "target_not_evaluated": [
+     [
+      "rule-emergency-routing",
+      "rule_condition_unknown"
+     ]
+    ]
+   },
+   "cost": "not_estimated"
+  }
+ }
+}

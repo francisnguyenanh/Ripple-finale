@@ -15,7 +15,7 @@ import datetime
 from decimal import Decimal
 from typing import Iterable, Mapping, Optional
 
-from core.change_intelligence.v2.policy_decision import decide
+from core.change_intelligence.v2.policy_decision import decide, effective_rules
 from core.change_intelligence.v2.serialize import canonical_hash
 
 SCHEMA = "ripple-roi-replay/1"
@@ -151,6 +151,13 @@ def evaluable_rules(rules: Iterable[Mapping], fact_keys: Iterable[str] = FACT_KE
     return kept, out
 
 
+def coverage_of(kept: list, not_evaluated: list) -> dict:
+    """The rules that decide, as the evaluator applies them: a decided TARGET replaces the OBSERVED rule of the same root, so the replaced rule is listed apart and
+    never as evaluated."""
+    effective, superseded = effective_rules(kept)
+    return {"rules_evaluated": sorted(r["rule_id"] for r in effective), "rules_superseded_by_target": superseded, "rules_not_evaluated": not_evaluated}
+
+
 def replay(records: Iterable[Mapping], baseline: Mapping, target: Mapping, *, assumptions: Mapping, window_from: Optional[str] = None, window_to: Optional[str] = None,
            dataset_label: str = "") -> dict:
     """The baseline-vs-target report. `baseline` / `target`: {"label", "rules": [...], "gaps": [...]} as the product stores them. `assumptions`:
@@ -167,8 +174,7 @@ def replay(records: Iterable[Mapping], baseline: Mapping, target: Mapping, *, as
     base_rules, base_out = evaluable_rules(baseline.get("rules") or [])
     target_rules, target_out = evaluable_rules(target.get("rules") or [])
     coverage = {"dataset_fields": list(FACT_KEYS),
-                "baseline": {"rules_evaluated": sorted(r["rule_id"] for r in base_rules), "rules_not_evaluated": base_out},
-                "target": {"rules_evaluated": sorted(r["rule_id"] for r in target_rules), "rules_not_evaluated": target_out},
+                "baseline": coverage_of(base_rules, base_out), "target": coverage_of(target_rules, target_out),
                 "note": "only rules whose fields the dataset carries are replayed; the others are listed here and decide nothing in this report"}
     for rec in q["valid"]:
         facts = facts_of(rec)

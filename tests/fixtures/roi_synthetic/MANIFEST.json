@@ -1,0 +1,27 @@
+{
+ "schema": "ripple-roi-synthetic/1",
+ "synthetic": true,
+ "seeds": {
+  "dev": 20261027,
+  "acceptance": 74151
+ },
+ "sizes_generated": {
+  "dev": 300,
+  "acceptance": 2000
+ },
+ "window": {
+  "from": "2026-04-01T00:00:00Z",
+  "to": "2026-10-01T00:00:00Z"
+ },
+ "sha256": {
+  "scenarios.json": "ec5ea59c7f1d8d9af99664a58e547e3b85d32784f4d177e955b1f22278571c50",
+  "dev.json": "94d9f72585deb887d557b7f518795a4bea316c6b87ab7b19a2e9bdd7163a07cc",
+  "acceptance.json": "626c1337f6dcada96110d711100efce34838d723b71deacea74d3a4e7d774fea",
+  "expected_dev.json": "21e9e0d8915afc0da56415a589e5f513d225d90036bbb0eb3b8abb3c210dbbfe",
+  "expected_acceptance.json": "096fc4207329fee4e581b12c3b0b7a38024d6db272298fefdca17f2c13cb8b31"
+ },
+ "sources": {
+  "generate.py": "fa2034e55967845af770d007bc07dbdf6897f571453498f54f9f1e588975f974",
+  "oracle.py": "c4edc6f4b30c7fad9af05c01ffb8dfd3203a496f7be6f76181a76d477b5cafe2"
+ }
+}
