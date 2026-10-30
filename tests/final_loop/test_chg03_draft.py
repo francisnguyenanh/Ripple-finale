@@ -201,8 +201,8 @@ def test_semantic_diff_hash_depends_on_the_operations_only_and_the_draft_hash_on
 
 # ---- model guidance: text only, downgrade only ----------------------------------------------------------------------------------------------------------
 
-def gobj(items=(), summary="Raise the threshold; update the policy wording by hand.", questions=()):
-    return {"summary": summary, "items": list(items), "questions_for_human": list(questions)}
+def gobj(items=(), summary="Raise the threshold; update the policy wording by hand.", questions=(), effects=()):
+    return {"summary": summary, "items": list(items), "questions_for_human": list(questions), "effects": list(effects)}
 
 
 def gitem(ref="F001", instruction="Change the value in the approval settings and re-run the routing tests.", hold=False, rationale="plain"):
@@ -268,6 +268,22 @@ def test_rendering_hides_paths_locators_and_instructions_without_evidence_rights
     tech_plain = bd.render(m, mode="technical", can_read_evidence=False, guidance_written_with_evidence=False)
     assert "file_actions" not in tech_plain["technical"] and tech_plain["files"] == [] and tech_plain["guidance"]["summary"]
 
+
+
+def test_the_server_proven_effects_are_shown_to_every_reader_in_business_words_whatever_the_ai_text_says():
+    """Revision 2 (A101 item AEV4-G-09): the model omitted a server fact (a range no other rule reaches) and the reader never saw it. The rendered draft now
+    carries every effect as the server's own statement, for a reader with or without evidence rights, with no id, path or location."""
+    d = draft(VALUE)
+    assert d["effects"], "the fixture change moves a threshold, so the server states what it does to cases"
+    m = bd.merge_guidance(d, bd.resolve_guidance(gobj(items=[gitem("F001", instruction="Edit the threshold.")], summary="Raise the threshold."), d, LIMITS),
+                          state={"status": "completed"})
+    for can in (False, True):
+        out = bd.render(m, mode="business", can_read_evidence=can)
+        assert out["effects"] == [{"effect": e["effect"], "text": e["text"]} for e in d["effects"]]
+        blob = json.dumps(out["effects"])
+        assert "rule-" not in blob and ".yaml" not in blob and ".md" not in blob
+    old = {k: v for k, v in m.items() if k != "effects"}                              # a draft stored before effects existed renders with none
+    assert bd.render(old, mode="business", can_read_evidence=False)["effects"] == []
 
 # ---- real routes, worker, job/budget contract and store ---------------------------------------------------------------------------------------------------
 

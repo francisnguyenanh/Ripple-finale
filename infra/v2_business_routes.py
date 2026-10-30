@@ -1033,19 +1033,20 @@ def _dependency_input(store, tenant, workspace_id, change_id, got):
     if rec is None:
         return [], {"status": "not_requested", "reason": "No model dependency check was run: only stored relations were used.", "complete": False}
     st = _qa_state(rec)
+    n = (rec.get("payload") or {}).get("attempt")                                # which of the three attempts this state is (the screen asks the next one)
     if st["status"] == "done" and rec.get("execution_result"):
         res = rec["execution_result"]
         pin_now = (got["report"].get("pin") or {}).get("snapshot_id")
         if pin_now and (res.get("pin") or {}).get("snapshot_id") not in (None, pin_now):
-            return [], {"status": "stale", "reason": "The model dependency check was run on an earlier version of the knowledge; its result is not used.", "complete": False}
+            return [], {"status": "stale", "reason": "The model dependency check was run on an earlier version of the knowledge; its result is not used.", "complete": False, "attempt": n}
         merged = business_impact.merge_dependencies(got["report"], {"accepted": res["accepted"], "rejected": res["rejected"], "notes": res["notes"]}, rules_not_shown=res["rules_not_shown"])
         titles = got["titles"]
         deps = [dict(d, from_title=titles.get(d["from_rule_id"], "?"), to_title=titles.get(d["to_rule_id"], "?")) for d in merged["accepted"]]
         # complete = the model check ran over every rule (coverage of the proposal); the deterministic unknowns are listed on the draft as their own items
-        return deps, {"status": "completed", "reason": None, "complete": not merged["gaps"], "job_id": rec.get("job_id"), "gaps": [g["text"] for g in merged["gaps"]], "evidence_access": bool(res["evidence_access"])}
+        return deps, {"status": "completed", "reason": None, "complete": not merged["gaps"], "job_id": rec.get("job_id"), "gaps": [g["text"] for g in merged["gaps"]], "evidence_access": bool(res["evidence_access"]), "attempt": n}
     if st["status"] in ("failed", "cancelled"):
-        return [], {"status": "failed", "reason": "The model dependency check did not finish; dependencies beyond the stored relations are unknown, not absent.", "complete": False}
-    return [], {"status": "pending", "reason": "The model dependency check is still running.", "complete": False}
+        return [], {"status": "failed", "reason": "The model dependency check did not finish; dependencies beyond the stored relations are unknown, not absent.", "complete": False, "attempt": n}
+    return [], {"status": "pending", "reason": "The model dependency check is still running.", "complete": False, "attempt": n}
 
 
 def dependency_gate(probe, deps_state) -> Optional[dict]:
@@ -1091,7 +1092,9 @@ def _merge_guidance_state(draft, store, tenant, workspace_id, change_id, *, can_
             else:
                 state = {"status": "completed", "reason": None, "job_id": rec.get("job_id"), "attempt": attempt_no, "result_hash": res["result_hash"], "integrity": "ok"}
                 merged = business_draft.merge_guidance(draft, {"summary": res["summary"], "accepted": res["accepted"], "rejected": res["rejected"], "questions": res["questions"],
-                                                               "advice": res.get("advice") or [], "question_items": res.get("question_items") or [], "not_addressed": res["not_addressed"]}, state=state)
+                                                               "advice": res.get("advice") or [], "question_items": res.get("question_items") or [], "not_addressed": res["not_addressed"],
+                                                               "effect_statements": res.get("effect_statements") or [], "effects_coverage": res.get("effects_coverage") or {},
+                                                               "removed": res.get("removed") or []}, state=state)
                 return merged, bool(res.get("evidence_access"))
         elif st["status"] in ("failed", "cancelled"):
             key = next((k for k in _GUIDE_REASON_WORDS if (st["reason"] or "").startswith(k)), None)
@@ -1203,8 +1206,30 @@ def _review_payload(view, *, mode, can_evidence, change_id, store=None, tenant=N
                                                              "by": view["committed"]["committed_by"], "at": view["committed"]["created_at"],
                                                              "pending_implementation": view["committed"]["pending_implementation"] if can_evidence else
                                                              {k: v for k, v in (view["committed"]["pending_implementation"] or {}).items() if k not in ("items", "unresolved")}},
-           "decisions_are_separate": "Confirming the understanding, accepting the knowledge change, approving automatic file edits and accepting the result are four separate decisions; none implies another."}
+           "decisions_are_separate": "Confirming the understanding, accepting the knowledge change, approving automatic file edits and accepting the result are four separate decisions; none implies another.",
+           "ai_steps": _ai_steps(view)}
     return out
+
+
+def _ai_steps(view) -> dict:
+    """D2a equivalent flow (owner decision 2026-10-27): the review page asks for the two AI steps of a confirmed change itself — the model dependency check and the
+    guidance on the server-built draft. What this reader may ask, the next attempt, and why guidance may not run yet (the same gate the guidance route enforces).
+    Nothing is run here; the page calls the existing routes, which check permissions, the provider allowlist and the budget again."""
+    from infra import provider_gate
+    perms = set(view.get("perms") or ())
+    gate = dependency_gate(view["probe"], view["dep_state"]) if view.get("probe") is not None else None
+    dep, guide = view["dep_state"] or {}, (view["draft"].get("guidance") or {})
+
+    def nxt(state):
+        st, n = state.get("status"), state.get("attempt")
+        if st in (None, "not_requested"):
+            return 1
+        return (n or 1) + 1 if st in ("failed", "stale", "tampered") and (n or 1) < 3 else None
+    return {"dependencies": {"may_ask": {"intent.create", "ai.use"} <= perms and provider_gate.role_refusal("change.impact_deps") is None, "next_attempt": nxt(dep),
+                             "kind_enabled": provider_gate.role_refusal("change.impact_deps") is None},
+            "guidance": {"may_ask": {"change.prepare", "ai.use"} <= perms and provider_gate.role_refusal("change.draft_guidance") is None, "next_attempt": nxt(guide),
+                         "kind_enabled": provider_gate.role_refusal("change.draft_guidance") is None,
+                         "gate": None if gate is None else {"code": gate["code"], "next_action": gate["next_action"].replace(" (POST .../impact/dependencies)", "")}}}
 
 
 @router.get("/v2/business/changes/{change_id}/review")

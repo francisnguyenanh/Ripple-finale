@@ -309,7 +309,7 @@ def resolve(obj: Mapping, request: str, rules: Mapping[str, Mapping], relations:
     for raw in obj["operations"]:
         quote = safe_text(raw["user_quote"], 400)
         if quote is None or _norm(quote) not in req_norm:
-            rejected.append({"reason": "quote_not_in_request", "kind": raw["kind"]})
+            rejected.append({"reason": "quote_not_in_request", "kind": raw["kind"], "quote": (str(raw.get("user_quote") or ""))[:200]})
             continue
         quotes.append(quote)
         if raw["kind"] in bk.UNSUPPORTED_OPERATION_KINDS or raw["kind"] not in bk.OPERATION_KINDS:
@@ -841,13 +841,107 @@ def _ambiguous_target(rule_id: str, rules: Mapping, req_norm: str, where: Option
 
 
 _VAGUE_ACTOR = frozenset("somebody someone anybody anyone everybody everyone whoever person people someone-else somebody-else staff".split())
+# personal pronouns name a person, never a role (shared with the answer reading); "us" is left out of the role-slug check only, where it may be the country
+PERSONAL_PRONOUNS = frozenset({"he", "she", "they", "him", "her", "hers", "his", "them", "their", "theirs", "himself", "herself", "themselves", "themself", "i", "me",
+                               "my", "myself", "we", "us", "our", "ourselves", "you", "your", "yourself"})
 
 
 def _vague_actor(role: str) -> bool:
     """A role slug made only of indefinite words ("somebody", "someone else") names no one: asked, never accepted (UNDERSTAND-V12 U12-09)."""
     words = [w for w in role.replace("role-", "").split("-") if w not in ("a", "an", "the", "else")]
-    # an indefinite pronoun anywhere ("someone senior", "somebody from finance") names no one; a role is a title, not a description of a person
-    return not words or any(w in _VAGUE_ACTOR for w in words)
+    # an indefinite pronoun anywhere ("someone senior", "somebody from finance") names no one; a role is a title, not a description of a person.
+    # R5 (2026-10-28): nor does a personal pronoun ("She should close the slopes" written as role-she), the class fixed for answer reading in A110
+    return not words or any(w in _VAGUE_ACTOR or (w in PERSONAL_PRONOUNS and w != "us") for w in words)
+
+
+def _cond_fields(cond) -> set:
+    if isinstance(cond, Mapping):
+        if "field" in cond:
+            return {cond["field"]}
+        return set().union(*(_cond_fields(c) for k in ("all", "any") for c in cond.get(k, []))) | (_cond_fields(cond["not"]) if "not" in cond else set())
+    return set()
+
+
+def _flips_side(current, desired) -> bool:
+    """A condition edit that is a bare NOT over fields the current condition (itself not a negation) already measures: the rule would apply on the other side
+    of its own comparison. A NOT inside an all / any (a band, an exception-like carve-out) is not a flip and reads as before."""
+    return (isinstance(desired, Mapping) and set(desired) == {"not"} and isinstance(current, Mapping) and set(current) != {"not"}
+            and bool(_cond_fields(desired["not"])) and _cond_fields(desired["not"]) <= _cond_fields(current))
+
+
+_UP, _DOWN = {"gte", "gt"}, {"lte", "lt"}
+
+
+def _leaves_of(cond) -> list:
+    if isinstance(cond, Mapping):
+        if "field" in cond and "op" in cond:
+            return [cond]
+        return [l for v in cond.values() for l in _leaves_of(v)]
+    if isinstance(cond, list):
+        return [l for c in cond for l in _leaves_of(c)]
+    return []
+
+
+def _inverts_direction(current, desired) -> bool:
+    """Hardening A109 (2026-10-27, items AEV7-U-04 / U-05): "close a slope when its score is NOT below 3" for a rule on "score < 3" was written directly as
+    "score >= 3", and "approve only when the refund is NOT 200 CHF or more" for a rule on ">= 200" as "< 200": no NOT for `_flips_side` to see, yet the rule
+    would apply in the opposite cases. A condition edit whose comparisons on a field the current condition measures all point the other way (up <-> down), and
+    which keeps none of the current comparisons on that field, reverses the rule: asked, never proposed. A band that keeps the current limit and adds one on the
+    other side (the documented "also invalid above 3,000" form) keeps the current comparison and is not a reversal; a moved threshold on the same side is not one."""
+    if not isinstance(current, Mapping) or not isinstance(desired, Mapping) or set(current) == {"not"} or "not" in _cond_fields_keys(desired):
+        return False
+    cur = {}
+    for l in _leaves_of(current):
+        if l.get("op") in _UP | _DOWN:
+            cur.setdefault(l.get("field"), set()).add("up" if l["op"] in _UP else "down")
+    cur_keys = {(l.get("field"), l.get("op"), str(l.get("value"))) for l in _leaves_of(current)}
+    for field, dirs in cur.items():
+        new = [l for l in _leaves_of(desired) if l.get("field") == field and l.get("op") in _UP | _DOWN]
+        if not new or any((l.get("field"), l.get("op"), str(l.get("value"))) in cur_keys for l in new):
+            continue
+        new_dirs = {"up" if l["op"] in _UP else "down" for l in new}
+        if len(dirs) == 1 and len(new_dirs) == 1 and dirs != new_dirs:
+            return True
+    return False
+
+
+_BOOL = {"true": "false", "false": "true"}
+
+
+def _flips_boolean(current, desired) -> bool:
+    """A113 (2026-10-28, AEV9-U-03): "inspect commercial connections in exactly the opposite case" for a rule on `certificate_valid eq false` was written as
+    `eq "true"`: no NOT, no ordered comparison, yet the rule would apply in the opposite cases. A condition edit identical to the current condition except that
+    yes / no comparisons on fields it already measures are turned around (the boolean value swapped, or eq <-> ne on the same value), and nothing else moved,
+    reverses the rule: asked, never proposed. Values are compared as written (True / "true" alike)."""
+    if not isinstance(current, Mapping) or not isinstance(desired, Mapping):
+        return False
+    flipped = [0]
+
+    def same(a, b) -> bool:
+        if isinstance(a, Mapping) and isinstance(b, Mapping):
+            if "field" in a and "op" in a and "field" in b and "op" in b:
+                if a["field"] != b["field"] or (a.get("unit") or "") != (b.get("unit") or ""):
+                    return False
+                va, vb = str(a.get("value")).strip().lower(), str(b.get("value")).strip().lower()
+                if a["op"] == b["op"] and va == vb:
+                    return True
+                if va in _BOOL and ((a["op"] == b["op"] and a["op"] in ("eq", "ne") and vb == _BOOL[va]) or ({a["op"], b["op"]} == {"eq", "ne"} and va == vb)):
+                    flipped[0] += 1
+                    return True
+                return False
+            return set(a) == set(b) and all(same(a[k], b[k]) for k in a)
+        if isinstance(a, list) and isinstance(b, list):
+            return len(a) == len(b) and all(same(x, y) for x, y in zip(a, b))
+        return str(a).strip().lower() == str(b).strip().lower()
+    return same(current, desired) and flipped[0] > 0
+
+
+def _cond_fields_keys(cond) -> set:
+    if isinstance(cond, Mapping):
+        return set(cond) | {k for v in cond.values() for k in _cond_fields_keys(v)}
+    if isinstance(cond, list):
+        return {k for c in cond for k in _cond_fields_keys(c)}
+    return set()
 
 
 def _cond_key(cond):
@@ -920,6 +1014,17 @@ def _decimals(node):
     if isinstance(node, list):
         return [_decimals(x) for x in node]
     return node
+
+
+def read_typed_condition(cond):
+    """A condition given in the typed structured-output schema (contract 7), read the way a condition edit is read: unfilled keys dropped, a composite wins
+    over stray leaf keys, an empty unit is no unit and a currency is written the usual way, and floats become contract values. Used by answer reading (R5)."""
+    if not isinstance(cond, Mapping):
+        return cond
+    given = {k: v for k, v in cond.items() if v not in (None, [], "")}
+    if any(k in given for k in ("any", "all", "not")):
+        given = {k: v for k, v in given.items() if k in ("any", "all", "not")}
+    return _decimals(_clean_units(given))
 
 
 def _given(desired) -> dict:
@@ -1030,6 +1135,10 @@ def _check_desired(kind, desired, rule, req_numbers, req_norm):
         # compared as written values (HK-AEV2 U-16: the model wrote "true" for the stored boolean true)
         if current is not None and (_cond_key(desired) == _cond_key({"not": current})
                                     or (isinstance(current, Mapping) and set(current) == {"not"} and _cond_key(desired) == _cond_key(current["not"]))):
+            raise ValueError("reverses_the_rule")
+        # R2-05b (2026-10-27, HK-AEV2 U-07): "should only go to the depot manager once it passes 30 hours" was written as NOT(hours > 30) for a rule on
+        # "hours > 20": a bare negation over the field the rule already measures puts the rule on the other side of its comparison, whatever the new value. Asked.
+        if _flips_side(current, desired) or _inverts_direction(current, desired) or _flips_boolean(current, desired):
             raise ValueError("reverses_the_rule")
         return rule["condition"], desired
     if kind == "set_exception":

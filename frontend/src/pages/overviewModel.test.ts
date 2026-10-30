@@ -34,6 +34,7 @@ describe("nextStep", () => {
   });
   it("offers a new change only when every dependency is known", () => {
     expect(nextStep(ready, none, "ready").kind).toBe("change");
+    expect(nextStep(ready, none, "ready")).toMatchObject({ to: "questions", params: { ui_section: "change" } });   // D2a: the enabled business change path
     expect(nextStep(ready, none, "failed").kind).toBe("unknown");
     expect(nextStep({ ...ready, questions: null }, none, "ready").kind).toBe("unknown");
     expect(nextStep({ ...ready, rules: null }, none, "ready").kind).toBe("unknown");

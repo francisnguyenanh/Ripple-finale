@@ -49,3 +49,34 @@ export function citationTarget(fact: Rec | null | undefined): string | null {
 export function actionStillCurrent(tv: Rec | null | undefined, action: string): boolean {
   return ((tv?.permitted_actions ?? []) as Rec[]).some((a) => a.action === action && a.allowed && a.current);
 }
+
+// R11 waiting, stopping and no-answer wording. Each sentence says only what the record shows: a question still queued can be stopped before it reaches the model;
+// one already being answered cannot be withdrawn, and if an answer comes it is shown and its cost counted. Nothing claims the provider call or the charge was stopped.
+export const SLOW_AFTER_MS = 20_000;
+
+/** The note under a pending question: whether Stop can still take effect, and after 20 s that it is taking longer than usual. */
+export function pendingNote(phase: unknown, waitedMs: number): string | null {
+  const running = phase === "running";
+  const slow = waitedMs >= SLOW_AFTER_MS ? "This is taking longer than usual. You can keep waiting; if no answer comes, this will say so. " : "";
+  const stop = running ? "It is being answered now and can no longer be stopped; if an answer comes, it is shown here and its cost is counted." : "";
+  return slow || stop ? (slow + stop).trim() : null;
+}
+
+/** What pressing Stop did, as the server reports it after the request. */
+export function cancelNote(outcome: unknown): string | null {
+  if (outcome === "cancelled") return "Stopped: the question had not been sent to the model.";
+  if (outcome === "running") return "It is already being answered and can no longer be stopped. If an answer comes, it is shown here and its cost is counted.";
+  if (outcome === "finished") return "It had already finished.";
+  return null;
+}
+
+/** Why no answer came, in plain words, with the reference support can use to find the job (the stored technical reason stays in the Technical view). */
+export function unavailableText(answer: Rec | null | undefined): string {
+  const why: Record<string, string> = {
+    provider_timeout: "The assistant did not answer in time.",
+    attempt_limit: "The answer could not be completed and is not tried again automatically.",
+    provider_failed: "The model service did not return a usable answer.",
+  };
+  const ref = answer?.reference ? ` Reference: ${String(answer.reference)}.` : "";
+  return `${why[String(answer?.reason_code ?? "")] ?? "No answer was produced."} Nothing was concluded; you can ask again, which is a new paid question.${ref}`;
+}

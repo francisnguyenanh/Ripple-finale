@@ -13,6 +13,7 @@ import { useParam } from "@/lib/param";
 import { useFlow } from "@/features/changes/flow";
 import { failureAdvice } from "@/lib/reasons";
 import type { Rec } from "@/features/changes/types";
+import { EquivalentStep } from "@/components/EquivalentStep";
 
 const q = encodeURIComponent;
 const BASIS: Record<string, string> = {
@@ -119,7 +120,7 @@ export function SimulationAnalysisCard({ ws, simulationJobId, impactJobId }: { w
       {r.status === "none" && (
         <>
           <Muted>No AI reading exists for this simulation. Writing one uses the paid model (one call, within your AI permission).</Muted>
-          {s.can("ai.use") && <div><Button data-testid="sim-analysis-request" title={aiWhy(s, "sim.analysis")} disabled={pending || !s.aiKind("sim.analysis")} onClick={async () => { if (await run(() => api("POST", "/v2/simulation-analyses", { workspace_id: ws, simulation_job_id: simulationJobId, impact_job_id: impactJobId }), { stale: true })) await load(); }}>Ask the AI to read this simulation (uses the paid model)</Button></div>}
+          {s.can("ai.use") && <div><Button data-testid="sim-analysis-request" title={aiWhy(s, "sim.analysis")} disabled={pending || !s.aiKind("sim.analysis")} onClick={async () => { if (await run(() => api("POST", "/v2/simulation-analyses", { workspace_id: ws, simulation_job_id: simulationJobId, impact_job_id: impactJobId }), { stale: true })) await load(); }}>Ask the AI to read this simulation (uses the paid model)</Button><EquivalentStep kind="sim.analysis" to="change" /></div>}
         </>
       )}
       {r.status === "waiting_for_approval" && (

@@ -62,3 +62,19 @@ def test_provider_response_diagnostics_do_not_carry_a_finish_message_echo():
     d = pr.diagnostics(Resp(), model_id="gemini-3.5-flash-lite", stage="test")
     assert "finish_message" not in d and d.get("finish_message_chars") == len(Cand.finish_message) and SOURCE not in str(d)
     assert d["finish_reason"] == "SAFETY"
+
+
+def test_r21_the_request_assistant_call_timeline_is_kept_typed_and_unsafe_values_are_dropped():
+    from infra.worker.safe_diagnostics import safe_diagnostics
+    d = safe_diagnostics({
+        "rqa_calls": [{"role": "request.assistant", "s": 15.0042, "outcome": "timeout", "text": "model output here"},
+                      {"role": "request.assistant.recover", "s": "29", "outcome": "a free {text}"}],
+        "rqa_prepare_s": 0.11,
+        "rqa_primary_error": "ProviderRateLimitError",
+        "rqa_primary_diagnostics": {"status_code": 429, "message": "quota for token=abc123def456ghi789jkl000", "rqa_calls": [{"role": "x"}]},
+        "prompt": "the whole prompt"})
+    assert d["rqa_calls"] == [{"role": "request.assistant", "outcome": "timeout", "s": 15.004}, {"role": "request.assistant.recover"}]
+    assert d["rqa_prepare_s"] == 0.11 and d["rqa_primary_error"] == "ProviderRateLimitError"
+    assert d["rqa_primary_diagnostics"]["status_code"] == 429 and "message" not in d["rqa_primary_diagnostics"]
+    assert "rqa_calls" not in d["rqa_primary_diagnostics"] and "prompt" not in d
+    assert safe_diagnostics({"rqa_prepare_s": float("nan"), "rqa_calls": "x"}) == {}

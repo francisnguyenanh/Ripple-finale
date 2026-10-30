@@ -38,11 +38,13 @@ def _close_browser():
             pw.stop()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def pw_browser():
-    """ONE Chromium per process, even when tests/ai10t01 and tests/ai10t02 register this fixture separately
-    (two session instances would start Playwright twice and every later test would error at setup)."""
-    if "browser" not in _BROWSER:
+    """ONE Chromium at a time, even when tests/ai10t01 and tests/ai10t02 register this fixture separately (two live instances would start Playwright twice and
+    every later test would error at setup). R8: stopped when the module that started it ends — the sync API keeps an event loop running on the main thread,
+    so a session-long instance made every later `asyncio.run` in the same process fail."""
+    started = "browser" not in _BROWSER
+    if started:
         pw_mod = pytest.importorskip("playwright.sync_api")
         pw = pw_mod.sync_playwright().start()
         try:
@@ -53,7 +55,9 @@ def pw_browser():
         _BROWSER["pw"] = pw
         import atexit
         atexit.register(_close_browser)
-    return _BROWSER["browser"]
+    yield _BROWSER["browser"]
+    if started:
+        _close_browser()
 
 
 class World:

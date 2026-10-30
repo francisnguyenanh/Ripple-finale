@@ -57,6 +57,24 @@ def close_client(client) -> None:
             pass
 
 
+def _shutdown_open_sockets(client) -> None:
+    """R23 (candidate C11, in-image run): on Linux, closing a socket from another thread does not wake a thread blocked reading it (on Windows it does), so
+    an abandoned call kept its thread until its own read timeout. Shutting the open connections' sockets down first wakes that read on both platforms.
+    Best effort over the pinned SDK / httpx layout; any failure is ignored (the close that follows and the caller's outcome are unchanged)."""
+    import socket
+    try:
+        pool = client._api_client._httpx_client._transport._pool
+        for conn in list(pool.connections):
+            sock = getattr(getattr(getattr(conn, "_connection", None), "_network_stream", None), "_sock", None)
+            if sock is not None:
+                try:
+                    sock.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+    except Exception:                          # noqa: BLE001 - another client shape: the plain close still runs
+        pass
+
+
 def generate_and_close(client, **kwargs):
     """ONE non-streaming `generate_content` on a client owned by this attempt, then close it. The response is fully materialised when the call returns, so
     closing afterwards is safe; the local reference keeps the client alive for the whole request (a temporary client was finalised mid-request, live
@@ -67,14 +85,74 @@ def generate_and_close(client, **kwargs):
         close_client(client)
 
 
+WALL_CLOCK_GRACE_S = 1.0                                          # R21: a call may overrun its HTTP deadline by at most this much (client set-up, connect)
+
+
+class WallClockTimeout(TimeoutError):
+    """R21: the call was still open at its deadline plus the grace; its result (if it ever comes) is discarded and nothing of it is used or published."""
+
+
+def generate_bounded(client, timeout_s: float | None, **kwargs):
+    """R21 (A160 H3-01: an HTTP 500 arrived 17.1 s after a 15 s deadline; H4-01: the job ran 1.9 s past its 45 s deadline): `generate_and_close` with a
+    WALL-CLOCK bound. The SDK's HTTP timeout applies per phase (connect, write, each read), so it does not bound the person's wait; here the call runs on a
+    daemon thread and the caller gets a timeout once `timeout_s + WALL_CLOCK_GRACE_S` have passed. A late answer inside the grace returns as before (the
+    caller's after-deadline rule books its reported usage); past the grace the call is abandoned (its usage is unknown, so it is booked at its ceiling) and the
+    thread closes its own client when the SDK returns. No retry is added. `timeout_s` None: the plain call."""
+    if not timeout_s:
+        return generate_and_close(client, **kwargs)
+    import threading
+    box: dict = {}
+
+    def run():
+        try:
+            box["response"] = generate_and_close(client, **kwargs)
+        except BaseException as exc:                              # noqa: BLE001 - re-raised on the caller's thread
+            box["error"] = exc
+
+    worker = threading.Thread(target=run, name="provider-call", daemon=True)
+    worker.start()
+    worker.join(float(timeout_s) + WALL_CLOCK_GRACE_S)
+    if worker.is_alive():
+        # R22: stop the transport, not only the wait: closing the call's own client closes its connection, so the request in flight fails on its thread and no
+        # answer can arrive after this point (proven against a delaying HTTP server in tests/unit/test_generate_bounded.py). The call stays booked at its
+        # ceiling (no usage known); nothing of it is used, published or retried.
+        _shutdown_open_sockets(client)
+        close_client(client)
+        worker.join(0.2)                                          # only to report whether the transport stopped; the person does not wait for it
+        raise WallClockTimeout(f"no provider answer within {float(timeout_s) + WALL_CLOCK_GRACE_S:g} s (wall clock); the call was closed"
+                               + ("" if not worker.is_alive() else " (its thread had not yet returned)"))
+    if "error" in box:
+        raise box["error"]
+    return box["response"]
+
+
+_SSL_CONTEXT = None
+
+
+def _ssl_context():
+    """R22 (profiled: a client build took 0.8-0.9 s, almost all in loading the CA bundle three times): ONE process-wide SSL context with exactly the SDK's own
+    defaults (certifi, or SSL_CERT_FILE / SSL_CERT_DIR), built once and shared by every client; certificate verification is unchanged."""
+    global _SSL_CONTEXT
+    if _SSL_CONTEXT is None:
+        import os
+        import ssl
+
+        import certifi
+        _SSL_CONTEXT = ssl.create_default_context(cafile=os.environ.get("SSL_CERT_FILE", certifi.where()), capath=os.environ.get("SSL_CERT_DIR"))
+    return _SSL_CONTEXT
+
+
 def _no_sdk_retry():
-    """The SDK's own retry is pinned off explicitly (its default today is 'never retry'; an SDK upgrade must not add hidden paid attempts)."""
+    """The SDK's own retry is pinned off explicitly (its default today is 'never retry'; an SDK upgrade must not add hidden paid attempts). R22: the shared SSL
+    context is passed to the sync and async transports (`verify` for httpx, `ssl` for aiohttp / websockets)."""
     from google.genai import types
-    return types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=1))
+    ctx = _ssl_context()
+    return types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=1), client_args={"verify": ctx}, async_client_args={"verify": ctx, "ssl": ctx})
 
 
-def _client_for_model(model_id: str):
-    """Resolve the configured ai_module account without enabling model fallback."""
+def _client_for_model(model_id: str, location: str | None = None):
+    """Resolve the configured ai_module account without enabling model fallback. `location` (R21): a Vertex multi-region ("us" / "eu") for the one call
+    whose role is configured for it (`role_locations`, checked by the caller); None = the account's own region (global for the request assistant)."""
     from ai_module.router import AIRouter
 
     router = AIRouter()
@@ -99,7 +177,7 @@ def _client_for_model(model_id: str):
         if not project:
             raise ValueError("Vertex project is not configured")
         options = {"vertexai": True, "project": project,
-                   "location": account.get("default_region") or "us-central1"}
+                   "location": location or account.get("default_region") or "us-central1"}
         if account.get("auth") == "service_account":
             key_file = resolve_service_account_path(account)
             if key_file:

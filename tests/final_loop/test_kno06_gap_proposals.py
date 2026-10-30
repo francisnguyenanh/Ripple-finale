@@ -22,11 +22,12 @@ from tests.pitch_brief.conftest import drain
 
 LIMITS = json.loads(open("config/knowledge_gap_proposals.json", encoding="utf-8").read())["limits"]
 POLICY_REF = "procurement-policy.md#2.1"
+EMERGENCY_REF = "emergency.py#route_emergency"          # R5: an exception is suggested from its source, the shown rule acting as the unstated exception
 MANAGER = "rule-standard-manager-review"
-QUESTION = "Does the manager approval rule still apply during a declared emergency, or is there an exception?"
+QUESTION = "Does the manager approval rule still apply to emergency purchases (rule-emergency-routing), or is that an exception it should state?"
 
 
-def gap(kind="missing_exception", rids=(MANAGER,), question=QUESTION, refs=(POLICY_REF,)):
+def gap(kind="missing_exception", rids=(MANAGER,), question=QUESTION, refs=(POLICY_REF, EMERGENCY_REF)):
     return {"kind": kind, "rule_ids": list(rids), "question": question, "evidence_refs": list(refs)}
 
 
@@ -51,7 +52,7 @@ def resolve(gaps=(), relations=(), *, evidence=True, existing_relations=()):
 def test_a_valid_suggestion_becomes_a_normal_open_gap_with_a_stable_id_and_a_proposed_edge():
     out = resolve([gap()], [rel()])
     g = out["gaps"][0]
-    assert g["kind"] == "missing_exception" and g["status"] == "OPEN" and g["priority"] == "normal" and g["affected_rule_ids"] == [MANAGER] and g["evidence_refs"] == [POLICY_REF]
+    assert g["kind"] == "missing_exception" and g["status"] == "OPEN" and g["priority"] == "normal" and g["affected_rule_ids"] == [MANAGER] and g["evidence_refs"] == [EMERGENCY_REF, POLICY_REF]
     assert g["gap_id"] == resolve([gap(question=QUESTION.upper() + "  ")])["gaps"][0]["gap_id"]                 # the same question twice is the same gap
     e = out["relations"][0]
     assert e["status"] == "PROPOSED" and e["provenance"] == "ai_inference" and e["type"] == "depends_on" and e["provenance_refs"] == [POLICY_REF] and out["rejected"] == []
@@ -71,6 +72,7 @@ def test_a_valid_suggestion_becomes_a_normal_open_gap_with_a_stable_id_and_a_pro
     (gap(refs=()), "evidence_refs_missing_or_too_many"),
     (gap(refs=["a", "b", "c", "d", "e", "f"]), "evidence_refs_missing_or_too_many"),
     (gap(refs=["approval.yaml#routing_rules.capex_finance_threshold_jpy"]), "evidence_ref_not_in_the_named_rules"),
+    (gap(refs=(POLICY_REF,), question="Is there an exception for urgent purchases?"), "exception_without_source"),           # R5: no source among the rules
 ])
 def test_invented_unbound_repeated_or_unsafe_gap_suggestions_are_rejected_with_a_reason(bad, reason):
     out = resolve([bad])
@@ -128,7 +130,7 @@ def test_duplicates_and_known_edges_are_dropped_and_a_reader_without_evidence_ri
     known = resolve([], [rel()], existing_relations=[{"edge_id": "e", "from": "rule-capex-finance-policy", "to": MANAGER, "type": "depends_on", "status": "PROPOSED", "provenance_refs": []}])
     assert known["rejected"][0]["reason"] == "already_in_the_graph"
     assert resolve([gap()], evidence=False)["rejected"][0]["reason"] == "evidence_ref_not_in_the_named_rules"
-    assert len(resolve([gap(refs=[MANAGER])], evidence=False)["gaps"]) == 1
+    assert len(resolve([gap(refs=[MANAGER, "rule-emergency-routing"])], evidence=False)["gaps"]) == 1
 
 
 @pytest.mark.parametrize("obj, ok", [(pobj(), True), (pobj(status="NONE_FOUND"), True), ({"status": "OK", "gaps": [], "relations": [], "notes": [], "x": 1}, False),
@@ -351,3 +353,45 @@ def test_a_suggested_disagreement_in_the_shape_of_the_live_raw_object_is_decided
     gap_after = next(x for x in kn["gaps"] if x["gap_id"] == g["gap_id"])
     assert gap_after["status"] == "RESOLVED" and counts(q.env)["v2_business_decisions"] == before["v2_business_decisions"] + 1
 
+
+
+def _production_config(q, tmp_path, **subs):
+    """The production example as the worker reads it (R6): gap proposals on gemini-3.8-flash, per-job cap 0.52, total cap 10.00; optional key substitutions."""
+    import pathlib
+    import re
+    cfg = (pathlib.Path(__file__).resolve().parents[2] / "config/ai_closed_loop/final_budgets.production.example.yaml").read_text(encoding="utf-8")
+    for key, value in subs.items():
+        cfg = re.sub(rf'{key}: "[^"]*"', f'{key}: "{value}"', cfg)
+    path = tmp_path / "budget_production.yaml"
+    path.write_text(cfg, encoding="utf-8")
+    q.monkeypatch.setenv("RIPPLE_BUDGET_CONFIG_PATH", str(path))
+    return path
+
+
+def test_r6_the_production_budget_admits_a_gap_proposal_on_its_pinned_model_and_refuses_what_does_not_fit(qa_env, tmp_path):
+    """R6 (owner request 2026-10-28): the chain production example -> model pin -> reservation -> per-job cap -> total cap through the real route and worker.
+    Admitted: the reservation of the priciest configured model (4 x 0.12816 = 0.51264) fits the per-job cap 0.52 and the call goes to gemini-3.8-flash. Refused at
+    admission, before any call: a total cap the reservation does not fit, and a per-job cap below the reservation. STUB provider; no spend."""
+    from decimal import Decimal
+    from infra.worker import explain, job_quota
+    q = qa_env
+    _production_config(q, tmp_path)
+    cfg = job_quota.load_worker_budget_config()
+    assert job_quota.compute_budget_reservation(cfg)[0] == Decimal("0.51264") and cfg.per_job_cap_usd == Decimal("0.52") and cfg.total_cap_usd == Decimal("10.00")
+    asked_models, model = [], use(q, good)
+    q.monkeypatch.setattr(explain, "_client_for_model", lambda m: (asked_models.append(m), model)[1])
+    r = propose(q, q.admin)
+    assert r.status_code == 200 and r.json()["job_id"].startswith("gpr-")
+    got = settle(q, q.admin)
+    assert got["proposals"]["status"] == "completed" and model.calls == 1 and asked_models == ["gemini-3.8-flash"]
+    # a per-job cap below the reservation: the config is unsafe and a new job (attempt 2) is refused before any call
+    from infra.worker import budget_invariants
+    _production_config(q, tmp_path, per_job_cap_usd="0.51")
+    assert budget_invariants.problems(job_quota.load_worker_budget_config())
+    r2 = propose(q, q.admin, attempt=2)
+    assert r2.status_code == 409 and r2.json()["code"] == "budget_exceeded" and model.calls == 1, r2.text
+    # the production per-job cap again, but the month's total cap no longer holds one reservation (9.60 of 10.00 booked): refused, nothing called
+    _production_config(q, tmp_path)
+    q.env.store.record_cost_adjustment(q.env.tenant, q.env.ws, "ADJ-20261028-R6CAP", "9.60", reason="test: the month's spend near the cap")
+    r3 = propose(q, q.admin, attempt=3)
+    assert r3.status_code == 409 and r3.json()["code"] == "budget_exceeded" and model.calls == 1 and asked_models == ["gemini-3.8-flash"], r3.text

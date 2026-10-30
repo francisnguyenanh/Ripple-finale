@@ -11,6 +11,7 @@ import { useSession } from "@/session";
 import type { Rec } from "@/features/changes/types";
 import { CodeCandidate, CodeRecommendations } from "./CodePanel";
 import { ChangeAiPanels } from "./ChangeAiPanels";
+import { DraftAiSteps } from "./DraftAiSteps";
 import { TaskFrame } from "@/features/request-assistant/TaskFrame";
 import { useTaskView } from "@/features/request-assistant/taskView";
 import { refusalWords } from "@/lib/refusal";
@@ -103,6 +104,13 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
     const t = setTimeout(() => setTick((x) => x + 1), 2000);
     return () => clearTimeout(t);
   }, [simStatus, tick]);
+  // the AI steps of the draft (dependency check, guidance) run as jobs: re-read while one is pending, bounded by the server's job states
+  const aiPending = data ? [((data.draft as Rec)?.dependency_state as Rec | undefined)?.status, ((data.draft as Rec)?.guidance as Rec | undefined)?.status].includes("pending") : false;
+  React.useEffect(() => {
+    if (!aiPending) return;
+    const t = setTimeout(() => setTick((x) => x + 1), 2000);
+    return () => clearTimeout(t);
+  }, [aiPending, tick]);
   // The task projection is read once here and shared with the task frame (same request, same refresh as before): it says what this person is asked to do now.
   const task = useTaskView(ws, "business_change", data ? cid : null, data);
   if (err) return <Callout tone="danger" testid="rev-error">{err}</Callout>;
@@ -225,6 +233,12 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
       <div data-testid="rev-impact" className="grid gap-1 text-sm">
         <p className="font-medium">What it touches</p>
         <ul className="list-disc pl-5">{((impact.affected_rules ?? []) as Rec[]).map((a, i) => <li key={i} data-testid="rev-affected" data-link={a.link as string} data-ref-key={a.ref_key as string | undefined} tabIndex={-1}>{a.title as string}: {a.meaning as string} ({a.severity as string}){a.unknown ? ", files unknown" : ""}{Array.isArray(a.versions) && <span data-testid="rev-affected-versions"> - reached in {(a.versions as Rec[]).length} versions: {(a.versions as Rec[]).map((v) => `${v.view === "target" ? "accepted target" : "observed in the sources"} (${v.meaning as string})`).join("; ")}</span>}</li>)}</ul>
+        {((draft.effects ?? []) as Rec[]).length > 0 && (   /* revision 2: the server's own statement of what the change does to cases, never only through the AI text */
+          <div data-testid="rev-effects" className="grid gap-1">
+            <p className="font-medium">What the change does to cases (proven from the rules)</p>
+            <ul className="list-disc pl-5">{((draft.effects ?? []) as Rec[]).map((e, i) => <li key={i} data-testid="rev-effect" data-effect={e.effect as string}>{e.text as string}</li>)}</ul>
+          </div>
+        )}
         {((impact.excluded ?? []) as string[]).map((t, i) => <Muted key={i}>{t}</Muted>)}
         {((draft.counterevidence ?? []) as Rec[]).map((c, i) => <Muted key={i} testid="rev-counter">{c.title as string}: {c.label as string}</Muted>)}
         {((draft.proposed_dependencies ?? []) as Rec[]).map((d, i) => <Muted key={i} testid="rev-dep">{d.from as string} {d.relation as string} {d.to as string}: {d.label as string}</Muted>)}
@@ -267,6 +281,7 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
           {blockers.map((b, i) => <Callout key={i} tone="warn" testid="rev-blocker">{b.text as string}</Callout>)}
         </div>
       )}
+      <DraftAiSteps ws={ws} cid={cid} draft={draft} steps={data.ai_steps as Rec | undefined} knowledgeMoved={data.knowledge_moved === true} onChanged={() => setTick((t) => t + 1)} />
       </div>
       <aside className="grid gap-4 content-start min-w-0" aria-label="Decisions on this change" data-testid="rev-rail">
         {note && <Callout tone={note.startsWith("The ") || note.includes("not") && !note.includes("Nothing") && !note.includes("not changed") ? "warn" : "info"} testid="rev-note">{note}</Callout>}

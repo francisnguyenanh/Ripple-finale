@@ -145,8 +145,16 @@ def _intent_view(store, tenant, ws, rid, authority) -> dict:
         if step is None:
             waiting.append({"holder": "system", "holder_label": "the system", "code": "draft_running"})
         else:
-            may = "change.prepare" in perms and (not need_ai or "ai.use" in perms)
+            # R2-07a (2026-10-27): a deployment whose role allowlist does not enable `change.draft` (the Final production configuration) cannot write this draft
+            # at all; the step is not asked of anyone and the request says why, instead of pointing at a control the server refuses
+            from infra import provider_gate
+            off = need_ai and provider_gate.role_refusal("change.draft") is not None
+            if off:
+                blockers.append({"code": "ai_kind_not_enabled", "text": "AI drafts are not enabled on this server, so this request cannot get its AI draft here.",
+                                 "source": "server"})
+            may = "change.prepare" in perms and (not need_ai or ("ai.use" in perms and not off))
             reason = (None if may and mine else "the requester is asked; your role may also do it" if may
+                      else "AI drafts are not enabled on this server" if off and "change.prepare" in perms
                       else "AI use is switched off for you" if "change.prepare" in perms else "your role cannot do this step")
             obligations.append(_obligation(code.lower(), step, holder="requester", holder_label="the requester", eligible_me=may, assigned_me=mine, reason=reason))
             actions.append({"action": "change.prepare", "label": step, "allowed": may, "serves": [code.lower()], **({} if may else {"reason": reason})})
@@ -226,7 +234,7 @@ def _intent_view(store, tenant, ws, rid, authority) -> dict:
 
 # ---- business_change ------------------------------------------------------------------------------------------------------------------------------------------------
 
-def _business_view(store, tenant, ws, rid, authority) -> dict:
+def _business_view(store, tenant, ws, rid, authority, keep: dict | None = None) -> dict:
     from infra.v2_business_routes import _change_record_for
     if not rid.startswith("chg-"):
         raise TenantScopeError(NOT_FOUND)
@@ -240,6 +248,8 @@ def _business_view(store, tenant, ws, rid, authority) -> dict:
     title = ((rec.get("payload") or {}).get("request") or "")[:200] or None
     states, obligations, waiting, blockers, actions, inputs, deliverables = {}, [], [], [], [], [], []
     view = v2_business_review.review_view(store, tenant, ws, rid, account_id=me, roles=roles)
+    if keep is not None:                                                                  # R20: the same reader's review view, for a caller that needs it too
+        keep["review_view"] = view
     if view is None:
         states["understand"] = "current"
         if rec.get("execution_status") not in ("COMPLETED", "FAILED", "CANCELLED"):
@@ -449,12 +459,13 @@ def _dto(family, rid, canonical, title, stage, obligations, waiting, blockers, a
             "statement": "A read-only view of the existing workflow: it shows who holds the next step and what blocks it; every action is checked again by its own route."}
 
 
-def task_view(store, tenant, ws, family: str, rid: str, authority: dict) -> dict:
+def task_view(store, tenant, ws, family: str, rid: str, authority: dict, *, keep: dict | None = None) -> dict:
+    """`keep` (R20): receives the business review view this projection was built from (same reader, same read), so the request assistant does not build it twice."""
     if family not in FAMILIES or not isinstance(rid, str) or len(rid) > 120:
         raise TenantScopeError(NOT_FOUND)
     if family == "intent_flow":
         return _intent_view(store, tenant, ws, rid, authority)
-    return _business_view(store, tenant, ws, rid, authority)
+    return _business_view(store, tenant, ws, rid, authority, keep)
 
 
 # ---- the work list (RUX-04): where one request belongs for THIS reader, read from the projection only ------------------------------------------------------------

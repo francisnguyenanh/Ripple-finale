@@ -45,9 +45,10 @@ def _ensure_database() -> None:
 
 if "AI10_TEST_DSN" not in os.environ:
     _ensure_database()
-# The upstream conftests read these at import time.
+# The upstream conftests read these at import time. Only when unset (R8): importing this harness from another suite overwrote a DSN the run had configured
+# (every later ledger test in the same process then connected to this harness's database, which may not be running).
 for _name in ("AI4_T01_TEST_DSN", "AI2_T03_TEST_DSN", "AI2_T04_TEST_DSN", "AI1_T03_TEST_DSN"):
-    os.environ[_name] = DSN
+    os.environ.setdefault(_name, DSN)
 
 LOOPBACK = ("127.0.0.1", "localhost", "[::1]")
 

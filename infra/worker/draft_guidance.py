@@ -94,7 +94,8 @@ class DraftGuidanceExecutor:
         draft = rc["dg_draft"]
         result = {"executor_id": EXECUTOR_ID, "config_sha256": rc["dg_sha"], "intent_id": ctx.job["payload"]["intent_id"], "pin": draft["pin"], "report_hash": draft["report_hash"],
                   "semantic_diff_hash": draft["semantic_diff_hash"], "summary": out["summary"], "accepted": out["accepted"], "rejected": out["rejected"], "questions": out["questions"], "advice": out["advice"], "question_items": out["question_items"],
-                  "not_addressed": out["not_addressed"], "evidence_access": rc["dg_evidence"], "provider_calls": 1, "applies_nothing": True, "model": {"pinned": model_id, "served": actual}}
+                  "not_addressed": out["not_addressed"], "effect_statements": out["effect_statements"], "effects_coverage": out["effects_coverage"], "removed": out["removed"],
+                  "evidence_access": rc["dg_evidence"], "provider_calls": 1, "applies_nothing": True, "model": {"pinned": model_id, "served": actual}}
         result = json.loads(_canon_json(result))
         result["result_hash"] = result_hash(result)
         return ExecutionOutcome(result=result, model_id=actual, input_tokens=in_t, output_tokens=out_t, thought_tokens=th_t)

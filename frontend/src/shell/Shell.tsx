@@ -189,13 +189,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <a href={ws ? hashFor(ws, "overview", undefined, { mode: s.mode === "technical" ? "technical" : undefined }) : "#"} data-testid="brand" className="text-lg font-semibold rounded-sm text-header-text"
           aria-label={ws ? "Ripple: go to Overview" : "Ripple"}>Ripple</a>
         {wide ? session : (
-          // Small screens: one row that still says where you are and in which view; the controls themselves are in the menu.
-          <span data-testid="header-context" className="min-w-0 flex-1 flex items-center gap-2 text-sm">
+          // Small screens: one row that still says where you are and in which view; the controls themselves are in the menu. The role wraps onto a second line
+          // instead of being cut ("requ..." on a 390 px phone, R2-07a): it is part of what the page means for this person.
+          <span data-testid="header-context" className="min-w-0 flex-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
             <span className="truncate" title={mine?.display_name || ws || undefined}>{mine?.display_name || ws || "No workspace selected"}</span>
             <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-header-muted px-2 py-0.5 text-xs" data-testid="header-mode" data-mode={s.mode}>
               {s.mode === "technical" ? <Wrench size={12} aria-hidden="true" /> : <Briefcase size={12} aria-hidden="true" />}{s.mode === "technical" ? "Technical" : "Business"}
             </span>
-            {mine && mine.roles.length > 0 && <span className="truncate text-xs text-header-muted" data-testid="header-role">{mine.roles.join(", ")}</span>}
+            {mine && mine.roles.length > 0 && <span className="min-w-0 break-words text-xs text-header-muted" data-testid="header-role">{mine.roles.join(", ")}</span>}
           </span>
         )}
       </header>

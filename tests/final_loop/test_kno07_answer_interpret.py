@@ -217,6 +217,8 @@ def test_permissions_disarmed_provider_and_input_checks(qa_env, monkeypatch):
     ("He approves them.", "He", "ambiguous_pronoun"),
     ("They decide.", "They", "ambiguous_pronoun"),
     ("Either the plant manager or the logistics lead can approve them.", "plant manager or the logistics lead", "alternative_actors"),
+    ("She authorises them herself.", "She authorises them herself.", "ambiguous_pronoun"),                # HK-AEV I-05: the whole sentence became the actor
+    ("Her line manager signs them off.", "her line manager", "ambiguous_pronoun"),                       # a relative title has no referent the knowledge can name
 ])
 def test_a_pronoun_or_two_alternative_actors_is_never_a_ready_actor(text, value, reason):
     """Live finding 2026-10-17 (diagnostic run): a reading took 'He' and 'X or Y' as the actor; the server now asks instead."""
@@ -224,6 +226,8 @@ def test_a_pronoun_or_two_alternative_actors_is_never_a_ready_actor(text, value,
     assert out["status"] == "NEEDS_CLARIFICATION" and out["answer"] is None and out["reasons"] == [reason]
     plain = resolve(mobj("actor", "the plant manager", quote="The plant manager approves them"), "The plant manager approves them.")
     assert plain["status"] == "READY" and plain["answer"] == {"actor": "the plant manager"}                     # an article is not a pronoun
+    titled = resolve(mobj("actor", "Head of Sterile Services", quote="The Head of Sterile Services authorises them"), "The Head of Sterile Services authorises them.")
+    assert titled["status"] == "READY" and titled["answer"] == {"actor": "Head of Sterile Services"}           # negative: a title with no pronoun stays READY
 
 
 
@@ -373,8 +377,58 @@ def test_the_worker_offers_a_field_whose_rule_sorted_last_and_reports_a_truncate
 def test_a_condition_refused_by_the_grammar_is_kept_for_diagnosis_and_never_applied():
     """v5 V5-IF-04 (live): the grammar refused the model's condition and the refused form was not recorded. It is now kept (bounded JSON + the refusal detail)."""
     text = "When the group is larger than 30 pupils."
-    out = resolve(mobj("condition", None, {"field": "request.net_amount_jpy", "op": "gt", "value": 30.0}, quote=text), text, COND_GAP)
+    out = resolve(mobj("condition", None, {"field": "request.net_amount_jpy", "op": "about", "value": 30}, quote=text), text, COND_GAP)
     assert out["answer"] is None and out["reasons"] == ["unsupported_grammar:unsupported_expression"]
-    assert out["rejected_reading"]["kind"] == "condition" and "30.0" in out["rejected_reading"]["condition_json"] and "floats are not allowed" in out["rejected_reading"]["detail"]
+    assert out["rejected_reading"]["kind"] == "condition" and "about" in out["rejected_reading"]["condition_json"] and "outside the grammar" in out["rejected_reading"]["detail"]
     ok = resolve(mobj("condition", None, {"field": "request.net_amount_jpy", "op": "gt", "value": 30}, quote=text), text, COND_GAP)
     assert ok["rejected_reading"] is None
+    # R5 (config version 2, typed condition): a float is read as the contract value, unfilled typed keys and an empty unit are dropped, as for condition edits
+    typed = resolve(mobj("condition", None, {"field": "request.net_amount_jpy", "op": "gt", "value": 30.0, "unit": "", "any": [], "all": None}, quote=text), text, COND_GAP)
+    assert typed["rejected_reading"] is None and typed["answer"] == {"condition": {"field": "request.net_amount_jpy", "op": "gt", "value": 30}}
+
+
+def test_a110_an_unsupported_reading_of_a_pronoun_only_actor_is_asked_and_other_unsupported_answers_stay_unsupported():
+    """A110 (AEV8-I-02): the model returned UNSUPPORTED for "She signs them herself." on a missing-actor gap; the person is asked which role it is. Negatives: an
+    UNSUPPORTED reading without a pronoun, or on another gap kind, stays UNSUPPORTED."""
+    out = resolve(mobj(status="UNSUPPORTED"), "She signs them herself.")
+    assert out["status"] == "NEEDS_CLARIFICATION" and out["reasons"] == ["ambiguous_pronoun"] and out["answer"] is None
+    plain = resolve(mobj(status="UNSUPPORTED"), "That depends on the weather.")
+    assert plain["status"] == "UNSUPPORTED" and plain["reasons"] == ["model_unsupported"]
+
+
+def test_r5_the_condition_reaches_the_provider_as_a_typed_schema():
+    """A113 (AEV10-I-10..I-12; A110 AEV8-I-05): with an untyped object the provider returned {} for every condition answer, refused by the grammar. Version 2 sends
+    the typed condition (field / op / value incl. booleans / unit, or any / all / not), as change.understand contract 7."""
+    from infra.worker.explain import provider_schema
+    frozen = json.loads(open("config/gap_answer_interpret.json", encoding="utf-8").read())
+    cond = provider_schema(frozen["output_schema"])["properties"]["condition"]
+    assert frozen["version"] == 2 and {"field", "op", "value", "unit", "any", "all", "not"} <= set(cond["properties"])
+    assert {"type": "boolean"} in cond["properties"]["value"]["anyOf"] and cond["properties"]["any"]["items"]["required"] == ["field", "op", "value"]
+
+
+def test_r6_a_typed_condition_through_the_real_worker_keeps_the_persons_values_and_adds_nothing(qa_env):
+    """R6 (owner request 2026-10-28): answer reading version 2 through the real route and worker (STUB model). The provider receives the typed condition schema;
+    a typed answer with unfilled keys, a float and a currency word is kept as the contract writes it (750000 JPY); a yes / no value stays a yes / no value; a reading
+    that adds a condition the person did not state is refused, never kept."""
+    q = qa_env
+    g = next(x for x in gaps(q, q.admin)["gaps"] if x["kind"] == "missing_condition")
+    configs = []
+    text = "It applies when the request is 750,000 yen or more."
+    typed = {"field": "request.net_amount_jpy", "op": "gte", "value": 750000.0, "unit": "yen", "any": [], "all": None, "not": None}
+    model = use(q, lambda p: mobj("condition", None, typed, quote=text.rstrip(".")))
+    real = model.models.generate_content
+    model.models.generate_content = lambda **kw: (configs.append(kw.get("config")), real(**kw))[1]
+    got, _ = run(q, q.admin, g["gap_id"], text)
+    r = got["reading"]
+    assert r["status"] == "READY" and r["proposed_answer"] == {"condition": {"field": "request.net_amount_jpy", "op": "gte", "value": 750000, "unit": "JPY"}}, r
+    schema = configs[0]["response_schema"] if isinstance(configs[0], dict) else getattr(configs[0], "response_schema", None)
+    cond = (schema or {}).get("properties", {}).get("condition", {})
+    assert {"field", "op", "value", "any", "all", "not"} <= set(cond.get("properties", {})), schema
+    yes_text = "Only when the supplier is new."
+    use(q, lambda p: mobj("condition", None, {"field": "supplier.is_new", "op": "eq", "value": True}, quote=yes_text.rstrip(".")))
+    got, _ = run(q, q.admin, g["gap_id"], yes_text)
+    assert got["reading"]["status"] == "READY" and got["reading"]["proposed_answer"] == {"condition": {"field": "supplier.is_new", "op": "eq", "value": True}}, got["reading"]
+    more = {"all": [{"field": "request.net_amount_jpy", "op": "gte", "value": 750000, "unit": "JPY"}, {"field": "request.category", "op": "eq", "value": "CAPEX"}]}
+    use(q, lambda p: mobj("condition", None, more, quote="It applies to requests of at least 750,000 yen"))
+    got, _ = run(q, q.admin, g["gap_id"], "It applies to requests of at least 750,000 yen.")
+    assert got["reading"]["proposed_answer"] is None and got["reading"]["status"] != "READY", got["reading"]

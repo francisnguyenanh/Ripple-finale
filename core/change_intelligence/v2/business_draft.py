@@ -29,7 +29,8 @@ from core.change_intelligence.v2.serialize import canonical_hash
 DRAFT_VERSION = "1.0.0"
 ACTIONS = ("AI_EDIT_SUPPORTED", "MANUAL", "NO_OP", "UNRESOLVED")
 MAX_ITEMS = 400
-GUIDE_KEYS = {"summary", "items", "questions_for_human"}
+GUIDE_KEYS = {"summary", "items", "questions_for_human", "effects"}
+GUIDE_EFFECT_KEYS = {"ref", "statement"}
 GUIDE_QUESTION_KEYS = {"question", "needed", "ref"}
 GUIDE_ITEM_KEYS = {"ref", "instruction", "hold", "rationale"}
 STATEMENT = ("Draft only: it changes no rule, file or code. Every requested change has an outcome below; items marked unresolved or manual still need a person. "
@@ -73,6 +74,14 @@ def rule_text(rule: Mapping) -> str:
     parts = [f"actor: {_role_words(rule.get('actor_ref'))}", f"when: {condition_text(rule.get('condition'))}",
              f"exceptions: {exc}" if exc else "exceptions: none", f"scope: {_scope_text(rule.get('scope') or {})}"]
     return " | ".join(parts)
+
+
+def rule_words(rule: Mapping) -> str:
+    """R14 (live A126 H3-09 / H4-09: "actor: logistics" was read as the rule's scope): the same parts as `rule_text`, each labelled with what it is, for the request
+    assistant's context. The stored draft and the review page keep `rule_text`."""
+    exc = "; ".join(e["text"] for e in rule.get("exceptions") or []) or "none"
+    return (f"who acts under the rule: {_role_words(rule.get('actor_ref'))} | applies when: {condition_text(rule.get('condition'))} | exceptions: {exc} | "
+            f"applies to (scope): {_scope_text(rule.get('scope') or {})}")
 
 
 # ---- rule before/after -------------------------------------------------------------------------------------------------------------------------------
@@ -156,6 +165,110 @@ def rule_diff(before: Mapping, after: Mapping) -> list:
 
 
 _OP_WORDS = {"eq": "is", "ne": "is not", "gt": "more than", "gte": "at least", "lt": "less than", "lte": "at most", "in": "is one of", "not_in": "is none of"}
+
+
+# ---- which cases a threshold change moves (R12) ------------------------------------------------------------------------------------------------------------
+# A changed threshold moves only the cases between the old and the new bound; the rest keep their outcome. Saying "orders of 500,000 or more would lose free
+# delivery" for a 500,000 -> 600,000 change is wrong (live A123 H4-09): the cases from 500,000 up to, not including, 600,000 move. This is exact arithmetic on the
+# stored conditions, so the server computes it and gives it to the assistant as a fact with its provenance, instead of leaving it to the model's reading.
+_LOWER, _UPPER = {"gt": False, "gte": True}, {"lt": False, "lte": True}
+
+
+def _half_line(leaf: Mapping):
+    """(lo, lo_incl, hi, hi_incl) of a one-sided comparison; None = no bound on that side."""
+    v = _num(leaf.get("value"))
+    if leaf.get("op") in _LOWER:
+        return (v, _LOWER[leaf["op"]], None, False)
+    return (None, False, v, _UPPER[leaf["op"]])
+
+
+def _minus(b, a):
+    """b minus a for two half-lines bounded on the SAME side: one interval or None (empty)."""
+    if b[0] is not None:                                             # lower bounds: [b .. a)
+        lo, lo_in, hi, hi_in = b[0], b[1], a[0], not a[1]
+    else:                                                            # upper bounds: (a .. b]
+        lo, lo_in, hi, hi_in = a[2], not a[3], b[2], b[3]
+    if lo < hi or (lo == hi and lo_in and hi_in):
+        return (lo, lo_in, hi, hi_in)
+    return None
+
+
+def _interval_words(iv, unit: str) -> str:
+    lo, lo_in, hi, hi_in = iv
+    u = f" {unit}" if unit else ""
+    if lo is not None and hi is not None and lo == hi:
+        return f"exactly {_value_words(_plain_number(lo))}{u}"
+    parts = []
+    if lo is not None:
+        parts.append(f"{'at least' if lo_in else 'more than'} {_value_words(_plain_number(lo))}")
+    if hi is not None:
+        parts.append(f"{'at most' if hi_in else 'less than'} {_value_words(_plain_number(hi))}")
+    return " and ".join(parts) + u
+
+
+def _plain_number(x: float):                                                          # R23: was a second _plain that shadowed the text one (TypeError at guidance)
+    return int(x) if float(x).is_integer() else x
+
+
+def condition_change(before, after) -> Optional[dict]:
+    """Which cases a changed condition moves, when that is exactly computable: one numeric one-sided comparison (at least / more than / at most / less than) on
+    the same measure and unit, bounded on the same side before and after, either the whole condition or one part of an "all" whose other parts are unchanged.
+    -> None when the condition did not change; {"computed": False, "reason"} when it changed but not in that form (nothing is guessed); else {"computed": True,
+    "measure", "unit", "leaving", "entering", "still_in", "still_out", "also_requires"} with intervals as (lo, lo_incl, hi, hi_incl)."""
+    if before == after:
+        return None
+    if not isinstance(before, Mapping) or not isinstance(after, Mapping) or _shape(before) != _shape(after):
+        return {"computed": False, "reason": "the condition changed in form (parts added, removed or regrouped), not only in one value"}
+    if "field" in before:
+        b_leaf, a_leaf, others = before, after, []
+    elif "all" in before and all(isinstance(c, Mapping) and "field" in c for c in before["all"]):
+        changed = [i for i, (x, y) in enumerate(zip(before["all"], after["all"])) if x != y]
+        if len(changed) != 1:
+            return {"computed": False, "reason": "more than one part of the condition changed"}
+        b_leaf, a_leaf = before["all"][changed[0]], after["all"][changed[0]]
+        others = [c for i, c in enumerate(before["all"]) if i != changed[0]]
+    else:
+        return {"computed": False, "reason": "the changed comparison sits inside an either-or, a negated or a nested condition"}
+    if b_leaf.get("field") != a_leaf.get("field"):
+        return {"computed": False, "reason": "the measured quantity itself changed"}
+    if (b_leaf.get("unit") or None) != (a_leaf.get("unit") or None):
+        return {"computed": False, "reason": "the unit changed"}
+    ops = (b_leaf.get("op"), a_leaf.get("op"))
+    if not all(o in _LOWER or o in _UPPER for o in ops) or (ops[0] in _LOWER) != (ops[1] in _LOWER):
+        return {"computed": False, "reason": "the comparison is not a one-sided bound on the same side before and after"}
+    if _num(b_leaf.get("value")) is None or _num(a_leaf.get("value")) is None:
+        return {"computed": False, "reason": "a value is not a number"}
+    b, a = _half_line(b_leaf), _half_line(a_leaf)
+    lower = b[0] is not None
+    if lower:
+        still_in = a if (a[0] > b[0] or (a[0] == b[0] and not a[1])) else b          # the stricter of the two lower bounds
+        loose = b if still_in is a else a
+        still_out = (None, False, loose[0], not loose[1])
+    else:
+        still_in = a if (a[2] < b[2] or (a[2] == b[2] and not a[3])) else b
+        loose = b if still_in is a else a
+        still_out = (loose[2], not loose[3], None, False)
+    return {"computed": True, "measure": str(b_leaf.get("field", "")).replace("_", " ").replace(".", " "), "unit": b_leaf.get("unit") or "",
+            "leaving": _minus(b, a), "entering": _minus(a, b), "still_in": still_in, "still_out": still_out,
+            "also_requires": " and ".join(condition_text(c) for c in others)}
+
+
+def condition_change_text(change: Mapping, *, compact: bool = False) -> str:
+    """The computed change in words, short enough to stay whole in one fact (stored values, unformatted; the same words as the rule text). `compact`: the same
+    content with short labels, for the rare text that would not fit otherwise."""
+    if compact and change.get("computed"):
+        u = change["unit"]
+        side = lambda iv: _interval_words(iv, u) if iv else "none"                   # noqa: E731
+        among = f"; only within: {change['also_requires']}" if change["also_requires"] else ""
+        return (f"by {change['measure']}: stop meeting it: {side(change['leaving'])}; start: {side(change['entering'])}; both before and after: "
+                f"{side(change['still_in'])}; neither: {side(change['still_out'])}{among}")
+    if not change.get("computed"):
+        return f"which cases the change moves is not computed ({change['reason']}); this does not mean no case is affected"
+    u = change["unit"]
+    side = lambda iv: _interval_words(iv, u) if iv else "none"                       # noqa: E731
+    among = f"; only among cases that also meet: {change['also_requires']}" if change["also_requires"] else ""
+    return (f"by {change['measure']}, cases that would stop meeting the condition: {side(change['leaving'])}; would start meeting it: {side(change['entering'])}; "
+            f"would still meet it: {side(change['still_in'])}; would still not meet it: {side(change['still_out'])}{among}")
 
 
 def _leaves(cond) -> list:
@@ -490,7 +603,7 @@ def unresolved_items(report: Mapping, rules: Mapping[str, Mapping], start: int) 
 
 # ---- server holds: what the rules themselves show must be decided by a person ------------------------------------------------------------------------
 
-HOLD_KINDS = ("approval_order_inverted", "dependent_rule_loses_trigger", "conflicts_with_effective_rule")
+HOLD_KINDS = ("approval_order_inverted", "approval_tiers_start_together", "dependent_rule_loses_trigger", "conflicts_with_effective_rule")
 HOLD_BASES = ("rules", "accepted_relation", "rule_condition", "recorded_disagreement")      # a model-proposed dependency alone is never a basis: it is checked, then shown as a lead
 _DEPENDENT_TYPES = ("depends_on", "approves", "implements", "exception_to")
 DEPENDENCY_CHECKS = {"trigger_verified": "its own condition is the changed rule's act, so it loses its trigger for the cases the change drops (held above when cases are lost)",
@@ -525,6 +638,32 @@ def _triggered_by(dependent: Mapping, rule: Mapping) -> Optional[str]:
     names = _tokens(_role_words(rule.get("actor_ref"))) | _tokens((rule.get("outcome") or {}).get("kind"))
     for leaf, subject in _state_leaves(dependent):
         if subject and subject <= names:
+            return leaf["field"]
+    return _done_by(dependent, rule)
+
+
+def _same_act(word: str, kind_words: set) -> bool:
+    """A state word names the rule's act when it is an outcome-kind word or an inflection of one ("reported" / "report", "grounded" / "grounded")."""
+    return any(word == k or (len(k) >= 4 and word.startswith(k)) or (len(word) >= 4 and k.startswith(word)) for k in kind_words)
+
+
+def _done_by(dependent: Mapping, rule: Mapping) -> Optional[str]:
+    """The other way sources name a state: "<act>_by_<actor>" ("incident.reported_by_duty_officer", "vehicle.grounded_by_workshop_foreman"; A101 items
+    AEV4-G-11 / G-12, 2026-10-27). Proven only when every actor word after "by" is a word of the rule's actor AND every word before it names the rule's
+    act (its outcome kind), so another act of the same person is never taken for this rule's. -> the leaf's field, or None."""
+    actor = _tokens(_role_words(rule.get("actor_ref")))
+    kind = _tokens((rule.get("outcome") or {}).get("kind"))
+    if not actor or not kind:
+        return None
+    for leaf in _hold_leaves(dependent.get("condition")):
+        if not isinstance(leaf.get("value"), bool):
+            continue
+        words = [t for t in re.split(r"[^a-z0-9]+", str(leaf.get("field") or "").split(".")[-1].lower()) if t]
+        if "by" not in words:
+            continue
+        i = words.index("by")
+        act, who = words[:i], set(words[i + 1:])
+        if act and who and who <= actor and all(_same_act(w, kind) for w in act):
             return leaf["field"]
     return None
 
@@ -639,15 +778,21 @@ def server_holds(changes: Iterable[Mapping], rules: Mapping[str, Mapping], relat
                 order = lambda v: (v > s) - (v < s)                       # noqa: E731
                 if order(x) != order(y):
                     n += 1
-                    out.append({"ref": f"H{n:03d}", "kind": "server_hold", "hold": "approval_order_inverted", "rule_id": rid, "other_rule_id": oid, "basis": "rules",
+                    # R2-05a (2026-10-27, guidance item agd-02): landing exactly on the other tier's value is not an inversion: both tiers would start together
+                    together = order(y) == 0
+                    hold = "approval_tiers_start_together" if together else "approval_order_inverted"
+                    what = (f"which makes it start at the same value as “{other.get('title')}” ({_role_words(other.get('actor_ref'))}, {_value_words(o['value'])} "
+                            f"{o.get('unit') or ''}), a tier of the same decision: from that value both steps would apply at once and the order between them is lost"
+                            if together else
+                            f"which puts it on the other side of “{other.get('title')}” ({_role_words(other.get('actor_ref'))}, {_value_words(o['value'])} "
+                            f"{o.get('unit') or ''}), a tier of the same decision: the order of the two tiers would be inverted")
+                    out.append({"ref": f"H{n:03d}", "kind": "server_hold", "hold": hold, "rule_id": rid, "other_rule_id": oid, "basis": "rules",
                                 "evidence": {"field": b["field"], "before": b["value"], "after": a["value"], "other_value": o["value"], "actor": before.get("actor_ref"), "other_actor": other.get("actor_ref"),
                                              "outcome": kind, "relation": "confirmed" if frozenset((base, obase)) in linked else None},
-                                "action": "UNRESOLVED", "reason": "approval_order_inverted",
+                                "action": "UNRESOLVED", "reason": hold,
                                 "instruction": (f"“{before.get('title')}” ({_role_words(before.get('actor_ref'))}) moves from {_value_words(b['value'])} to {_value_words(a['value'])} "
-                                                f"{b.get('unit') or ''}, which puts it on the other side of “{other.get('title')}” ({_role_words(other.get('actor_ref'))}, "
-                                                f"{_value_words(o['value'])} {o.get('unit') or ''}), a tier of the same decision: the order of the two tiers would be inverted. "
-                                                "A person decides how the two rules fit together before this change is made.").replace("  ", " "),
-                                "gap_text": "approval order inverted"})
+                                                f"{b.get('unit') or ''}, {what}. A person decides how the two rules fit together before this change is made.").replace("  ", " "),
+                                "gap_text": "approval tiers start at the same value" if together else "approval order inverted"})
         lost = _narrows(before, after)
         if lost:
             dependents = []
@@ -683,6 +828,125 @@ def server_holds(changes: Iterable[Mapping], rules: Mapping[str, Mapping], relat
                             "instruction": (f"“{before.get('title')}” disagrees with the effective rule “{live[oid].get('title')}” (a recorded disagreement). Changing one side "
                                             "does not settle it: a person decides which rule stands before this change is made."),
                             "gap_text": "conflicts with an effective rule"})
+    return out
+
+
+def _range_words(lo, hi, unit, lo_in=True, hi_in=False) -> str:
+    left = f"from {_value_words(lo)}" if lo_in else f"above {_value_words(lo)}"
+    right = f"up to {_value_words(hi)}" if hi_in else f"below {_value_words(hi)}"
+    return f"{left} {right} {unit or ''}".rstrip()
+
+
+def _actor_in_state(dependent: Mapping, rule: Mapping) -> Optional[str]:
+    """For an actor change: does a boolean state leaf of `dependent` name the changed rule's (old) actor ("order.lead_surgeon_signed_off" for the lead surgeon)?
+    Every word of the actor is in the leaf's last path segment. -> the leaf's field, or None. Used for the effect line only, never for a hold."""
+    actor = _tokens(_role_words(rule.get("actor_ref")))
+    if not actor:
+        return None
+    for leaf in _hold_leaves(dependent.get("condition")):
+        if isinstance(leaf.get("value"), bool) and actor <= _tokens(str(leaf.get("field") or "").split(".")[-1]):
+            return leaf["field"]
+    return None
+
+
+def change_effects(changes: Iterable[Mapping], rules: Mapping[str, Mapping], relations: Iterable[Mapping]) -> list:
+    """R2-05a (2026-10-27; guidance items agd-02 / agd-09 / agd-10 / AEV-G-05): what the change does to cases and to other rules, PROVEN from the pinned rules —
+    facts for the person and for the guidance model, never holds (holds stay in `server_holds`).
+      * `range_vacated` — a threshold move drops a range of cases from the rule: which live rules of the same decision (same outcome kind, same measured field,
+        same direction) still cover that range, from which value, or that no rule of the knowledge names anyone for it;
+      * `range_added` — a threshold move adds a range: the rules whose own condition is this rule's act now reach those cases too;
+      * `actor_dependency` — an actor change: a rule whose condition names the old actor's act would no longer be met as written.
+    Every figure and title comes from the rules; nothing is decided here."""
+    out = []
+    live = {rid: r for rid, r in rules.items() if r.get("status") not in ("REJECTED", "SUPERSEDED")}
+    for c in changes:
+        rid, before, after = c["rule_id"], c["before"], c["after"]
+        base = rid[:-len("-target")] if rid.endswith("-target") else rid
+        others = {oid: o for oid, o in live.items() if (oid[:-len("-target")] if oid.endswith("-target") else oid) != base}
+        title, actor = before.get("title"), _role_words(before.get("actor_ref"))
+        b, a = _hold_single_numeric(before), _hold_single_numeric(after)
+        if b and a and b["field"] == a["field"] and b["op"] == a["op"] and _hold_num(b["value"]) != _hold_num(a["value"]):
+            x, y, unit, up = _hold_num(b["value"]), _hold_num(a["value"]), b.get("unit"), b["op"] in ("gte", "gt")
+            incl = b["op"] in ("gte", "lte")
+            kind = (before.get("outcome") or {}).get("kind")
+            vacated = (up and y > x) or (not up and y < x)
+            lo, hi = min(x, y), max(x, y)
+            lo_v, hi_v = (b["value"], a["value"]) if x < y else (a["value"], b["value"])          # the stored values, as the rules write them
+            rng = _range_words(lo_v, hi_v, unit, lo_in=incl if up else not incl, hi_in=(not incl) if up else incl)
+            if vacated:
+                # A103 (items AEV5-G-08 / G-09, AEV4-G-09): a rule of the same decision covers only the part of the dropped range inside its OWN interval on the
+                # measured field — a band ("from 5 below 25 t") is bounded above as well — and the part no rule reaches is stated with its figures, never as "the rest"
+                lo_in, hi_in = (incl, not incl) if up else (not incl, incl)
+                word = {lo: lo_v, hi: hi_v}                                                       # figures as the rules write them
+                covers, spans = [], []
+                for oid, o in sorted(others.items()):
+                    if not kind or (o.get("outcome") or {}).get("kind") != kind:
+                        continue
+                    own = [l for l in _hold_leaves(o.get("condition")) if l.get("field") == b["field"] and _hold_is_num(l.get("value"))]
+                    lows = [l for l in own if l.get("op") in ("gte", "gt")]
+                    highs = [l for l in own if l.get("op") in ("lte", "lt")]
+                    if not (lows if up else highs):
+                        continue                                                                  # a rule of the other direction is not a tier of this one
+                    low = max(lows, key=lambda l: _hold_num(l["value"])) if lows else None
+                    high = min(highs, key=lambda l: _hold_num(l["value"])) if highs else None
+                    a = max(lo, _hold_num(low["value"])) if low else lo
+                    z = min(hi, _hold_num(high["value"])) if high else hi
+                    if a >= z:
+                        continue
+                    if low is not None and a == _hold_num(low["value"]) and a not in word:
+                        word[a] = low["value"]
+                    if high is not None and z == _hold_num(high["value"]) and z not in word:
+                        word[z] = high["value"]
+                    extra = len(_hold_leaves(o.get("condition"))) > len(own) or (o.get("scope") or {}) != (before.get("scope") or {})
+                    covers.append({"rule_id": oid, "title": o.get("title"), "actor": _role_words(o.get("actor_ref")), "from_value": word[a], "to_value": None if z >= hi else word[z],
+                                   "whole_range": a <= lo and z >= hi, "other_conditions": extra})
+                    if not extra:
+                        spans.append((a, z))
+                gaps, at = [], lo                                                                 # the dropped range minus every unconditional cover
+                for a, z in sorted(spans):
+                    if a > at:
+                        gaps.append((at, a))
+                    at = max(at, z)
+                if at < hi:
+                    gaps.append((at, hi))
+                if covers:
+                    def part(cv):
+                        if cv["whole_range"]:
+                            return ""
+                        if cv["to_value"] is None:
+                            return f" from {_value_words(cv['from_value'])} {unit or ''}".rstrip()
+                        return " " + _range_words(cv["from_value"], cv["to_value"], unit, lo_in=True if up else False, hi_in=False if up else True)
+                    said = "; ".join(f"“{cv['title']}” ({cv['actor']})" + part(cv) + (" when its other conditions hold" if cv["other_conditions"] else "") for cv in covers)
+                    text = f"Cases {rng} no longer reach “{title}” ({actor}). They still reach {said}."
+                    for g0, g1 in gaps:
+                        gw = _range_words(word[g0], word[g1], unit, lo_in=lo_in if g0 == lo else up, hi_in=hi_in if g1 == hi else not up)
+                        text += f" No other rule of the same kind in the knowledge reaches cases {gw}."
+                else:
+                    # neutral on purpose (A100, regression item agd-08): whether those cases still need the step from someone (an approval) or simply no longer
+                    # need it (a service interval not yet due) is the meaning of the request and the rules, read by the guidance model, not decided here
+                    text = (f"Cases {rng} no longer reach “{title}” ({actor}), and no other rule of the same kind in the knowledge applies to them.")
+                out.append({"effect": "range_vacated", "rule_id": rid, "range": {"from": lo, "to": hi, "unit": unit}, "covered_by": covers,
+                            "uncovered": [{"from": g0, "to": g1} for g0, g1 in gaps] if covers else [{"from": lo, "to": hi}], "text": text})
+            else:
+                followers = [(did, d) for did, d in sorted(others.items()) if _triggered_by(d, before)]
+                if followers:
+                    said = "; ".join(f"“{d.get('title')}” ({_role_words(d.get('actor_ref'))})" for _, d in followers)
+                    text = (f"Cases {rng} now reach “{title}” ({actor}); because the condition of {said} is what this rule decides, those cases now reach "
+                            f"{'it' if len(followers) == 1 else 'them'} too.")
+                else:
+                    # no negative claim (A101, items AEV4-G-11 / G-12): the matcher proves a follower when it finds one; not finding one proves nothing
+                    text = f"Cases {rng} now reach “{title}” ({actor})."
+                out.append({"effect": "range_added", "rule_id": rid, "range": {"from": lo, "to": hi, "unit": unit}, "followers": [did for did, _ in followers], "text": text})
+        if before.get("actor_ref") and after.get("actor_ref") and before.get("actor_ref") != after.get("actor_ref"):
+            for did, d in sorted(others.items()):
+                field = _actor_in_state(d, before)
+                if field:
+                    out.append({"effect": "actor_dependency", "rule_id": rid, "other_rule_id": did, "field": field,
+                                "text": (f"“{d.get('title')}” ({_role_words(d.get('actor_ref'))}) is met when “{field}” is true, which names the act of {actor}. After this "
+                                         f"change {_role_words(after.get('actor_ref'))} acts instead, so that rule's condition as written would no longer be met: a person "
+                                         "checks whether it should follow the change.")})
+    for n, e in enumerate(out, 1):                                                         # guidance version 10: the model states each effect by its ref
+        e["ref"] = f"E{n}"
     return out
 
 
@@ -751,6 +1015,14 @@ def _item_link(item: Mapping, rules: Mapping[str, Mapping], changes: Iterable[Ma
         return "held", f"related rule “{title}” is the subject of hold {hold['ref']} ({hold['hold'].replace('_', ' ')}): a person decides how it fits before the change goes on"
     if a.get("link") == "counterevidence":
         return "counterevidence", f"related rule “{title}” disagrees with the changed rule (kept as evidence, not changed); a person may need to settle which stands"
+    # A101 item AEV4-G-14 (2026-10-27): an actor change whose dependent rule's condition names the old actor's act — the same proof as the `actor_dependency`
+    # effect, so the item never says "no action" while the effect asks a person to check
+    moved = next(((c, f) for c in changes if (c.get("before") or {}).get("actor_ref") and (c.get("after") or {}).get("actor_ref")
+                  and c["before"]["actor_ref"] != c["after"]["actor_ref"] for f in [_actor_in_state(rule, c["before"])] if f), None)
+    if moved:
+        c, field = moved
+        return "follows_from", (f"related rule “{title}” follows from the changed rule (its own condition “{field}” names the act of {_role_words(c['before']['actor_ref'])}); "
+                                f"after this change {_role_words(c['after']['actor_ref'])} acts instead, so check whether it should follow the change")
     trigger = next((f for c in changes for f in [_triggered_by(rule, c["before"])] if f), None)
     confirmed = path and all(e.get("status") == "CONFIRMED" and e.get("type") in _DEPENDENT_TYPES for e in path)
     if trigger or confirmed:
@@ -803,6 +1075,7 @@ def build_draft(intent: Mapping, report: Mapping, rules: Mapping[str, Mapping], 
     counter = [{"rule_id": rid, "title": rules[rid]["title"] if rid in rules else rid, "label": "disagrees with a changed rule; kept as read-only evidence; not changed by this draft"}
                for rid in report["counterevidence_rule_ids"]]
     checks = dependency_checks(changes, rules, proposed_dependencies or [])
+    effects = change_effects(changes, rules, relations)
     deps = [dict(d, label=PROPOSED_LABEL, **(checks.get(d.get("dep_id")) or {"check": None, "text": None})) for d in (proposed_dependencies or []) if d.get("status") == "PROPOSED"]
     open_items = [i for i in items if i["action"] in ("UNRESOLVED", "MANUAL")] + unresolved
     invalid = [c for c in changes if not c["valid"]]
@@ -817,7 +1090,7 @@ def build_draft(intent: Mapping, report: Mapping, rules: Mapping[str, Mapping], 
     semantic = {"pin": dict(pin), "operations": ops, "rule_changes": [{"rule_id": c["rule_id"], "before": c["before"], "after": c["after"]} for c in changes], "relation_updates": rel}
     draft = {"draft_version": DRAFT_VERSION, "statement": STATEMENT, "applies_nothing": True, "pin": dict(pin), "intent_id": intent["intent_id"], "request": intent["request"],
              "write_scope": list(report["write_scope"]), "report_hash": report["report_hash"], "status": status, "operations": outcomes, "rule_changes": changes, "relation_updates": rel,
-             "file_actions": items, "unresolved": unresolved, "counterevidence": counter, "excluded": list(report["excluded"]), "proposed_dependencies": deps,
+             "file_actions": items, "unresolved": unresolved, "counterevidence": counter, "excluded": list(report["excluded"]), "proposed_dependencies": deps, "effects": effects,
              "dependency_state": dict(dependency_state or {"status": "not_requested"}), "measured": list(report["measured"]), "coverage": coverage,
              "semantic_diff_hash": canonical_hash(semantic), "guidance": {"status": guidance_state}}
     draft["draft_hash"] = canonical_hash(draft)
@@ -843,7 +1116,35 @@ def validate_guidance_object(obj, limits: Mapping) -> dict:
         if not isinstance(it, dict) or set(it) != GUIDE_ITEM_KEYS or not isinstance(it["ref"], str) or not isinstance(it["instruction"], str) \
                 or not isinstance(it["hold"], bool) or not isinstance(it["rationale"], str):
             raise ValueError("item_shape")
+    if not isinstance(obj["effects"], list) or len(obj["effects"]) > limits["max_items"]:
+        raise ValueError("effects")
+    for e in obj["effects"]:
+        if not isinstance(e, dict) or set(e) != GUIDE_EFFECT_KEYS or not isinstance(e["ref"], str) or not isinstance(e["statement"], str):
+            raise ValueError("effect_shape")
     return obj
+
+
+_NOT_DUE = re.compile(r"(?i)\bnot (?:yet )?due\b")
+_NUM = re.compile(r"\d+(?:[.,]\d+)*")
+_COVER_CLAIM = re.compile(r"(?i)\b(?:falls? under|now (?:reach|reaches|go to|goes to|fall|falls)|still (?:reach|reaches|go to|goes to)|(?:are|is|remain|remains) covered by|"
+                          r"(?:are|is) handled by|now (?:approved|decided|signed off) by)\b")
+# a sentence that itself says some cases reach no one is not a cover claim (it states the uncovered part)
+_CLAUSE = re.compile(r"(?i),\s*(?:but|though|although|while|whereas|and|yet)\b|;|\s(?:but|while|whereas)\s")
+_NO_COVER = re.compile(r"(?i)\b(?:no(?: other)?(?: \w+)? (?:rule|rules|tier|tiers|approval|approver|step|one)|nobody|no-one|reach(?:es|ed)? no|not covered|uncovered|"
+                       r"without (?:a|an|any) \w+)\b")
+
+
+def _fmt(v) -> str:
+    f = float(str(v).replace(",", ""))
+    return str(int(f)) if f == int(f) else str(f)
+
+
+def _nums_in(text: str) -> set:
+    return {_fmt(m.group(0).replace(",", "")) for m in _NUM.finditer(text or "")}
+
+
+def _fig(r: Mapping) -> set:
+    return {_fmt(r[k]) for k in ("from", "to") if r.get(k) is not None}
 
 
 def resolve_guidance(obj: Mapping, draft: Mapping, limits: Mapping) -> dict:
@@ -889,8 +1190,85 @@ def resolve_guidance(obj: Mapping, draft: Mapping, limits: Mapping) -> dict:
             question_items.append(ref)
         else:
             advice.append({"text": text, "ref": ref, "why_not_blocking": why})
+    # guidance version 10 (hardening H1 / H2, 2026-10-27): the model states every server-proven effect by its ref; the server checks each statement against the fact
+    # (figures, the uncovered parts, the direction) and removes AI sentences that contradict a proven fact, recording what it removed and why. Nothing the server
+    # writes is counted as the model's; the effect itself is always shown as the server's statement.
+    effects = list(draft.get("effects") or [])
+    added = [e for e in effects if e.get("effect") == "range_added"]
+    vacated = [e for e in effects if e.get("effect") == "range_vacated"]
+    added_nums = {n for e in added for n in _fig(e.get("range") or {})}
+
+    gapped = [e for e in vacated if e.get("uncovered")]
+
+    def _num(v) -> float:
+        return float("inf") if v is None else float(str(v).replace(",", ""))
+
+    def claims_full_cover(text: str) -> bool:
+        """A109 (AEV7-G-08): "cases from 5,000 to 30,000 CHF ... now fall under the foreman or director tiers" while the fact proves 5,000 to under 20,000 reached
+        by no rule. R5 (2026-10-28) variants: a sentence naming BOTH ends of a range no rule covers ("cases from 1,000,000 to 1,500,000 JPY now fall under
+        Finance") and a dropped range with no cover at all slipped through the figure test. Now: a cover phrase over the span the sentence's own figures mark
+        inside a dropped range (one figure: from it to the range end) that overlaps a part no rule reaches is a cover the rules do not give, unless the same
+        sentence says some cases reach no one (it states the gap)."""
+        m = _COVER_CLAIM.search(text)
+        if not m or _NO_COVER.search(text):
+            return False
+        # the figures that qualify the cover: those after the phrase in its clause ("... and still reach the general manager from 100 tonnes"), else those of
+        # the clause ("..., but cases of 5,000 still reach ..."), else the cases the sentence named before it ("cases from 5,000 to 30,000 ... and now fall under")
+        cuts = [0] + [c.end() for c in _CLAUSE.finditer(text)] + [len(text)]
+        start = max(c for c in cuts if c <= m.start())
+        end = min((c.start() for c in _CLAUSE.finditer(text) if c.start() >= m.end()), default=len(text))
+        vals = ([_num(n) for n in _nums_in(text[m.end():end])] or [_num(n) for n in _nums_in(text[start:end])]
+                or [_num(n) for n in _nums_in(text[:end])])
+        for e in gapped:
+            lo_r, hi_r = _num(e["range"].get("from")), _num(e["range"].get("to"))
+            inside = sorted(v for v in vals if lo_r <= v <= hi_r)
+            if not inside:
+                continue
+            lo, hi = inside[0], (inside[-1] if len(inside) > 1 else hi_r)
+            if any(lo < _num(g.get("to")) and hi > _num(g.get("from")) for g in e["uncovered"]):
+                return True
+        return False
+
+    def contradicts(text: str) -> bool:                                                  # a sentence the proven facts contradict
+        return bool(added and _NOT_DUE.search(text) and (not vacated or _nums_in(text) & added_nums)) or claims_full_cover(text)
+    removed = []
+    keep = []
+    for a in accepted:
+        if contradicts(a["instruction"]):
+            rejected.append({"ref": a["ref"], "reason": "contradicts_server_fact"})
+            removed.append({"where": "instruction", "ref": a["ref"], "text": a["instruction"], "reason": "contradicts_server_fact", "by": "server"})
+        else:
+            keep.append(a)
+    accepted = keep
+    sentences = [x for x in re.split(r"(?<=[.!?])\s+", summary) if x.strip()]
+    if any(contradicts(x) for x in sentences):
+        removed += [{"where": "summary", "ref": None, "text": x, "reason": "contradicts_server_fact", "by": "server"} for x in sentences if contradicts(x)]
+        summary = " ".join(x for x in sentences if not contradicts(x))
+    by_ref = {e["ref"]: e for e in effects if e.get("ref")}
+    statements, stated = [], set()
+    for st in obj.get("effects") or []:
+        ref, text = st["ref"], _plain(st["statement"], limits["max_instruction_chars"])
+        e = by_ref.get(ref)
+        if e is None or ref in stated:
+            rejected.append({"ref": ref[:40], "reason": "effect_ref_not_in_draft" if e is None else "duplicate"})
+            continue
+        stated.add(ref)
+        if text is None:
+            statements.append({"ref": ref, "statement": None, "status": "refused", "reason": "text_not_plain"})
+        elif _nums_in(text) - _nums_in(e["text"]):
+            statements.append({"ref": ref, "statement": None, "status": "refused", "reason": "number_not_in_the_effect"})
+        elif e.get("effect") == "range_added" and _NOT_DUE.search(text):
+            statements.append({"ref": ref, "statement": None, "status": "refused", "reason": "contradicts_server_fact"})
+            removed.append({"where": "effect", "ref": ref, "text": text, "reason": "contradicts_server_fact", "by": "server"})
+        elif e.get("effect") == "range_vacated" and e.get("covered_by") and any(not {_fmt(g["from"]), _fmt(g["to"])} <= _nums_in(text) for g in e.get("uncovered") or []):
+            statements.append({"ref": ref, "statement": text, "status": "incomplete", "reason": "uncovered_part_not_stated"})
+        else:
+            statements.append({"ref": ref, "statement": text, "status": "kept", "reason": None})
+    missing = sorted(set(by_ref) - stated)
+    coverage = {"effects": len(by_ref), "kept": sum(1 for x in statements if x["status"] == "kept"), "incomplete": sum(1 for x in statements if x["status"] == "incomplete"),
+                "refused": sum(1 for x in statements if x["status"] == "refused"), "missing": missing}
     return {"summary": summary, "accepted": accepted, "rejected": rejected, "questions": questions, "question_items": question_items, "advice": advice,
-            "not_addressed": sorted(set(refs) - seen)}
+            "not_addressed": sorted(set(refs) - {a["ref"] for a in accepted}), "effect_statements": statements, "effects_coverage": coverage, "removed": removed}
 
 
 def merge_guidance(draft: Mapping, guidance: Mapping, *, state: Mapping) -> dict:
@@ -908,7 +1286,9 @@ def merge_guidance(draft: Mapping, guidance: Mapping, *, state: Mapping) -> dict
                 it.update(server_action="AI_EDIT_SUPPORTED", action="MANUAL", reason="model_raised_a_concern", held_edit=it["proposal_edit"], proposal_edit=None)
     out["guidance"] = {**dict(state), "summary": guidance.get("summary") or "", "questions_for_human": list(guidance.get("questions") or []),
                        "question_items": list(guidance.get("question_items") or []), "advice_for_human": list(guidance.get("advice") or []),
-                       "rejected": list(guidance.get("rejected") or []), "not_addressed": list(guidance.get("not_addressed") or [])}
+                       "rejected": list(guidance.get("rejected") or []), "not_addressed": list(guidance.get("not_addressed") or []),
+                       "effect_statements": list(guidance.get("effect_statements") or []), "effects_coverage": dict(guidance.get("effects_coverage") or {}),
+                       "removed": list(guidance.get("removed") or [])}
     out["coverage"]["guidance"] = state.get("status")
     out["coverage"]["file_actions"] = {a: sum(1 for i in out["file_actions"] if i["action"] == a) for a in ACTIONS}
     open_items = [i for i in out["file_actions"] if i["action"] in ("UNRESOLVED", "MANUAL")] + out["unresolved"]
@@ -926,6 +1306,8 @@ def build_guidance_prompt(frozen: Mapping, draft: Mapping, *, can_read_evidence:
     for d in draft.get("proposed_dependencies") or []:                  # the completed dependency step: what a model suggested depends on a changed rule (not confirmed)
         rules.append(f"- related (suggested by a model, not confirmed): {d.get('from_title') or d.get('from_rule_id')} {d.get('relation')} {d.get('to_title') or d.get('to_rule_id')}"
                      + (f" | server check: {d['text']}" if d.get("text") else ""))
+    for e in draft.get("effects") or []:                                  # R2-05a: facts the server proved from the rules (who still covers a range, what follows)
+        rules.append(f"- effect ref={e.get('ref', '?')} (server, proven from the rules): {e['text']}")
     st = draft.get("dependency_state") or {}
     if st.get("status") and st["status"] != "completed":
         rules.append(f"- dependency check: {st['status']} ({st.get('reason') or 'not run'})")
@@ -1081,10 +1463,14 @@ def render(draft: Mapping, *, mode: str, can_read_evidence: bool, guidance_writt
             row["model_instruction"] = u.get("model_instruction")
         unresolved.append(row)
     g = dict(draft.get("guidance") or {})
-    guidance = {"status": g.get("status", "not_requested"), "reason": g.get("reason"), "summary": None if hide_guidance else g.get("summary"), "summary_withheld": hide_guidance and bool(g.get("summary")),
+    guidance = {"status": g.get("status", "not_requested"), "reason": g.get("reason"), "attempt": g.get("attempt"), "summary": None if hide_guidance else g.get("summary"), "summary_withheld": hide_guidance and bool(g.get("summary")),
                 "questions_for_human": [] if hide_guidance else list(g.get("questions_for_human") or []),
                 "advice_for_human": [] if hide_guidance else list(g.get("advice_for_human") or []),           # checks the person may want to make: shown, never blockers
-                "not_addressed_count": len(g.get("not_addressed") or []), "rejected_count": len(g.get("rejected") or [])}
+                "not_addressed_count": len(g.get("not_addressed") or []), "rejected_count": len(g.get("rejected") or []),
+                "effect_statements": [] if hide_guidance else [{"ref": x["ref"], "statement": x["statement"], "status": x["status"], "reason": x["reason"]}
+                                                                 for x in g.get("effect_statements") or []],
+                "effects_coverage": dict(g.get("effects_coverage") or {}),
+                "removed": [] if hide_guidance else [{"where": x["where"], "text": x["text"], "reason": x["reason"], "by": x["by"]} for x in g.get("removed") or []]}
     out = {"statement": draft["statement"], "status": draft["status"], "operations": ops,
            "rule_changes": [{"title": c["title"], "before": c["before_text"], "after": c["after_text"], "changes": [d["text"] for d in c["diff"]], "aspects": semantic_aspects(c["diff"]), "valid": c["valid"], "error": c["error"],
                              "flags": [f["text"] for f in c["flags"]]} for c in draft["rule_changes"]],
@@ -1092,7 +1478,11 @@ def render(draft: Mapping, *, mode: str, can_read_evidence: bool, guidance_writt
            "counterevidence": [{"title": c["title"], "label": c["label"]} for c in draft["counterevidence"]], "excluded": [e["text"] for e in draft["excluded"]],
            "proposed_dependencies": [{"from": d.get("from_title", d.get("from_rule_id")), "to": d.get("to_title", d.get("to_rule_id")), "relation": d["relation"], "status": "PROPOSED", "label": d["label"],
                                       "check": d.get("check"), "check_text": d.get("text")} for d in draft["proposed_dependencies"]],
-           "dependency_state": {"status": draft["dependency_state"].get("status"), "reason": draft["dependency_state"].get("reason")},
+           "dependency_state": {"status": draft["dependency_state"].get("status"), "reason": draft["dependency_state"].get("reason"),
+                                "complete": draft["dependency_state"].get("complete"), "attempt": draft["dependency_state"].get("attempt")},
+           # revision 2 (A101 item AEV4-G-09): what the change does to cases, proven from the rules, is shown as the server's own statement — never only through
+           # the model's text, which may omit it. Business words only (rule titles, role words, values); no id, path or location.
+           "effects": [{"effect": e["effect"], "text": e["text"]} for e in draft.get("effects") or []],
            "files": files if can_read_evidence else [], "files_withheld": 0 if can_read_evidence else len(files), "file_action_counts": draft["coverage"]["file_actions"],
            "unresolved": unresolved, "measured": draft["measured"], "coverage": draft["coverage"], "guidance": guidance,
            "questions": [{"ref": q["ref"], "question": q["question"], "clarification": _clarification_view(q.get("clarification"), can_read_evidence)}

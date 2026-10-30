@@ -17,6 +17,7 @@ import { AIInterpretationPreview } from "@/components/decision/AIInterpretationP
 import { useFlow } from "./flow";
 import type { Chat, Ids, Rec, StageKey, Understanding } from "./types";
 import { STAGES } from "./types";
+import { EquivalentStep } from "@/components/EquivalentStep";
 
 const FIELD_ORDER: [string, string][] = [
   ["subject", "What is changing"], ["scope", "Applies to"], ["unit", "What the amount measures"], ["currency", "Currency"],
@@ -149,7 +150,7 @@ function AiHeld({ chat }: { chat: Chat }) {
         : <span>Nothing was sent to the AI yet. It answers when you send a message, or press the button.</span>}
       {mine && !block && (
         <div className="flex flex-wrap gap-2 mt-1">
-          <Button variant="primary" data-testid="chat-allow" title={aiWhy(s, "intent.interpret")} disabled={pending || !s.aiKind("intent.interpret")} onClick={ask}>Ask the AI</Button>
+          <Button variant="primary" data-testid="chat-allow" title={aiWhy(s, "intent.interpret")} disabled={pending || !s.aiKind("intent.interpret")} onClick={ask}>Ask the AI</Button><EquivalentStep kind="intent.interpret" to="change" />
         </div>
       )}
       {!mine && block === "sandbox_hold" && chat.can_allow && (

@@ -106,6 +106,26 @@ class BudgetConfig:
     #: (optional): role (job kind) -> thinking level sent to the provider for that role. Absent role = the request carries no thinking parameter (the model default
     #: applies). Only a configured level is ever sent, so a model that does not take the parameter is never sent one by accident.
     role_thinking_levels: dict = field(default_factory=dict)
+    #: (optional, R7 2026-10-28): role -> provider service tier requested for that role's calls. Only "priority" (Vertex Priority PayGo) is known; the role's
+    #: model must then also be priced under the key "<model>@priority". The served tier is read from the response (`usage_metadata.traffic_type`): a call the
+    #: provider served at priority is priced at that key, a call it downgraded (ON_DEMAND) at the standard key, a call without a traffic type at the priority key
+    #: (fail closed). Absent role = no tier header (standard PayGo).
+    role_service_tiers: dict = field(default_factory=dict)
+    #: (optional, R11 2026-10-28): role -> its own request deadline in seconds, at most `request_timeout_seconds`. The call is sent with that timeout, and an answer
+    #: that still arrives after it is not used: its reported usage is booked and the attempt ends as a provider timeout (no retry beyond `max_retries`). Absent
+    #: role = `request_timeout_seconds` and the earlier behaviour.
+    role_request_timeouts: dict = field(default_factory=dict)
+    #: (optional, R21 owner approval 2026-10-29): role -> Vertex multi-region location ("us" / "eu") for that role's calls instead of the global endpoint. Only the
+    #: roles in `LOCATION_ROLES` may have one (every other role stays global and keeps the global-endpoint assertion); the role's model must be priced under
+    #: "<model>@<location>" (the multi-region list price), and a role cannot combine a location with a service tier. Absent role = global.
+    role_locations: dict = field(default_factory=dict)
+    #: (optional, R23 2026-10-30): role -> its own reservation ceiling of output tokens (`role_max_output_tokens`) and its own max-output-tokens request
+    #: parameter (`role_generation_max_output_tokens`). Absent role = the global `max_output_tokens` / `generation_max_output_tokens`. The 2x overshoot rule
+    #: holds per role (its ceiling >= 2 x what it sends). Admission reserves the worst single call over every role at THAT role's ceiling; booking prices a
+    #: missing output side at the ceiling of the role that made the call. Lets one role (the request assistant: 2,048 sent / 4,096 reserved, as measured)
+    #: run tighter than the others without lowering anyone else's cap.
+    role_max_output_tokens: dict = field(default_factory=dict)
+    role_generation_max_output_tokens: dict = field(default_factory=dict)
     #: The server's AI role allowlist (`infra/ai_kinds.py`): None = the key is absent and NO AI job kind may run (fail closed); the string
     #: "all" = every kind (development / tests / evaluation); otherwise a frozenset of AI job kinds. Not overridable by environment.
     enabled_roles: object = None
@@ -120,6 +140,65 @@ def thinking_level_for_role(config, role: str | None) -> str | None:
     return mapping.get(role) if role else None
 
 
+SERVICE_TIERS = ("priority",)
+
+
+def service_tier_for_role(config, role: str | None) -> str | None:
+    """The configured provider service tier of a role, or None (standard). Duck-typed like `model_for_role`."""
+    mapping = getattr(config, "role_service_tiers", None) or {}
+    return mapping.get(role) if role else None
+
+
+def role_request_timeout(config, role: str | None) -> float | None:
+    """The role's own deadline (`role_request_timeouts`), or None (the role uses `request_timeout_seconds`). Duck-typed like `model_for_role`."""
+    mapping = getattr(config, "role_request_timeouts", None) or {}
+    return mapping.get(role) if role else None
+
+
+LOCATIONS = ("us", "eu")
+#: R21: the only roles that may be sent to a non-global location (the request assistant's recovery call); widening it is a reviewed code change. R23 (prepared,
+#: not active anywhere: no shipped or evaluated budget sets it): the request assistant's answer call too, so the answer call can be served at a multi-region
+#: with the recovery on the global endpoint; every call at a location is priced and booked at that location on every path (`request_assistant._priced`)
+LOCATION_ROLES = frozenset({"request.assistant", "request.assistant.recover"})
+
+
+def location_for_role(config, role: str | None) -> str | None:
+    """The configured multi-region location of a role, or None (global). Duck-typed like `model_for_role`."""
+    mapping = getattr(config, "role_locations", None) or {}
+    return mapping.get(role) if role else None
+
+
+def output_ceiling_for_role(config, role: str | None) -> int:
+    """R23: the reservation ceiling of output tokens of one call of this role (`role_max_output_tokens`, else the global `max_output_tokens`)."""
+    mapping = getattr(config, "role_max_output_tokens", None) or {}
+    return (mapping.get(role) if role else None) or config.max_output_tokens
+
+
+def generation_cap_for_role(config, role: str | None) -> int | None:
+    """R23: the max-output-tokens request parameter sent for this role (`role_generation_max_output_tokens`, else the global generation cap, else the role's
+    own reservation ceiling when it has one, else the global `max_output_tokens`)."""
+    mapping = getattr(config, "role_generation_max_output_tokens", None) or {}
+    own = mapping.get(role) if role else None
+    if own:
+        return own
+    glob = getattr(config, "generation_max_output_tokens", None)
+    ceiling = output_ceiling_for_role(config, role)
+    return min(glob, ceiling) if glob else ceiling
+
+
+def price_key(model_id: str, tier: str | None, location: str | None = None) -> str:
+    """The `model_prices` key of a model served at a tier ("<model>@<tier>") or at a multi-region location ("<model>@<location>"); the model id itself for
+    the standard tier on the global endpoint. A tier and a location are never combined (the loader refuses it)."""
+    if location:
+        return f"{model_id}@{location}"
+    return f"{model_id}@{tier}" if tier else model_id
+
+
+def price_key_for_role(config, role: str | None) -> str:
+    """The price a role's call is reserved at: its model at its configured tier or location (the priciest the call can be served at)."""
+    return price_key(model_for_role(config, role), service_tier_for_role(config, role), location_for_role(config, role))
+
+
 def model_for_role(config, role: str | None) -> str:
     """The model a role (job kind) runs: its `role_model_ids` entry, else `default_model_id`.
     Duck-typed so a config object without `role_model_ids` keeps the default."""
@@ -130,7 +209,9 @@ def model_for_role(config, role: str | None) -> str:
 def worst_case_model_id(config) -> str:
     """The priciest configured model (default plus every role model) at the config ceilings.
     Admission is not job-kind aware, so it reserves at this model: it can never under-reserve."""
-    ids = {config.default_model_id, *(getattr(config, "role_model_ids", None) or {}).values()}
+    roles = getattr(config, "role_model_ids", None) or {}
+    ids = {config.default_model_id, *roles.values(), *(price_key(roles.get(r) or config.default_model_id, t) for r, t in (getattr(config, "role_service_tiers", None) or {}).items()),
+           *(price_key(roles.get(r) or config.default_model_id, None, loc) for r, loc in (getattr(config, "role_locations", None) or {}).items())}
 
     def worst(mid):
         price = config.model_prices[mid]
@@ -139,9 +220,32 @@ def worst_case_model_id(config) -> str:
     return max(sorted(ids), key=worst)
 
 
+def worst_case_call_usd(config) -> Decimal:
+    """R23: the most one provider call of ANY configured role can cost, each role priced at its own price key (and its standard key, a tier may be served
+    downgraded) with its OWN output ceiling, plus the default model at the global ceiling. Without per-role ceilings this equals the cost of
+    `worst_case_model_id(config)` at the global ceilings. Zero when the operator chose fail-open (as `actual_call_cost_usd` for a fully missing report)."""
+    if not config.fail_closed_on_missing_usage:
+        return Decimal("0")
+    roles = getattr(config, "role_model_ids", None) or {}
+    names = set(roles) | set(getattr(config, "role_service_tiers", None) or {}) | set(getattr(config, "role_locations", None) or {}) \
+        | set(getattr(config, "role_max_output_tokens", None) or {})
+    pairs = {(config.default_model_id, config.max_output_tokens)}
+    for r in names:
+        ceiling = output_ceiling_for_role(config, r)
+        pairs.add((price_key_for_role(config, r), ceiling))
+        pairs.add((model_for_role(config, r), ceiling))
+
+    def cost(pair):
+        price = config.model_prices[pair[0]]
+        return Decimal(config.max_input_tokens_per_call) / Decimal(1000) * price.input_usd_per_1k + Decimal(pair[1]) / Decimal(1000) * price.output_usd_per_1k
+    return max(cost(p) for p in sorted(pairs))
+
+
 def worst_case_model_id_raw(raw: dict) -> str:
     """`worst_case_model_id` for a raw (JSON-loaded) config mapping, for harnesses that read the file directly."""
-    ids = {raw["default_model_id"], *(raw.get("role_model_ids") or {}).values()}
+    roles = raw.get("role_model_ids") or {}
+    ids = {raw["default_model_id"], *roles.values(), *(price_key(roles.get(r) or raw["default_model_id"], t) for r, t in (raw.get("role_service_tiers") or {}).items()),
+           *(price_key(roles.get(r) or raw["default_model_id"], None, loc) for r, loc in (raw.get("role_locations") or {}).items())}
 
     def worst(mid):
         p = raw["model_prices"][mid]
@@ -287,6 +391,26 @@ def _validate(raw: dict) -> tuple[BudgetConfig | None, list]:
         else:
             generation_cap = v
 
+    role_caps: dict = {}
+    for key in ("role_max_output_tokens", "role_generation_max_output_tokens"):            # R23: per-role output caps
+        role_caps[key] = {}
+        v = raw.get(key)
+        if v is None:
+            continue
+        if not isinstance(v, dict):
+            errors.append(f"{key}: must be a mapping, got {v!r}")
+            continue
+        for role, n in v.items():
+            if not isinstance(role, str) or not role or not _is_strict_int(n) or n <= 0:
+                errors.append(f"{key}[{role!r}]: must be an int > 0, got {n!r}")
+            else:
+                role_caps[key][role] = n
+    for role in set(role_caps["role_max_output_tokens"]) | set(role_caps["role_generation_max_output_tokens"]):
+        ceiling = role_caps["role_max_output_tokens"].get(role) or max_output_tokens
+        sent = role_caps["role_generation_max_output_tokens"].get(role) or (min(generation_cap, ceiling) if generation_cap and ceiling else None)
+        if ceiling and sent and ceiling < 2 * sent:
+            errors.append(f"role caps[{role!r}]: 2 x {sent} sent exceeds the role's reservation ceiling {ceiling} (a 2x overshoot must fit what is reserved)")
+
     max_input_tokens_per_call = None
     if "max_input_tokens_per_call" in raw:
         v = raw["max_input_tokens_per_call"]
@@ -398,6 +522,40 @@ def _validate(raw: dict) -> tuple[BudgetConfig | None, list]:
                 else:
                     role_thinking_levels[role] = level
 
+    role_service_tiers: dict = {}
+    if "role_service_tiers" in raw:
+        v = raw["role_service_tiers"]
+        if not isinstance(v, dict):
+            errors.append(f"role_service_tiers: must be a mapping, got {v!r}")
+        else:
+            for role, tier in v.items():
+                mid = role_model_ids.get(role) or default_model_id
+                if not isinstance(role, str) or not role or tier not in SERVICE_TIERS:
+                    errors.append(f"role_service_tiers[{role!r}]: tier must be one of {SERVICE_TIERS}, got {tier!r}")
+                elif model_prices and price_key(mid, tier) not in model_prices:
+                    errors.append(f"role_service_tiers[{role!r}]: {price_key(mid, tier)!r} is not a key in model_prices (the tier needs its own price)")
+                else:
+                    role_service_tiers[role] = tier
+
+    role_locations: dict = {}
+    if "role_locations" in raw:
+        v = raw["role_locations"]
+        if not isinstance(v, dict):
+            errors.append(f"role_locations: must be a mapping, got {v!r}")
+        else:
+            for role, loc in v.items():
+                mid = role_model_ids.get(role) or default_model_id
+                if not isinstance(role, str) or role not in LOCATION_ROLES:
+                    errors.append(f"role_locations[{role!r}]: only {sorted(LOCATION_ROLES)} may use a non-global location")
+                elif loc not in LOCATIONS:
+                    errors.append(f"role_locations[{role!r}]: location must be one of {LOCATIONS}, got {loc!r}")
+                elif role in role_service_tiers:
+                    errors.append(f"role_locations[{role!r}]: a role cannot combine a location with a service tier")
+                elif model_prices and price_key(mid, None, loc) not in model_prices:
+                    errors.append(f"role_locations[{role!r}]: {price_key(mid, None, loc)!r} is not a key in model_prices (the location needs its own price)")
+                else:
+                    role_locations[role] = loc
+
     request_timeout = None
     if "request_timeout_seconds" in raw:
         v = raw["request_timeout_seconds"]
@@ -405,6 +563,20 @@ def _validate(raw: dict) -> tuple[BudgetConfig | None, list]:
             errors.append(f"request_timeout_seconds: must be a finite number > 0, got {v!r}")
         else:
             request_timeout = float(v)
+
+    role_request_timeouts: dict = {}
+    if "role_request_timeouts" in raw:
+        v = raw["role_request_timeouts"]
+        if not isinstance(v, dict):
+            errors.append(f"role_request_timeouts: must be a mapping, got {v!r}")
+        else:
+            for role, sec in v.items():
+                if not isinstance(role, str) or not role or not (_is_strict_float(sec) or _is_strict_int(sec)) or math.isnan(sec) or math.isinf(sec) or sec <= 0:
+                    errors.append(f"role_request_timeouts[{role!r}]: must be a finite number of seconds > 0, got {sec!r}")
+                elif request_timeout is None or sec > request_timeout:
+                    errors.append(f"role_request_timeouts[{role!r}]: needs request_timeout_seconds and must not exceed it (the worker lease covers that timeout), got {sec!r}")
+                else:
+                    role_request_timeouts[role] = float(sec)
 
     snapshot_date = None
     if "price_snapshot_date" in raw:
@@ -445,9 +617,10 @@ def _validate(raw: dict) -> tuple[BudgetConfig | None, list]:
         max_provider_calls_per_job=max_provider_calls_per_job, model_prices=model_prices,
         default_model_id=default_model_id, fail_closed_on_missing_usage=fail_closed,
         latency_slo_p50_seconds=p50, latency_slo_p95_seconds=p95,
-        role_model_ids=role_model_ids, role_thinking_levels=role_thinking_levels, request_timeout_seconds=request_timeout,
+        role_model_ids=role_model_ids, role_thinking_levels=role_thinking_levels, role_service_tiers=role_service_tiers, role_request_timeouts=role_request_timeouts, role_locations=role_locations, request_timeout_seconds=request_timeout,
         price_snapshot_date=snapshot_date, price_snapshot_max_age_days=snapshot_max_age,
         generation_max_output_tokens=generation_cap, enabled_roles=enabled_roles,
+        role_max_output_tokens=role_caps["role_max_output_tokens"], role_generation_max_output_tokens=role_caps["role_generation_max_output_tokens"],
     ), []
 
 
@@ -553,7 +726,7 @@ def estimate_job_cost_usd(
 
 
 def actual_call_cost_usd(
-    config: BudgetConfig, *, model_id: str, input_tokens: int | None, output_tokens: int | None,
+    config: BudgetConfig, *, model_id: str, input_tokens: int | None, output_tokens: int | None, output_ceiling: int | None = None,
 ) -> Decimal:
     """Contract §7.3: a missing side is priced at its worst case
     when `fail_closed_on_missing_usage` is true; the reported side is priced as reported.
@@ -573,7 +746,7 @@ def actual_call_cost_usd(
         return Decimal("0")
 
     effective_input = input_tokens if input_tokens is not None else config.max_input_tokens_per_call
-    effective_output = output_tokens if output_tokens is not None else config.max_output_tokens
+    effective_output = output_tokens if output_tokens is not None else (output_ceiling or config.max_output_tokens)   # R23: the call's role ceiling
 
     return (
         Decimal(effective_input) / Decimal(1000) * price.input_usd_per_1k

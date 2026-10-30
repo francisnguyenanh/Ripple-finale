@@ -35,6 +35,7 @@ role_model_ids:
   code.diff_proposal: stand_in     # SUR-03 proposal-only explanation + edits of a confirmed change (diff built and parsed by the server; never applied or run)
   request.qa: stand_in             # job kind of the request assistant (role request.assistant below)
   request.assistant: stand_in      # RQA-03 read-only request assistant (one call per explicit question; live use needs its own allocation)
+  request.assistant.complete: stand_in   # R17: at most one supplementary call per question for the parts the first pass left open
   roi.analyst: stand_in            # SUR-07 analyst memo over a SYNTHETIC replay (numbers computed by the replay engine; real data refused)
   retrieval.semantic: stand_in  # planned, QRY-02 (only if a model is used for query expansion or embeddings)
   document.wording: stand_in    # AIX-D1 audience variants of a generated document (server-checked wording, labelled fallback); the DOC-02 path itself needs no model

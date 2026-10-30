@@ -88,6 +88,15 @@ def _assert_global_endpoint() -> None:
         raise NonRetryableExecutionError("endpoint_not_global", f"default_region={region!r}")
 
 
+def _assert_vertex_backend() -> None:
+    """R21: a role allowed a Vertex multi-region location (`budget_config.LOCATION_ROLES`) still requires the Vertex backend of the routed account; there is no
+    fallback to another backend."""
+    from ai_module.router import AIRouter
+    route = AIRouter().routing["text_generation"]
+    if route.get("backend") != "vertex":
+        raise NonRetryableExecutionError("endpoint_not_vertex", f"backend={route.get('backend')!r}")
+
+
 def _clip(text, n):
     return text if not isinstance(text, str) or len(text) <= n else text[:n] + "..."
 

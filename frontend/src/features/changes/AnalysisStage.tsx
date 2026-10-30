@@ -17,6 +17,7 @@ import type { Rec } from "./types";
 import { isDone, isTerminal } from "./types";
 import { SimulationOutcome } from "@/components/decision/SimulationOutcome";
 import { outcomeOf } from "@/components/decision/outcomeModel";
+import { EquivalentStep } from "@/components/EquivalentStep";
 
 const REASONS: Record<string, string> = {
   no_confirmed_relation_evidence_bounded_investigation_not_run: "No relation evidence covers this rule and the target - UNKNOWN (not 'unaffected'). Compute relation coverage and run the impact analysis again.",
@@ -291,7 +292,7 @@ export function AnalysisStage() {
           <Muted>The AI reads up to <strong>3 files</strong> that still hold UNKNOWN rules, one call each, one after the other, and says whether each file depends on this change, with a quote the server re-checks. Its answer is shown apart ("AI judgement, re-checked by the server"): it is never a proven dependency, and a rule it does not flag stays UNKNOWN. Running this repeats the impact analysis, so do it before the simulation.</Muted>
           {inv && <Callout tone="wait" testid="investigate-running" role="status"><span>Looking at file {inv.step} of {inv.total}: <strong>{inv.label}</strong> (waiting for the AI)...</span></Callout>}
           {invNote && <Muted testid="investigate-note">{invNote}</Muted>}
-          <div><Button data-testid="action-investigate-unknown" title={aiWhy(s, "impact.judge")} disabled={pending || !s.aiKind("impact.judge") || !!inv} onClick={() => void investigate()}>Ask the AI to look at up to 3 files (uses the paid model)</Button></div>
+          <div><Button data-testid="action-investigate-unknown" title={aiWhy(s, "impact.judge")} disabled={pending || !s.aiKind("impact.judge") || !!inv} onClick={() => void investigate()}>Ask the AI to look at up to 3 files (uses the paid model)</Button><EquivalentStep kind="impact.judge" to="change" /></div>
           {((((d.impact!.execution_result ?? {}) as Rec).coverage?.model_judgments?.requested ?? 0) > 0) ? <Muted testid="investigate-intake">Last investigation: {JSON.stringify(((d.impact!.execution_result ?? {}) as Rec).coverage?.model_judgments)}</Muted> : null}
         </div>
       )}

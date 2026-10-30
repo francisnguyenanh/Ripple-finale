@@ -15,7 +15,8 @@ def old_build(frozen, pack_, history, question, *, perspective):
     authority = "\n".join(b["text"] for b in ra.authority_summary(pack_["facts"])) or "(none)"
     causes = ", ".join(f"{f['id']} [{f['kind']}]" for f in ra.cause_basis(pack_["facts"])) or "(none)"
     return (frozen["prompt_template"].replace("{perspective}", perspective).replace("{as_of}", str(pack_.get("as_of"))).replace("{authority}", authority)
-            .replace("{cause_facts}", causes).replace("{facts}", facts).replace("{history}", hist).replace("{question}", question))
+            .replace("{cause_facts}", causes).replace("{basis}", ra.basis_text(pack_["facts"]))            # answer/6 (R16): the per-pack basis placeholder
+            .replace("{facts}", facts).replace("{history}", hist).replace("{question}", question))
 
 
 def pack(*texts):

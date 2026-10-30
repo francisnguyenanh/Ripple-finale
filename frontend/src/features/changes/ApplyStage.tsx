@@ -16,6 +16,7 @@ import { useFlow } from "./flow";
 import { ApproveJobButton, JobLine, useCreateStage } from "./StageBits";
 import type { ChangeState, Rec } from "./types";
 import { isDone, jobState } from "./types";
+import { EquivalentStep } from "@/components/EquivalentStep";
 
 export function ApplyStage() {
   const { ids, data, setIds, refresh } = useFlow();
@@ -282,7 +283,7 @@ export function QueryStage() {
               if (!q.trim() || !scope.length) { notify.status("Enter a question; at least one file must be searched."); return; }
               const id = newId("ui-query");
               if (await create("gap.answer", id, { question: q.trim(), question_id: id, artifact_ids: scope, intent_id: ids.intent || undefined })) { setIds({ query: id }); await refresh(); }
-            }}>Ask on the new revision</Button>
+            }}>Ask on the new revision</Button><EquivalentStep kind="gap.answer" to="ask" />
             <ApproveJobButton job={d.query} label="Approve this model call" testid="action-approve-query" />
           </div>
         </div>

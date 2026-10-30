@@ -193,6 +193,19 @@ The budget configuration names the AI job kinds this server may run. The code is
 - **Semantic retrieval:** the external semantic layer runs only when `retrieval.semantic` is enabled (and `RIPPLE_SEMANTIC_RETRIEVAL` selects a provider); otherwise answers use the lexical layers, labelled as a fallback.
 - A role model pin (`role_model_ids`) chooses the model; it is not a feature switch.
 
+## 6b. Provider service tier (`role_service_tiers`, R7 2026-10-28)
+
+- Optional mapping role -> tier. The only tier is `priority` (Vertex Priority PayGo). A role with a tier must have its model priced under its own key `"<model>@priority"`
+  in `model_prices`; otherwise the loader refuses the config (`... needs its own price`).
+- The call of such a role carries the official headers `X-Vertex-AI-LLM-Request-Type: shared` and `X-Vertex-AI-LLM-Shared-Request-Type: priority` (Priority PayGo
+  only, no provisioned throughput first). No other role carries a tier header.
+- The served tier is read from the response, `usage_metadata.traffic_type`, and recorded on the attempt (`provider_usage`: `traffic_type`, `requested_tier`,
+  `service_tier`) and on the assistant result (`model.service_tier`). Priced: `ON_DEMAND_PRIORITY` at the priority key; any other reported traffic type (a
+  downgrade to standard, `ON_DEMAND`) at the standard key; no traffic type at the priority key (fail closed).
+- The reservation stays "the priciest configured price x the call ceiling": the priority keys of configured tiers take part in `worst_case_model_id`, so the
+  per-job cap must hold `max_provider_calls_per_job x (max_input x priority input rate + max_output x priority output rate)` or `budget_invariants.problems`
+  reports it and the live server stays disarmed.
+
 ## 7. The three ADR-005 gaps this contract closes, plus the input-ceiling fix
 
 ### 7.1 How `max_output_tokens` reaches the provider

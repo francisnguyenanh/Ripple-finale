@@ -33,9 +33,17 @@ A private conversation about one request, for people with the read-only capabili
   "Ask AI" on a suggestion, or Ask, sends one paid question (the note is next to the buttons); the first question creates your private conversation in the same call,
   and repeating it after a lost response does not ask twice.
 - **Checked answers.** Every kept statement cites the facts it rests on. Who holds a step, who must or may act, who the request waits on and what blocks it is written
-  by the server from a typed statement it checked against the facts; the model's own wording about authority is refused. Answers are in English. If a request has more
+  by the server from the task record; the model's own wording about authority is refused. A person, title or step your question names that the request's record does
+  not hold is stated by the server as "The record of this request does not name: …" (the assistant may not write anything else about it, not even that it is not
+  needed). The assistant answers your question part by part; when the first pass leaves a part unanswered or answered only from the stage, one further model call (at
+  most one) completes that part from the record; what it adds is checked the same way, and if it does not arrive in time the first answer stands with a note.
+  A part still unanswered is said so ("Not answered in this answer: …"). Answers are in English. If a request has more
   required facts than one question can carry, the question is refused instead of being answered from part of them. An answer stored under older checks shows a note and
   hides its free-text authority statements.
+- **Waiting and stopping.** While a question waits in the queue, Stop withdraws it before it reaches the model. Once it is being answered it can no longer be
+  stopped: the panel says so, and if an answer comes it is shown and its cost is counted. After 20 seconds the panel says the answer is taking longer than usual.
+  An answer that does not come within the assistant's deadline (45 seconds in the production example) is not waited for: the panel says the assistant did not answer
+  in time, that nothing was concluded and that asking again is a new paid question, with a reference for support. Nothing is retried automatically.
 - **Privacy follows access.** Threads are private to their creator; switching request, account or workspace shows nothing of the previous one; an answer is withheld when the
   asker's access changed since it was asked, and is marked historical when the request moved.
 

@@ -70,7 +70,8 @@ class ImpactDependencyExecutor:
         changes = [f"- changed rule id={o['rule_id']} ({o['kind']}): {report_text}" for o in intent["operations"]
                    for report_text in [bim._action(o, rules[o["rule_id"]]["title"]) if o["rule_id"] in rules else o["kind"]]]
         found = [f"- id={i['rule_id']} ({i['link']})" for i in report["affected_rules"]]
-        prompt = bim.build_dep_prompt(frozen, changes, shown, found, can_read_evidence=can_evidence, max_chars=frozen["limits"]["max_prompt_chars"])
+        same = bim.same_measure(write_ids, {r["rule_id"]: r for r in shown}, found_ids)
+        prompt = bim.build_dep_prompt(frozen, changes, shown, found, can_read_evidence=can_evidence, max_chars=frozen["limits"]["max_prompt_chars"], same=same)
         from infra.worker import extraction
         if extraction._input_token_bound(prompt, frozen["output_schema"]) > config.max_input_tokens_per_call:
             raise NonRetryableExecutionError("budget_exceeded", "the change and the rules exceed the input ceiling")

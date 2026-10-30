@@ -381,3 +381,27 @@ def test_contract_4_a_context_remark_is_read_as_context_and_a_disguised_change_i
     got, _ = understand(q, req2, dict(model_obj(ops=[raise_op]), context=["The Finance Controller decides high-risk suppliers instead"]), client=q.admin)
     d = got["understanding"]
     assert d["status"] == "CLARIFY" and d["context"] == [] and any("Finance Controller decides" in p for p in d["uncovered_parts"])
+
+
+def test_r6_reversals_pronoun_actors_and_valid_near_misses_through_the_route(qa_env):
+    """R6 (owner request 2026-10-28), the classes fixed in R5 through the real route, worker and store (STUB model answering as the live model did): a yes / no
+    rule turned around and an inverted comparison without NOT are asked, never proposed; a pronoun actor is asked; a same-side value move and a named actor stay
+    READY (the guards must not turn valid requests into questions)."""
+    q = qa_env
+    def cond_op(rule, c, quote):
+        return dict(op("add_or_change_condition", rule, None, quote), condition=c)
+    flip_req = "Onboard suppliers in exactly the opposite case to what the onboarding rule says today."
+    got, _ = understand(q, flip_req, model_obj(ops=[cond_op("rule-new-supplier-onboarding", {"field": "supplier.is_new", "op": "eq", "value": "false"}, flip_req.rstrip("."))]), mode="technical")
+    u = got["understanding"]
+    assert u["status"] == "CLARIFY" and not u["technical"]["operations"] and any(r["reason"] == "desired_not_supported:reverses_the_rule" for r in u["technical"]["rejected"]), u
+    inv_req = "Free freight should apply only when the order is not 500,000 JPY or more."
+    got, _ = understand(q, inv_req, model_obj(ops=[cond_op("rule-free-freight", {"field": "order.net_goods_jpy", "op": "lt", "value": 500000, "unit": "JPY"}, inv_req.rstrip("."))]), mode="technical")
+    assert got["understanding"]["status"] == "CLARIFY" and any(r["reason"] == "desired_not_supported:reverses_the_rule" for r in got["understanding"]["technical"]["rejected"])
+    she_req = "She should approve purchases from high-risk suppliers instead of the Operations Director."
+    got, _ = understand(q, she_req, model_obj(ops=[op("set_actor", "rule-high-risk-director", "role-she", she_req.rstrip("."))]), mode="technical")
+    assert got["understanding"]["status"] == "CLARIFY" and got["understanding"]["technical"]["rejected"][0]["reason"] == "desired_not_supported:actor_not_named"
+    move_req = "Free freight should start from 600,000 JPY instead of 500,000 JPY."
+    got, _ = understand(q, move_req, model_obj(ops=[op("set_value", "rule-free-freight", {"value": 600000, "unit": "JPY"}, move_req.rstrip("."))]), mode="technical")
+    assert got["understanding"]["status"] == "READY" and got["understanding"]["technical"]["operations"][0]["kind"] == "set_value", got["understanding"]
+    got, _ = understand(q, ACTOR_REQ, model_obj(ops=[OP_ACTOR]), mode="technical")
+    assert got["understanding"]["status"] == "READY"

@@ -92,7 +92,7 @@ export function Overview() {
   const inb = inboxState.inbox;
   const list = inb ? { first: sectionsOf(inb).mine[0], unavailable: inb.unavailable ?? 0, cut: inb.coverage?.complete === false && (inb.coverage.truncated ?? []).length > 0 } : null;
   const repeat = ctaRepeatsFirstRow(next, mine[0], list);                    // identity of the request, never its wording
-  const action = next.to ? <Button variant="primary" asChild><a href={firstHref || hashFor(ws, next.to)} data-testid="overview-cta">{next.label}<ArrowRight size={16} aria-hidden="true" /></a></Button> : undefined;
+  const action = next.to ? <Button variant="primary" asChild><a href={firstHref || hashFor(ws, next.to, undefined, next.params)} data-testid="overview-cta">{next.label}<ArrowRight size={16} aria-hidden="true" /></a></Button> : undefined;
   return (
     <>
       <PageHeader id="overview" />

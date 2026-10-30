@@ -2,6 +2,9 @@
 
 @@STATUS@@
 
+> **Final release note (2026-10-27, owner decision DEC-0009).** This guide records a Pitch-era walkthrough (deployed run of 2026-10-13) on the **Changes** page. On the Final production configuration the AI steps of that page (chat replies, *Generate GenAI draft*, the AI impact judgement, AI explanations and the AI reading of a simulation) are **not enabled**; each of those buttons says so and links to the equivalent step. The equivalent, enabled path is **Questions › Request a change**: the AI reads your request and asks what is unclear; after you confirm it, the review of the change offers **Check dependencies with AI** and then **Ask AI for guidance**, next to the server's own statement of what the change does to cases, and the multi-agent what-if simulation with its AI interpretation. Questions about the knowledge go to **Questions › Ask**. The recorded results below stay as history.
+
+
 Ripple keeps a company's rules consistent when one of them changes. It reads the sources (configuration, workbooks, policy documents), keeps what it found with citations, and when a person asks for a change in plain words it shows **what would change, what else may be affected, and what stays unresolved** - before anyone applies anything. People decide; the AI suggests; the server owns rights, grounding, status and integrity.
 
 ## What am I testing?

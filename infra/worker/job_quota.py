@@ -71,7 +71,7 @@ import yaml
 from infra.adapters.v2_postgres import PROJECT_SPEND_SQL, project_spend_params
 from infra.worker.budget_config import (
     BudgetConfig, BudgetConfigError, BudgetExceeded,
-    actual_call_cost_usd, check_admission, worst_case_model_id,
+    actual_call_cost_usd, check_admission, worst_case_call_usd, worst_case_model_id,
     _apply_env_overrides as _shared_apply_env_overrides,
     _validate as _shared_validate,
 )
@@ -89,6 +89,8 @@ class JobQuotaError(Exception):
 #: each; kinds like chunked, multi-stage extraction call the provider more
 #: than once per attempt. A kind absent from this table defaults to 1 call.
 JOB_KIND_REAL_CALLS_PER_ATTEMPT: dict[str, int] = {
+    # RequestAssistantExecutor (R17): the answer call plus at most one supplementary call for the parts the first pass left open.
+    "request.qa": 2,
     "change": 1,
     "restore": 1,
     "analysis": 1,
@@ -300,8 +302,7 @@ def compute_budget_reservation(config) -> tuple[Decimal, Decimal] | None:
     # The call ceiling is per ATTEMPT. A job may consume max_retries + 1
     # attempts without returning through HTTP admission, so the reservation
     # must cover the whole bounded execution, including its retry window.
-    estimate = (actual_call_cost_usd(config, model_id=worst_case_model_id(config),
-                                     input_tokens=None, output_tokens=None)
+    estimate = (worst_case_call_usd(config)                                                 # R23: each role at its own output ceiling
                 * config.max_provider_calls_per_job * (config.max_retries + 1))
     check_admission(config, scope="per_job", spent_usd=Decimal("0"),
                     estimate_usd=estimate)
@@ -342,8 +343,7 @@ def enforce_project_budget(config, *, tenant_id: str, workspace_id: str) -> Deci
     Returns the worst-case estimate used, so a caller does not have to
     recompute it.
     """
-    estimate = actual_call_cost_usd(config, model_id=worst_case_model_id(config),
-                                    input_tokens=None, output_tokens=None)
+    estimate = worst_case_call_usd(config)
     spent = project_spent_usd(tenant_id=tenant_id, workspace_id=workspace_id)
     check_admission(config, scope="total", spent_usd=spent, estimate_usd=estimate)
     return estimate

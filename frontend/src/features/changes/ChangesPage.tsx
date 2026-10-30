@@ -20,6 +20,9 @@ import { WhatIfStage } from "./WhatIfStage";
 import { WorkInbox } from "@/features/inbox/WorkInbox";
 import { TaskFrame } from "@/features/request-assistant/TaskFrame";
 import { TaskViewContext, useTaskView } from "@/features/request-assistant/taskView";
+import { jumpTo, pickJump, type JumpTarget } from "@/features/questions/decisionJump";
+import { ArrowDown } from "lucide-react";
+import { EquivalentStep } from "@/components/EquivalentStep";
 
 function Unavailable() {
   const { ws } = useFlow();
@@ -35,6 +38,26 @@ function Unavailable() {
 function ExpandAll() {
   const { showAll, setShowAll } = useStages();
   return <div><Button type="button" variant="ghost" data-testid="stages-expand-all" aria-pressed={showAll} onClick={() => setShowAll(!showAll)}>{showAll ? "Collapse finished stages" : "Expand all stages"}</Button></div>;
+}
+
+// R2-07a (2026-10-27, HK-04 S4a): the SCN-17 jump on a change request. The "What to do" box names the draft control, which sits far below the task on a
+// 1440 x 900 screen; the link appears only while the reader is asked to ask for the draft and the page renders that control (the same permission that renders
+// it). It scrolls and focuses only; it never starts the draft.
+function TaskDetail({ asked }: { asked: string[] }) {
+  const s = useSession();
+  const ok = s.can("change.prepare") && s.aiKind("change.draft");              // the same conditions that enable the control: never a link to a refused button
+  const targets: Record<string, JumpTarget | undefined> = { ask_draft: ok ? { id: "action-run-draft", disabled: false, label: "Go to the draft control" } : undefined };
+  const t = pickJump(asked, targets);
+  return (
+    <>
+      <NextCard inline />
+      {t && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="secondary" data-testid="task-jump" data-target={t.id} onClick={() => jumpTo(t)}>{t.label}<ArrowDown size={14} aria-hidden="true" /></Button>
+        </div>
+      )}
+    </>
+  );
 }
 
 function Flow() {
@@ -70,7 +93,7 @@ function Flow() {
       )}
       <LegacyAiNote />
       <SupersededCard />
-      {reqId && <TaskFrame key={`${ws}|${reqId}`} ws={ws} family="intent_flow" id={reqId} refreshKey={data} shared={task} detail={task.tv ? <NextCard inline /> : undefined}
+      {reqId && <TaskFrame key={`${ws}|${reqId}`} ws={ws} family="intent_flow" id={reqId} refreshKey={data} shared={task} detail={task.tv ? (asked: string[]) => <TaskDetail asked={asked} /> : undefined}
         fallbackTitle={data.intent ? (() => { const f = fmtForm(data.intent); return `${f.title}: ${f.from} → ${f.to}`; })() : undefined} />}
       <Journey />
       <NextCard />
@@ -125,6 +148,7 @@ function LegacyAiNote() {
       <strong>Some AI steps of this page are not enabled on this server.</strong>
       <span>Not available here: {off.map((k) => AI_KIND_WORDS[k] ?? k).join(", ")}. The steps that need no AI still work, and nothing is sent to the AI for the others.
         The business change path on the Questions page uses its own AI steps.</span>
+      <EquivalentStep kind={off[0]} to="change" />
     </Callout>
   );
 }

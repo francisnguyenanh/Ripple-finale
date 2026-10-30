@@ -461,19 +461,38 @@ def _attempt_cost(config, calls_used: int, outcome: ExecutionOutcome | None,
     if config is None:
         return None, Decimal("0")
     kind = _PRICING_ROLE.get(kind, kind)
+    from infra.worker.budget_config import output_ceiling_for_role, price_key, price_key_for_role
+    ceiling = output_ceiling_for_role(config, kind)                                        # R23: the role's own output ceiling
     per_call_worst = job_quota.actual_call_cost_usd(
-        config, model_id=model_for_role(config, kind), input_tokens=None, output_tokens=None)
+        config, model_id=price_key_for_role(config, kind), input_tokens=None, output_tokens=None, output_ceiling=ceiling)
     estimate = per_call_worst * calls_used
+    priced = getattr(outcome, "priced_calls", None) if outcome is not None else None
+    if priced and len(priced) == calls_used:                                              # R19: each call at its own key, its own usage or its own ceiling
+        actual = sum((job_quota.actual_call_cost_usd(config, model_id=c["price_key"], input_tokens=c.get("input_tokens"), output_tokens=c.get("output_tokens"),
+                                                     output_ceiling=c.get("output_ceiling")) for c in priced), Decimal("0"))
+        return estimate, actual
     if outcome is not None:
         billed_output = outcome.output_tokens
         if billed_output is not None and outcome.thought_tokens is not None:
             billed_output += outcome.thought_tokens
+        # a missing side is priced at its ceiling for EVERY call made (R17: an attempt of two calls whose second reported nothing is not priced as one call)
+        in_tokens = outcome.input_tokens if outcome.input_tokens is not None else config.max_input_tokens_per_call * calls_used
+        out_tokens = billed_output if billed_output is not None else ceiling * calls_used
         actual = job_quota.actual_call_cost_usd(
-            config, model_id=outcome.model_id or model_for_role(config, kind),
-            input_tokens=outcome.input_tokens, output_tokens=billed_output)
+            config, model_id=price_key(outcome.model_id or model_for_role(config, kind), getattr(outcome, "service_tier", None)),
+            input_tokens=in_tokens, output_tokens=out_tokens)
     else:
         actual = estimate
     return estimate, actual
+
+
+def _priced_failure(exc: BaseException, calls_used: int) -> ExecutionOutcome | None:
+    """R20: a failed attempt whose executor priced each call (different models / tiers, some usage known) is booked per call, each missing side at THAT call's
+    ceiling; None when the executor gave no per-call pricing (the attempt-level rules apply)."""
+    priced = getattr(exc, "priced_calls", None)
+    if priced and len(priced) == calls_used:
+        return ExecutionOutcome(result={}, priced_calls=tuple(priced))
+    return None
 
 
 def _cost_basis(calls_used: int, outcome: ExecutionOutcome | None) -> str:
@@ -481,6 +500,10 @@ def _cost_basis(calls_used: int, outcome: ExecutionOutcome | None) -> str:
     missing and was priced at its ceiling (fail closed) - an ESTIMATE, never reported as a confirmed provider cost."""
     if not calls_used:
         return "none"
+    priced = getattr(outcome, "priced_calls", None) if outcome is not None else None
+    if priced and len(priced) == calls_used:                                              # R19: per-call usage
+        known = [c.get("input_tokens") is not None and c.get("output_tokens") is not None for c in priced]
+        return "provider_usage" if all(known) else ("estimate_partial_usage" if any(known) else "estimate_no_usage")
     if outcome is None or (outcome.input_tokens is None and outcome.output_tokens is None):
         return "estimate_no_usage"
     if outcome.input_tokens is None or outcome.output_tokens is None:
@@ -491,14 +514,19 @@ def _cost_basis(calls_used: int, outcome: ExecutionOutcome | None) -> str:
 def _answered_usage(ctx, calls_used: int) -> ExecutionOutcome | None:
     """The usage every call of this attempt reported before the executor refused its result (recorded by `explain.call_pinned_json`). Only when EACH call used is
     recorded; otherwise None, and the attempt stays priced fail-closed. A missing token side stays missing (priced at its ceiling)."""
-    rows = (getattr(ctx, "request_context", None) or {}).get("provider_usage") or []
+    rc = getattr(ctx, "request_context", None) or {}
+    priced = rc.get("rqa_priced_calls")
+    if calls_used and priced and len(priced) == calls_used:                 # R21: the executor priced each call (model, tier, location): book that, never a global key
+        return ExecutionOutcome(result={}, priced_calls=tuple(priced))
+    rows = rc.get("provider_usage") or []
     if not calls_used or len(rows) != calls_used:
         return None
     def total(key):
         vals = [r.get(key) for r in rows]
         return None if any(v is None for v in vals) else sum(vals)
     return ExecutionOutcome(result={}, model_id=rows[-1].get("model_id"), input_tokens=total("input_tokens"), output_tokens=total("output_tokens"),
-                            thought_tokens=total("thought_tokens") if any(r.get("thought_tokens") is not None for r in rows) else None)
+                            thought_tokens=total("thought_tokens") if any(r.get("thought_tokens") is not None for r in rows) else None,
+                            service_tier=rows[-1].get("service_tier"))
 
 
 def _note_failure(attempt: dict, exc: BaseException, calls_used: int, outcome: ExecutionOutcome | None) -> None:
@@ -714,7 +742,7 @@ def _execute_admitted_claim(store: PostgresV2Store, tenant_id: str, workspace_id
         return "LEASE_LOST"
     except NonRetryableExecutionError as exc:
         # a result rejected AFTER the provider answered carries the usage the provider reported: settle that, not the worst-case estimate
-        used_outcome = getattr(exc, "usage_outcome", None) or _answered_usage(ctx, calls.used)
+        used_outcome = _priced_failure(exc, calls.used) or getattr(exc, "usage_outcome", None) or _answered_usage(ctx, calls.used)
         estimate, cost = _attempt_cost(config, calls.used, used_outcome, job_kind or job["kind"])
         attempt = _base_attempt(claim, worker_id, job, executor, request, stored)
         attempt.update(outcome="FAILED", reason=str(exc), retryable=False,
@@ -726,7 +754,7 @@ def _execute_admitted_claim(store: PostgresV2Store, tenant_id: str, workspace_id
             _checks_for_new_readings(store, tenant_id, workspace_id, job)      # the readings that did arrive are still checked (a failed last reading must not leave them unchecked)
         return written
     except ProviderExecutionError as exc:
-        used_outcome = getattr(exc, "usage_outcome", None)
+        used_outcome = _priced_failure(exc, calls.used) or getattr(exc, "usage_outcome", None)
         estimate, cost = _attempt_cost(config, calls.used, used_outcome, job_kind or job["kind"])
         reason = f"provider_execution_failed: {type(exc).__name__}: {exc}"
         attempt = _base_attempt(claim, worker_id, job, executor, request, stored)

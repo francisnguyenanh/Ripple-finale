@@ -29,7 +29,7 @@ export function buildSummary(p: Parts, recent: (t: string) => boolean): Summary 
 }
 
 export type NextKind = "loading" | "work" | "add-files" | "analyze" | "questions" | "change" | "unknown";
-export interface Next { kind: NextKind; text: string; to: string; label: string }
+export interface Next { kind: NextKind; text: string; to: string; label: string; params?: Record<string, string> }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -47,7 +47,7 @@ export function nextStep(sum: Summary | null, work: { count: number; first?: str
   if (sum.questions > 0) return { kind: "questions", text: `${plural(sum.questions, "question is", "questions are")} waiting for a person to confirm or answer.`, to: "questions", label: "Review questions" };
   // Starting something new is only suggested when "nothing is waiting" is actually known.
   if (inbox === "failed") return unknown;
-  return { kind: "change", text: "Describe what you want to change in your own words. Ripple asks if anything is unclear, then follows it through review.", to: "changes", label: "Start a change" };
+  return { kind: "change", text: "Describe what you want to change in your own words. Ripple asks if anything is unclear, then follows it through review.", to: "questions", params: { ui_section: "change" }, label: "Start a change" };   // D2a: the enabled business change path
 }
 
 /** One row of the work list, as far as identity goes. */

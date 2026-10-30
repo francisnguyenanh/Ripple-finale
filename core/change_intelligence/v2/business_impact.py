@@ -347,7 +347,25 @@ def resolve_dependencies(obj: Mapping, rules: Mapping[str, Mapping], write_ids: 
     return {"accepted": accepted, "rejected": rejected, "notes": notes}
 
 
-def build_dep_prompt(frozen: Mapping, changes: Iterable[str], rules: Iterable[Mapping], found: Iterable[str], *, can_read_evidence: bool, max_chars: int) -> str:
+def same_measure(write_ids: Iterable[str], rules: Mapping[str, Mapping], linked: Iterable[str]) -> list:
+    """HK-AEV2 D-04 (2026-10-27): the model answered "nothing beyond the rules already linked" although a tier on the same measure was not linked. The rules not
+    linked yet whose condition measures a field a changed rule measures, as plain lines for the model to check (a lead, never a dependency on its own)."""
+    from core.change_intelligence.v2 import business_draft as _bd
+    write_ids, linked = list(write_ids), set(linked)
+    out = []
+    for w in write_ids:
+        fields = {l.get("field") for l in _bd._hold_leaves((rules.get(w) or {}).get("condition")) if l.get("field")}
+        for rid, r in sorted(rules.items()):
+            if rid in write_ids or rid in linked:
+                continue
+            shared = sorted(fields & {l.get("field") for l in _bd._hold_leaves(r.get("condition")) if l.get("field")})
+            if shared:
+                out.append(f"- id={rid} measures {', '.join(shared)} like changed rule id={w}")
+    return out
+
+
+def build_dep_prompt(frozen: Mapping, changes: Iterable[str], rules: Iterable[Mapping], found: Iterable[str], *, can_read_evidence: bool, max_chars: int,
+                     same: Iterable[str] = ()) -> str:
     lines, used = [], 0
     for r in rules:
         line = f"- id={r['rule_id']} actor={r.get('actor_ref')} concepts={','.join(r.get('concept_ids') or [])} status={r.get('status')}\n  title: {r['title']}"
@@ -360,8 +378,8 @@ def build_dep_prompt(frozen: Mapping, changes: Iterable[str], rules: Iterable[Ma
             break
         lines.append(line)
         used += len(line)
-    parts = {"{changes}": "\n".join(changes), "{found}": "\n".join(found) or "(none)", "{rules}": "\n".join(lines) or "(none)"}
-    return re.sub(r"\{changes\}|\{found\}|\{rules\}", lambda m: parts[m.group(0)], frozen["prompt_template"])     # one pass: data never expands a placeholder
+    parts = {"{changes}": "\n".join(changes), "{found}": "\n".join(found) or "(none)", "{rules}": "\n".join(lines) or "(none)", "{same}": "\n".join(same) or "(none)"}
+    return re.sub(r"\{changes\}|\{found\}|\{rules\}|\{same\}", lambda m: parts[m.group(0)], frozen["prompt_template"])     # one pass: data never expands a placeholder
 
 
 def merge_dependencies(report: Mapping, proposed: Mapping, *, rules_not_shown: int = 0) -> dict:

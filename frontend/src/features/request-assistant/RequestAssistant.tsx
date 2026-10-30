@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Callout, Field, Muted, TextArea } from "@/components/bits";
 import { StatusBadge, type Status } from "@/components/StatusBadge";
 import { OriginTag } from "@/components/decision/Origin";
-import { actionStillCurrent, actionTarget, citationTarget, suggestQuestions } from "./guide";
+import { actionStillCurrent, actionTarget, cancelNote, citationTarget, pendingNote, suggestQuestions, unavailableText } from "./guide";
 import { useSession } from "@/session";
 import { useMedia } from "@/lib/useMedia";
 
@@ -24,7 +24,7 @@ const STATE: Record<string, { status: Status; label: string }> = {
 };
 const OUTCOME: Record<string, string> = { answered: "Answered", partial: "Partly answered", insufficient_context: "The facts do not answer this", out_of_scope: "Outside this request",
   refused: "The answer did not pass the checks" };
-const KIND: Record<string, string> = { authority: "Who acts", cause: "Why", fact: "Fact", interpretation: "Interpretation", suggestion: "Suggestion" };
+const KIND: Record<string, string> = { authority: "Who acts", absence: "Not in the record", cause: "Why", fact: "Fact", interpretation: "Interpretation", suggestion: "Suggestion" };
 // what a cited fact is, for a Business reader (the fact id and its full text stay in the Technical view)
 const FACT_KIND: Record<string, string> = { state: "Stage", request: "Request", obligation: "Step", waiting: "Waiting", blocker: "Blocker", action: "Action", step: "Progress",
   axis: "Completion", rule_change: "Rule change", impact: "Impact", decision: "Decision", review_note: "Reviewer note" };
@@ -41,6 +41,8 @@ export function RequestAssistant({ ws, family, id, tv }: { ws: string; family: "
   const [err, setErr] = React.useState<string | null>(null);
   const [jump, setJump] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [stopNote, setStopNote] = React.useState<string | null>(null);              // R11: what Stop did, as the server reported it
+  const firstSeen = React.useRef<Record<string, number>>({});                      // when this page first saw each pending question (the slow note after 20 s)
   const inflight = React.useRef<{ question: string; key: string } | null>(null);   // one logical question keeps its key across retries and lost responses
   const composer = React.useRef<HTMLTextAreaElement>(null);
   const paidId = React.useId();
@@ -104,7 +106,10 @@ export function RequestAssistant({ ws, family, id, tv }: { ws: string; family: "
   };
   const cancel = async (mid: string) => {
     if (!tid) return;
-    try { setSt(await api<Rec>("POST", `/v2/request-assistant/threads/${q(tid)}/messages/${q(mid)}/cancel`, { workspace_id: ws })); } catch (e) { setErr(refusal(e)); }
+    try {
+      const r = await api<Rec>("POST", `/v2/request-assistant/threads/${q(tid)}/messages/${q(mid)}/cancel`, { workspace_id: ws });
+      setSt(r); setStopNote(cancelNote((r.cancel as Rec | undefined)?.outcome));
+    } catch (e) { setErr(refusal(e)); }
   };
   const go = (action: string) => {                                                 // navigation only: focus the existing control, never submit it
     const target = actionStillCurrent(tv, action) ? actionTarget(family, action) : null;
@@ -136,10 +141,12 @@ export function RequestAssistant({ ws, family, id, tv }: { ws: string; family: "
       {msgs.length > 0 && (
         <ol className="grid gap-3 text-sm" aria-live="polite">
           {msgs.map((m) => <AssistantMessage key={String(m.message_id)} m={m} technical={technical} onCancel={(mid) => void cancel(mid)}
+            waitedMs={m.state === "pending" ? Date.now() - (firstSeen.current[String(m.message_id)] ??= Date.now()) : 0}
             onAction={go} actionable={(a) => actionStillCurrent(tv, a) && actionTarget(family, a) !== null} onJumped={wide ? undefined : () => setBack(true)}
             onSource={tid ? (mid, ref) => api<Rec>("GET", `/v2/request-assistant/threads/${q(tid)}/messages/${q(mid)}/citations/${q(ref)}/source?workspace_id=${q(ws)}`) : undefined} />)}
         </ol>
       )}
+      {stopNote && <p role="status" data-testid="assistant-stop-note" className="text-sm text-muted">{stopNote}</p>}
       {jump && <Muted testid="assistant-jump-unavailable">{jump}</Muted>}
       {loaded && suggestions.length > 0 && (
         <div className="grid gap-1" data-testid="assistant-suggestions">
@@ -196,9 +203,9 @@ const SOURCE_WHY: Record<string, string> = {
 };
 const SOURCE_STATE: Record<string, string> = { current: "current", changed_since: "changed since", absent_now: "no longer in the sources" };
 
-export function AssistantMessage({ m, technical, onCancel, onAction, actionable, onSource, onJumped }:
+export function AssistantMessage({ m, technical, onCancel, onAction, actionable, onSource, onJumped, waitedMs = 0 }:
   { m: Rec; technical: boolean; onCancel?: (messageId: string) => void; onAction?: (action: string) => void; actionable?: (action: string) => boolean;
-    onSource?: (messageId: string, factRef: string) => Promise<Rec>; onJumped?: () => void }) {
+    onSource?: (messageId: string, factRef: string) => Promise<Rec>; onJumped?: () => void; waitedMs?: number }) {
   const badge = STATE[String(m.state)] ?? { status: "info" as Status, label: String(m.state) };
   const ans = (m.answer ?? null) as Rec | null;
   const cites = (m.citations ?? {}) as Record<string, Rec>;
@@ -216,13 +223,14 @@ export function AssistantMessage({ m, technical, onCancel, onAction, actionable,
       <div className="flex flex-wrap items-center gap-2"><StatusBadge status={badge.status} label={badge.label} />
         {ans?.status && m.state === "answered" ? <span data-testid="assistant-outcome" className="text-xs">{OUTCOME[String(ans.status)] ?? String(ans.status)}</span> : null}
         {m.state === "answered" && m.current === false ? <span className="text-xs text-warning">Historical: the request changed since (as of {new Date(String(m.as_of)).toLocaleString()})</span> : null}
-        {m.state === "pending" && onCancel ? <Button size="sm" variant="ghost" data-testid="assistant-cancel" onClick={() => onCancel(String(m.message_id))}>Stop</Button> : null}
+        {m.state === "pending" && m.phase !== "running" && onCancel ? <Button size="sm" variant="ghost" data-testid="assistant-cancel" onClick={() => onCancel(String(m.message_id))}>Stop</Button> : null}
       </div>
+      {m.state === "pending" && pendingNote(m.phase, waitedMs) ? <Muted testid="assistant-pending-note">{pendingNote(m.phase, waitedMs)}</Muted> : null}
       {m.state === "withheld" ? <Muted>{String(m.reason)}</Muted> : null}
-      {m.state === "unavailable" ? <Muted testid="assistant-unavailable">No answer was produced{ans?.reason ? ` (${String(ans.reason)})` : ""}. Nothing was concluded; you can ask again.</Muted> : null}
+      {m.state === "unavailable" ? <Muted testid="assistant-unavailable">{unavailableText(ans)}{technical && ans?.reason ? ` (${String(ans.reason)})` : ""}</Muted> : null}
       {((ans?.blocks ?? []) as Rec[]).map((b, i) => (
         <div key={i} data-testid="assistant-block" data-kind={String(b.kind)} data-corrected={b.corrected ? "true" : undefined} className="grid gap-0.5">
-          <span>{b.kind === "authority" ? <OriginTag origin="source" label="Task record" /> : <OriginTag origin="ai" />}{" "}
+          <span>{b.kind === "authority" || b.origin === "task_record" ? <OriginTag origin="source" label="Task record" /> : <OriginTag origin="ai" />}{" "}
             <span className="text-xs text-muted">{KIND[String(b.kind)] ?? String(b.kind)}{b.corrected ? " (corrected: the assistant's claim did not match the task record)" : ""}:</span> {String(b.text)}</span>
           {((b.fact_refs ?? []) as string[]).filter((r) => cites[r]).map((r) => (
             <span key={r} className="flex flex-wrap items-baseline gap-1">
@@ -247,7 +255,24 @@ export function AssistantMessage({ m, technical, onCancel, onAction, actionable,
       {citeNote && <Muted testid="assistant-citation-missing">{citeNote}</Muted>}
       {ans?.legacy_checks ? <Muted testid="assistant-legacy">{String(ans.legacy_note)}</Muted> : null}
       {((ans?.rejected ?? []) as Rec[]).length ? <Muted testid="assistant-rejected">{((ans?.rejected ?? []) as Rec[]).length} part(s) of the answer were refused by the checks and are not shown.</Muted> : null}
-      {((ans?.limitations ?? []) as string[]).length ? <Muted>Not covered: {((ans?.limitations ?? []) as string[]).join("; ")}</Muted> : null}
+      {((ans?.limitations ?? []) as string[]).length ? (
+        <div data-testid="assistant-limitations" className="grid gap-0.5 text-sm text-muted">
+          <span>Not covered:</span>
+          {((ans?.limitations ?? []) as string[]).map((x, i) => {
+            // checks/30: a limitation the server kept on a record fact shows that fact (the assistant's words are not changed)
+            const sup = ((ans?.limitation_support ?? []) as Rec[]).find((s) => s.text === x);
+            const facts = ((sup?.fact_refs ?? []) as string[]).filter((r) => cites[r]);
+            return (
+              <span key={i} data-testid="assistant-limitation" className="grid gap-0.5">
+                <span>{x}</span>
+                {facts.map((r) => (
+                  <Muted key={r} testid="assistant-limitation-support"><OriginTag origin="source" label="Task record" />{" "}
+                    {technical ? `${r}: ${String(cites[r].text)}` : `${FACT_KIND[String(cites[r].kind)] ?? "Fact"}: ${String(cites[r].display ?? cites[r].text)}`}</Muted>))}
+                {((sup?.server_statement ?? []) as string[]).map((t, k) => (
+                  <Muted key={`s${k}`} testid="assistant-limitation-support"><OriginTag origin="source" label="Task record" /> {t}</Muted>))}
+              </span>);
+          })}
+        </div>) : null}
       {((ans?.next_actions ?? []) as Rec[]).length ? (
         <div data-testid="assistant-next" className="grid gap-1 text-sm text-muted">
           <span>Your next steps on this request (use its controls): {((ans?.next_actions ?? []) as Rec[]).map((a) => String(a.label)).join("; ")}.</span>

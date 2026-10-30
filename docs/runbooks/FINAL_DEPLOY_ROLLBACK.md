@@ -19,7 +19,8 @@ target platform, project and access model are the owner's decision. Recovery of 
     or deterministic fallback, never a silent success);
   - the production budget configuration lists `enabled_roles` explicitly (the AI features this deployment offers; `all` is for development and evaluation only;
     absent = no AI feature runs); see `docs/contracts/AI_CLOSED_LOOP_BUDGETS.md` section 6a;
-  - optional features stay off unless decided: `RIPPLE_SEMANTIC_RETRIEVAL`, `RIPPLE_REQUEST_ASSISTANT`, `RIPPLE_FIREBASE_MODE`, `RIPPLE_PROJECTION_SINK`, `RIPPLE_NOTIFICATION_TRANSPORT`.
+  - the request assistant is ON by owner decision DEC-0009 (2026-10-27): leave `RIPPLE_REQUEST_ASSISTANT` unset (never `off`) and set the runtime switch `request_assistant` to `on` where operator switches are active; its pre-traffic smoke row is in the pre-traffic checklist;
+  - optional features stay off unless decided: `RIPPLE_SEMANTIC_RETRIEVAL`, `RIPPLE_FIREBASE_MODE`, `RIPPLE_PROJECTION_SINK`, `RIPPLE_NOTIFICATION_TRANSPORT`.
 - Prompt / schema pins: the pinned roles in `docs/evaluation/FINAL_AI_QUALITY_PLAN.md` are checked by `tests/contract/test_final_prompt_pins.py`; a changed pin invalidates its
   evidence.
 

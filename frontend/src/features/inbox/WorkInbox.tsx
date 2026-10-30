@@ -70,7 +70,7 @@ function columns(ws: string, section: Section, technical: boolean): Column<WorkI
       const t = rowTitle(it);
       return (
         <span className="grid gap-0.5" data-testid="work-title" data-fallback={String(t.fallback)}>
-          <span className="font-medium text-base break-words">{t.text}</span>
+          <span className="font-medium text-base break-words">{t.text}{t.fallback && <span className="text-sm font-normal text-muted" data-testid="work-title-untitled"> · no title yet</span>}</span>
           <span className="text-xs text-muted break-words">
             {t.fallback
               ? <>{/* the id is not a title: short id visible, full id for assistive technology and in the Technical view */}

@@ -33,6 +33,8 @@ def _shot(page, name):
 def rq_ui(qa_env, monkeypatch, tmp_path):                  # noqa: F811
     q = qa_env
     cfg = open(os.environ["RIPPLE_BUDGET_CONFIG_PATH"], encoding="utf-8").read().replace("role_model_ids:\n", "role_model_ids:\n  request.assistant: gemini-3.8-flash\n", 1)
+    cfg = cfg.replace("max_provider_calls_per_job: 1\n", "max_provider_calls_per_job: 2\n")       # R17 / R19: a request.qa attempt declares two calls (as in ra_env)
+    cfg = cfg.replace('per_job_cap_usd: "0.30"', 'per_job_cap_usd: "1.20"').replace('total_cap_usd: "12.82"', 'total_cap_usd: "60.00"')
     path = tmp_path / "budget_rq_ui.yaml"
     path.write_text(cfg, encoding="utf-8")
     monkeypatch.setenv("RIPPLE_BUDGET_CONFIG_PATH", str(path))
@@ -41,13 +43,17 @@ def rq_ui(qa_env, monkeypatch, tmp_path):                  # noqa: F811
     from tests.final_loop.test_chg02_impact import confirmed
     cid2, _ = confirmed(q, ACTOR_REQ, [OP_ACTOR])                                            # a second request, to switch to (before the assistant stub is set)
     q.cid2 = cid2
-    model = Model(lambda p: answer(blocks=[("The current stage is shown in the facts.", [fact_id(p, "state"), fact_id(p, "impact")], "fact")]))   # answer/5: no authority from the model
+    model = Model(lambda p: answer(blocks=[("The current stage is shown in the facts.", [fact_id(p, "state"), fact_id(p, "impact")], "fact")],   # answer/5: no authority from the model
+                                   limitations=[LATER]))                                   # checks/30: an honest absence the server keeps on a record fact
     q.monkeypatch.setattr(explain, "_client_for_model", lambda m: model)
     worker = LiveWorker(q.env).start()
     server = ServerThread().start()
     yield q, model, server, cid
     server.stop()
     worker.stop.set()
+
+
+LATER = "The facts do not record who acts on later steps until each step starts."
 
 
 def _threads(env, cid):
@@ -118,6 +124,10 @@ def test_task_frame_and_private_assistant_on_a_business_change(rq_ui, pw_browser
     assert msg.locator('[data-testid="assistant-block"][data-corrected="true"]').count() == 0
     msg.locator('[data-testid="assistant-block"][data-kind="authority"]').first.scroll_into_view_if_needed()
     _shot(page, "6_task_record_authority")
+    lim = msg.locator('[data-testid="assistant-limitation"]').filter(has_text=LATER)                     # checks/30: the kept limitation shows what it rests on
+    expect(lim).to_have_count(1)
+    expect(lim.get_by_test_id("assistant-limitation-support")).to_contain_text("Task record")
+    expect(lim.get_by_test_id("assistant-limitation-support")).to_contain_text("recorded only when that step starts")
     expect(msg.get_by_test_id("assistant-next")).to_contain_text("approve")
     assert model.calls == 1 and counts(env)["v2_business_decisions"] == before["v2_business_decisions"]   # "I agree" approved nothing
     assert _threads(env, cid) == 1                                                                         # the first ask created the one private thread

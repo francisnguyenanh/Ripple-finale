@@ -167,7 +167,8 @@ def test_before_the_draft_the_step_is_named_with_its_action_and_eligibility_is_n
                                                                                          "roles": ("requester",)}))
     step = next(f for f in facts if f["kind"] == "step")
     assert "AI draft: current step, not started yet" in step["text"] and ": current." not in step["text"]
-    assert [f["text"] for f in facts if f["kind"] == "stage_reason"] == ["What the workflow record shows for the current step: AI draft: current step, not started yet."]
+    assert [f["text"] for f in facts if f["kind"] == "stage_reason"] == ["What the workflow record shows for the current step: AI draft: current step, not started yet. "
+                                                                         "The record gives no reason why AI draft has not started."]   # context/13
 
 
 def test_after_request_changes_the_requester_answers_first_and_the_approver_is_not_asked(qa_env):
@@ -250,3 +251,22 @@ def test_the_work_list_places_business_changes_from_the_same_projection(qa_env):
     r3 = _sec(_work(q.req, q.env), cid)
     assert list(r3) == ["mine"] and r3["mine"][0]["task"] == "restate_request" and r3["mine"][0]["blocked"] is True and r3["mine"][0]["blockers"]
     assert _sec(_work(approver, q.env), cid) == {} and _work(q.req, q.env)["unavailable"] == 0
+
+
+def test_without_the_draft_kind_on_this_server_the_draft_step_is_asked_of_nobody_and_says_why(env, ch, monkeypatch, tmp_path):
+    """R2-07a (2026-10-27): the Final production allowlist does not enable `change.draft`; the requester is then not asked for a draft the server refuses, the
+    request names the reason as a blocker, and the step is not offered as an allowed action."""
+    import os
+    import re
+    req = env.req_client()
+    iid = intent(env, req, S1)["intent_id"]
+    cfg = open(os.environ["RIPPLE_BUDGET_CONFIG_PATH"], encoding="utf-8").read()
+    cfg = re.sub(r"(?ms)^enabled_roles:.*?(?=^\S)", "", cfg) + "\nenabled_roles:\n  - knowledge.qa\n  - change.understand\n"
+    path = tmp_path / "budget_no_draft.yaml"
+    path.write_text(cfg, encoding="utf-8")
+    monkeypatch.setenv("RIPPLE_BUDGET_CONFIG_PATH", str(path))
+    view = tv(req, env, "intent_flow", iid).json()
+    o = ob(view, "ask_draft")
+    assert o["obligation_me"] is False and o["eligible_me"] is False and o["reason"] == "AI drafts are not enabled on this server"
+    assert any(b["code"] == "ai_kind_not_enabled" for b in view["blockers"])
+    assert not [a for a in view["permitted_actions"] if a["action"] == "change.prepare" and a["allowed"]]

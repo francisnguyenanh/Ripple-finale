@@ -14,6 +14,7 @@ import { useSession } from "@/session";
 import { aiWhy } from "@/lib/aiKinds";
 import { Permission, Turns } from "@/features/changes/ChatBits";
 import type { Chat, Rec, Understanding } from "@/features/changes/types";
+import { EquivalentStep } from "@/components/EquivalentStep";
 
 export interface Surface {
   purpose: "knowledge_qa" | "gap_reply" | "draft_feedback" | "whatif" | "question_reply";
@@ -136,7 +137,7 @@ export function PurposeChat({ ws, surface, context, convId, onConvId, seed }: { 
             : <span>Nothing was sent to the AI yet. It answers when you send a message, or press the button.</span>}
           {mine && !chat.ai_block && (
             <div className="flex flex-wrap gap-2 mt-1">
-              <Button variant="primary" data-testid={`${tp}-allow`} title={aiWhy(s, "intent.interpret")} disabled={pending || !s.aiKind("intent.interpret")} onClick={async () => { if (await run(() => call("/allow", { turns: 1 }))) await load(); }}>Ask the AI</Button>
+              <Button variant="primary" data-testid={`${tp}-allow`} title={aiWhy(s, "intent.interpret")} disabled={pending || !s.aiKind("intent.interpret")} onClick={async () => { if (await run(() => call("/allow", { turns: 1 }))) await load(); }}>Ask the AI</Button><EquivalentStep kind="intent.interpret" to={surface.purpose === "knowledge_qa" ? "ask" : surface.purpose === "question_reply" ? "direct" : "change"} />
             </div>
           )}
           {!mine && chat.ai_block === "sandbox_hold" && chat.can_allow && (

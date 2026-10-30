@@ -87,6 +87,7 @@ def test_requester_confirms_and_sees_the_meaning_an_approver_decides_separately_
     expect(threshold).to_contain_text("→")
     assert req.get_by_test_id("rev-change").count() == 0
     expect(req.get_by_test_id("rev-affected").first).to_contain_text("changed by this request")
+    expect(req.get_by_test_id("rev-effect").first).to_contain_text("Cases ")                     # revision 2: the server's statement of what the change does to cases
     expect(req.get_by_test_id("rev-counts")).to_contain_text("Automatic edits possible: 1")
     expect(req.get_by_test_id("rev-counts")).to_contain_text("Unresolved:")
     expect(req.get_by_test_id("rev-op")).to_have_attribute("data-coverage", "partial")          # the policy text named by the knowledge is not in this import: pending, not "no impact"

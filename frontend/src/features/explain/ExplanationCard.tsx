@@ -9,6 +9,7 @@ import { useAction } from "@/lib/useAction";
 import { useSession } from "@/session";
 import { aiWhy } from "@/lib/aiKinds";
 import type { Rec } from "@/features/changes/types";
+import { EquivalentStep } from "@/components/EquivalentStep";
 
 const q = encodeURIComponent;
 
@@ -71,7 +72,7 @@ export function ExplanationCard({ ws, subject, subjectId, title = "AI explanatio
       {exp.status === "none" && (
         <>
           <Muted>No explanation has been written for the current state. Writing one uses the paid model (one call, within your AI permission).</Muted>
-          {s.can("ai.use") && <div><Button data-testid="ai-explanation-request" title={aiWhy(s, "explain")} disabled={pending || !s.aiKind("explain")} onClick={async () => { if (await run(() => api("POST", "/v2/explanations", { workspace_id: ws, subject, subject_id: subjectId }), { stale: true })) await load(); }}>Write an AI explanation</Button></div>}
+          {s.can("ai.use") && <div><Button data-testid="ai-explanation-request" title={aiWhy(s, "explain")} disabled={pending || !s.aiKind("explain")} onClick={async () => { if (await run(() => api("POST", "/v2/explanations", { workspace_id: ws, subject, subject_id: subjectId }), { stale: true })) await load(); }}>Write an AI explanation</Button><EquivalentStep kind="explain" to="change" /></div>}
         </>
       )}
       {exp.status === "waiting_for_approval" && (

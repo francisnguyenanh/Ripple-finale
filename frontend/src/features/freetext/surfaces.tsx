@@ -10,6 +10,8 @@ import { hashFor } from "@/lib/route";
 import { useAction } from "@/lib/useAction";
 import { useNotify } from "@/lib/notify";
 import { useSession } from "@/session";
+import { aiWhy } from "@/lib/aiKinds";
+import { EquivalentStep } from "@/components/EquivalentStep";
 import type { Rec, Understanding, Job } from "@/features/changes/types";
 import { isTerminal, jobState } from "@/features/changes/types";
 import type { Surface } from "./PurposeChat";
@@ -122,17 +124,18 @@ function AskEdit({ ws, u, save, pending }: { ws: string; u: Understanding; save:
 
 function AskAction({ ws, outcome, markDone }: { ws: string; chat: unknown; outcome: Rec; markDone: (ref: string) => Promise<void> }) {
   const { run, pending } = useAction();
+  const s = useSession();
   const ref = outcome.executed?.ref as string | undefined;
   return (
     <div className="grid gap-2">
       <p className="text-sm">Question: <span data-ai-text>{outcome.question}</span> - searching {(outcome.files ?? []).join(", ")}.</p>
       {!ref && (
         <div>
-          <Button variant="primary" data-testid="ask-run" disabled={pending} onClick={async () => {
+          <Button variant="primary" data-testid="ask-run" title={aiWhy(s, "gap.answer")} disabled={pending || !s.aiKind("gap.answer")} onClick={async () => {
             const id = newId("ui-ask");
             const r = await run(() => api<Rec>("POST", "/v2/jobs", { workspace_id: ws, kind: "gap.answer", job_id: id, payload: { question: outcome.question, question_id: id, artifact_ids: outcome.artifact_ids } }), { stale: true });
             if (r) await markDone(r.job_id ?? id);
-          }}>Ask the AI to answer from these files</Button>
+          }}>Ask the AI to answer from these files</Button><EquivalentStep kind="gap.answer" to="ask" />
         </div>
       )}
       {ref && <AnswerJob ws={ws} jobId={ref} />}

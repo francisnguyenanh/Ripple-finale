@@ -86,6 +86,13 @@ def _num(v: Any) -> Optional[int]:
     return v if isinstance(v, int) and not isinstance(v, bool) else None
 
 
+def _sec(v: Any) -> Optional[float]:
+    """A duration in seconds: a finite, non-negative number below one hour, rounded to milliseconds."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or not 0 <= v < 3600:
+        return None
+    return round(float(v), 3)
+
+
 def safe_diagnostics(diag: Any) -> dict:
     """Provider diagnostics with only allowlisted keys and typed values. `message` / `finish_message` keep a safe short form or only their length."""
     if not isinstance(diag, Mapping):
@@ -111,6 +118,26 @@ def safe_diagnostics(diag: Any) -> dict:
                     rows.append(row)
             if rows:
                 out[k] = rows
+        elif k == "rqa_calls" and isinstance(v, list):                     # R21: the request assistant's call timeline (role, seconds, outcome) of a failed attempt
+            rows = []
+            for r in v[:4]:
+                if isinstance(r, Mapping):
+                    row = {rk: r[rk] for rk in ("role", "outcome") if isinstance(r.get(rk), str) and _ENUM.match(r[rk])}
+                    if _sec(r.get("s")) is not None:
+                        row["s"] = _sec(r.get("s"))
+                    rows.append(row)
+            if rows:
+                out[k] = rows
+        elif k == "rqa_prepare_s":
+            if _sec(v) is not None:
+                out[k] = _sec(v)
+        elif k == "rqa_primary_error":
+            if isinstance(v, str) and _ENUM.match(v):
+                out[k] = v
+        elif k == "rqa_primary_diagnostics" and isinstance(v, Mapping):   # the answer call's own diagnostics, under the same allowlist (one level only)
+            inner = safe_diagnostics({ik: iv for ik, iv in v.items() if not str(ik).startswith("rqa_")})
+            if inner:
+                out[k] = inner
         elif k in ("message", "finish_message"):
             if isinstance(v, str):
                 safe = safe_detail(v)

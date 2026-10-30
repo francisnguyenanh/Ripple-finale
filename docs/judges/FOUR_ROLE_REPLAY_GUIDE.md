@@ -1,5 +1,8 @@
 # Four-role workflow (optional) - not yet available
 
+> **Final release note (2026-10-27, owner decision DEC-0009).** This guide records a Pitch-era walkthrough (deployed run of 2026-10-13) on the **Changes** page. On the Final production configuration the AI steps of that page (chat replies, *Generate GenAI draft*, the AI impact judgement, AI explanations and the AI reading of a simulation) are **not enabled**; each of those buttons says so and links to the equivalent step. The equivalent, enabled path is **Questions › Request a change**: the AI reads your request and asks what is unclear; after you confirm it, the review of the change offers **Check dependencies with AI** and then **Ask AI for guidance**, next to the server's own statement of what the change does to cases, and the multi-agent what-if simulation with its AI interpretation. Questions about the knowledge go to **Questions › Ask**. The recorded results below stay as history.
+
+
 > **Starting point.** This walkthrough uses a specific starting baseline. If earlier changes have been applied in this workspace, the sample values and expected results may no longer match. Check the current source revision and values before starting. For subsequent runs, follow the same workflow using the latest data.
 
 **Status: not yet available.** There is no workspace, account or allowance for a hands-on four-role run yet, and this page does not give you one. It describes what the run will involve so you can see what is planned. Until it is announced as available, use the [one-role demo](SINGLE_ROLE_GUIDE.md) (recommended) and the [recorded case](VERIFIED_FOUR_ROLE_CASE.md) (read-only evidence).

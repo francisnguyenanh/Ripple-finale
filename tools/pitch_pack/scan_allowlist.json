@@ -480,5 +480,17 @@
   "path_glob": "README.md",
   "value_regex": "com/francisnguyenanh/Ripple\\-Pitch\\-AI\\-Builder\\-Cup\\-2026",
   "reason": "public GitHub repository path in the quickstart clone command (owner and repository name); contains no credential, token or userinfo"
+ },
+ {
+  "rule": "secret_assignment",
+  "path_glob": "tests/unit/test_priority_service_tier.py",
+  "value_regex": "^(AnonymousCredentials|offline-test-only)$",
+  "reason": "offline SDK test: an anonymous credentials object and a placeholder token string the SDK requires with a fully mocked transport; no real credential"
+ },
+ {
+  "rule": "secret_assignment",
+  "path_glob": "tests/unit/test_safe_diagnostics.py",
+  "value_regex": "^abc123def456ghi789jkl000$",
+  "reason": "synthetic token inside a provider message, used to prove the safe diagnostics never keep such text; not a credential"
  }
 ]

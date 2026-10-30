@@ -13,7 +13,7 @@ from typing import Iterable, Mapping, Optional
 
 from core.change_intelligence.v2 import business_answers as ba
 from core.change_intelligence.v2 import business_knowledge as bk
-from core.change_intelligence.v2.business_change import _covered, _norm, _segments, numbers_in, safe_text
+from core.change_intelligence.v2.business_change import PERSONAL_PRONOUNS, _covered, _norm, _segments, numbers_in, read_typed_condition, safe_text
 
 STATUSES = ("OK", "NEEDS_CLARIFICATION", "UNSUPPORTED")
 MODEL_KEYS = {"status", "kind", "text", "condition", "quote", "uncovered", "ruled_out", "message", "uncertainty"}
@@ -139,6 +139,7 @@ def _text_values_in(cond, text_words: set, text_numbers: set) -> Optional[str]:
 
 
 _PRONOUNS = frozenset({"he", "she", "they", "it", "him", "her", "them", "someone", "somebody", "whoever", "this person", "that person", "the person"})
+_PERSONAL = PERSONAL_PRONOUNS
 _ALTERNATIVE = __import__("re").compile(r"(?i)(?<![a-z])(or|either|and/or)(?![a-z])")
 
 
@@ -150,6 +151,10 @@ def actor_ambiguity(value: str) -> str | None:
         if v.startswith(art) and v[len(art):] in _PRONOUNS:
             return "ambiguous_pronoun"
     if v in _PRONOUNS:
+        return "ambiguous_pronoun"
+    # HK-AEV I-05 (2026-10-27): "She authorises them herself." became the actor role-she-authorises-them-herself. A role title never contains a personal pronoun:
+    # "she", "her line manager", "they themselves" have no referent the knowledge can name, so the person is asked which role it is
+    if set(__import__("re").findall(r"[a-z]+", v)) & _PERSONAL:
         return "ambiguous_pronoun"
     if _ALTERNATIVE.search(v):
         return "alternative_actors"
@@ -180,14 +185,18 @@ def resolve(obj: Mapping, text: str, gap: Mapping, rules: Mapping[str, Mapping],
         if t and _norm(t) in text_norm:
             uncovered.append(t)
     answer = None
-    if obj["status"] == "UNSUPPORTED":
+    if obj["status"] == "UNSUPPORTED" and gap.get("kind") == "missing_actor" and set(re.findall(r"[a-z]+", text.lower())) & _PERSONAL:
+        # A110 (AEV8-I-02): "She signs them herself." came back UNSUPPORTED; an actor given only as a pronoun is answerable once the person names the role, so
+        # the person is asked which role it is (the same refusal the server gives when the model takes a pronoun as the actor), never told it is unsupported
+        reasons.append("ambiguous_pronoun")
+    elif obj["status"] == "UNSUPPORTED":
         reasons.append("model_unsupported")
     elif obj["kind"] is None:
         reasons.append("no_reading")
     elif quote is None or _norm(quote) not in text_norm:
         reasons.append("quote_not_in_text")
     else:
-        kind, value, cond = obj["kind"], obj["text"], obj["condition"]
+        kind, value, cond = obj["kind"], obj["text"], read_typed_condition(obj["condition"])      # config version 2: a typed condition (R5)
         expected = "accept_unknown" if kind == "accept_unknown" else ba.ANSWER_KEYS.get(gap["kind"])
         if expected is None:
             reasons.append("gap_kind_not_answerable")

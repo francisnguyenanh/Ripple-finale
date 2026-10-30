@@ -121,4 +121,27 @@ def test_possessive_and_assigning_claims_need_a_step_that_is_the_readers():
     assert ra.authority_problem("You should ask for the AI draft.", [current_action], "suggestion") is None
     for text in ("No, the next step is not yours; it is waiting on the requester.", "The requester holds the next step.", "You may also do it, but you do not need to."):
         assert ra.authority_problem(text, [may_not_asked, waiting, permitted], "fact") is None, text
-    assert ra.CHECKS_VERSION == "request-assistant-checks/14"
+    assert ra.CHECKS_VERSION == "request-assistant-checks/30" and "request-assistant-checks/26" in ra.COMPATIBLE_CHECKS
+
+
+def test_checks16_who_is_not_stated_is_authority_only_with_an_authority_verb():
+    """checks/16 (R8, A117 H4-13): "The facts do not identify who raised the block" is provenance and an honest limitation (the blocker fact names no one); it was
+    refused as authority under checks/11-15. Who holds / decides / must act / receives the next step stays authority prose. Replay of 677 stored model sentences:
+    7 change, all of this provenance kind."""
+    keep = ["The facts do not identify who raised the block; they record only that the business knowledge changed after confirmation.",
+            "The facts do not record who placed the request on hold or recorded the blocker.",
+            "The facts do not name who asked for this change.",
+            "The record does not show who created the draft.",
+            "The facts do not state the business rationale for the change.",
+            "The facts do not record when the change was put on hold."]
+    refuse = ["The facts do not state who holds the responsibility for the next response.",
+              "The facts do not say who must approve this.",
+              "It is unclear who decides next.",
+              "The facts do not record who will act on it.",
+              "The facts do not state who receives the deliverable.",
+              "It is unknown who is responsible for the decision.",
+              "The facts do not state whether the submitter or the administrator will move the request forward.",      # R8 A119 H3-04
+              "The facts do not specify the steps that occur after returning the response."]                          # R8 A119 H4-14
+    assert [ra.free_text_authority(t) for t in keep] == [None] * len(keep)
+    assert all(ra.free_text_authority(t) == "authority_in_free_text" for t in refuse), [(t, ra.free_text_authority(t)) for t in refuse]
+    assert "request-assistant-checks/15" in ra.COMPATIBLE_CHECKS

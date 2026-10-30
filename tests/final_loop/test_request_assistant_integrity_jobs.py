@@ -99,8 +99,8 @@ def test_one_cause_rule_and_guarded_prose_through_the_worker_for_two_readers(ra_
         ask(q, client, t["thread_id"], "Why is it here, and can you approve it?", key, 0)
         m = settle(q, client, t["thread_id"])["messages"][0]
         a = m["answer"]
-        line = next(l for l in model.prompts[0].split(chr(10)) if "which for this request are:" in l)
-        listed = line.split("which for this request are: ", 1)[1].split(". The stage", 1)[0]
+        line = next(l for l in model.prompts[0].split(chr(10)) if "(the only facts a cause block may cite): " in l)   # answer/6 prompt (R16) wording of the cause list
+        listed = line.split("(the only facts a cause block may cite): ", 1)[1].rstrip(".")
         assert a["checks_version"] == ra.CHECKS_VERSION and a["status"] == "partial"
         assert [b["text"] for b in a["blocks"] if b["kind"] != "authority"] == ["The request is at the knowledge decision stage.",
                                                                               "Purchases from high-risk suppliers go to the Finance Controller regardless of amount."]
@@ -229,10 +229,13 @@ def test_every_shown_impact_rule_is_its_own_fact_even_when_rules_share_a_link_ki
     pack = vra.build_context(q.env.store, q.env.tenant, q.env.ws, "business_change", cid, auth)
     view = v2_business_review.review_view(q.env.store, q.env.tenant, q.env.ws, cid, account_id=q.env.admin, roles=("admin",))
     rules = (_review_payload(view, mode="business", can_evidence=True, change_id=cid).get("impact") or {}).get("affected_rules") or []
-    impact = [f for f in pack["facts"] if f["kind"] == "impact"]
+    impact = [f for f in pack["facts"] if f["kind"] == "impact" and f["key"] != "parties"]   # context/7 (R16): the parties fact is a computed fact, not a walked rule
     assert len({r["link"] for r in rules}) < len(rules), "precondition: at least two shown rules share a link kind"
     assert rules and len(impact) == min(len(rules), vra.IMPACT_LIMIT)
     assert len({f["key"] for f in impact}) == len(impact) and all(f["key"].startswith("impact:rk-") for f in impact)
+    parties = next(f for f in pack["facts"] if f["key"] == "parties")                       # context/10: a range fact is named only when the pack holds one
+    ranged = any(str(f["key"]).endswith(":range") for f in pack["facts"])
+    assert ("computed range fact" in parties["text"]) is ranged and ("rule's before / after" in parties["text"]) is not ranged
 
 
 def test_an_old_shape_model_object_is_a_schema_violation_and_leaves_no_partial_answer(ra_env):

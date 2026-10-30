@@ -167,6 +167,12 @@ def resolve_proposals(obj: Mapping, rules: Mapping[str, Mapping], existing_gaps:
                 no("evidence_refs_missing_or_too_many")
             elif not set(refs) <= allowed or not set(refs) & named:
                 no("evidence_ref_not_in_the_named_rules")
+            elif kind == "missing_exception" and not set(refs) - named:
+                # R5 (2026-10-28, P-02 class: AEV8-P-08 "any exceptions for urgent transactions?", agp-04): an exception is suggested only from a source, the
+                # shown rule that acts as the unstated exception, cited beside the rule that lacks it. A suggestion citing only the rule itself has no source in the
+                # rules (a general practice is not one): refused and recorded, never shown as a question. Replay over every stored output: 3 such suggestions, all
+                # wrong; no planted exception lost.
+                no("exception_without_source")
             elif key in seen:
                 no("duplicate")
             else:
@@ -298,9 +304,59 @@ def candidate_pairs(rules: Iterable[Mapping]) -> list:
             if not same_actor:
                 why.append(f"actors {r1.get('actor_ref') or 'unknown'} and {r2.get('actor_ref') or 'unknown'}")
             basis = sorted({_case_category(r, _leaves(r.get("condition")))[1] for r in (r1, r2)} - {"none"})
+            # R5 (P-02 class, AEV8-P-07): the outcome each rule gives is stated with the pair, so the model reads whether one case can receive both
+            outcomes = {r["rule_id"]: (r.get("outcome") or {}).get("kind") or "unspecified" for r in (r1, r2)}
             out.append({"rule_ids": sorted([r1["rule_id"], r2["rule_id"]]), "case": k1[0] or "any category", "why": "; ".join(why), "case_from": basis,
-                        "measure": k1[1]})
+                        "measure": k1[1], "outcomes": [outcomes[x] for x in sorted(outcomes)]})
     out.sort(key=lambda x: (x["case"], x["rule_ids"]))
+    return out[:MAX_PAIRS]
+
+
+_EXCLUSIVE = re.compile(r"(?i)\b(?:only|solely|exclusively)\b")
+
+
+def overlapping_deciders(rules: Iterable[Mapping]) -> list:
+    """Hardening H9 (HK-AEV P-01, 2026-10-27): "imaging purchases are decided only by the committee" and "purchases of 6,000,000 JPY or more are decided only by the
+    board" measure different fields, so the same-measure pairs never showed them, and the model found nothing. Rules of the same outcome kind with different actors
+    whose conditions read disjoint fields can both apply to one case: listed for the model to examine (a lead, never a gap on its own). Rules with different
+    outcome kinds (a tag and three quotes) complement each other and are not listed."""
+    rules = [r for r in rules if r.get("status") not in ("REJECTED", "SUPERSEDED")]
+    out = []
+    for i, a in enumerate(rules):
+        for b in rules[i + 1:]:
+            ka, kb = (a.get("outcome") or {}).get("kind"), (b.get("outcome") or {}).get("kind")
+            if not ka or ka != kb or a.get("actor_ref") == b.get("actor_ref"):
+                continue
+            # A108 (development, HK-AEV P-05): listing every same-outcome pair led the model to call two separate requirements a conflict; only rules that each
+            # claim the decision for themselves ("only", "solely", "exclusively" in their own title) can contradict each other for one case
+            if not (_EXCLUSIVE.search(a.get("title") or "") and _EXCLUSIVE.search(b.get("title") or "")):
+                continue
+            fa, fb = {l.get("field") for l in _leaves(a.get("condition"))}, {l.get("field") for l in _leaves(b.get("condition"))}
+            if not fa or not fb or fa & fb or '"not":' in json.dumps(a.get("condition")) or '"not":' in json.dumps(b.get("condition")):
+                continue
+            out.append({"rule_ids": sorted([a["rule_id"], b["rule_id"]]), "outcome": ka})
+    out.sort(key=lambda x: x["rule_ids"])
+    return out[:MAX_PAIRS]
+
+
+def stated_exception_leads(rules: Iterable[Mapping]) -> list:
+    """R5 (2026-10-28, P-02 class, AEV8-P-09): a rule that already states an exception, and another rule acting on a narrower case of it (every comparison of the
+    first rule's condition plus at least one more): the narrower rule may be that stated exception, and then nothing is missing. A lead for the model to read,
+    never a verdict: the server cannot tell whether the stated text and the narrower rule describe the same case."""
+    rules = [r for r in rules if r.get("status") not in ("REJECTED", "SUPERSEDED")]
+    key = lambda l: (l.get("field"), l.get("op"), str(l.get("value")).strip().lower())                                       # noqa: E731
+    out = []
+    for a in rules:
+        if not a.get("exceptions") or '"not":' in json.dumps(a.get("condition")):
+            continue
+        base = {key(l) for l in _leaves(a.get("condition"))}
+        for b in rules:
+            if b is a or not base:
+                continue
+            more = {key(l) for l in _leaves(b.get("condition"))}
+            if base < more:
+                out.append({"rule_id": a["rule_id"], "narrower_rule_id": b["rule_id"], "stated": [str(e.get("text") or "")[:200] for e in a["exceptions"]][:3]})
+    out.sort(key=lambda x: (x["rule_id"], x["narrower_rule_id"]))
     return out[:MAX_PAIRS]
 
 
@@ -314,9 +370,18 @@ def build_prompt_with_coverage(frozen: Mapping, rules: Iterable[Mapping], asked:
     rules = list(rules)
     asked, edges = list(asked), list(edges)
     all_pairs = candidate_pairs(rules)
-    pairs = [(f"- {p['rule_ids'][0]} and {p['rule_ids'][1]}: both decide a {p['case']} purchase by its amount but state different {p['why']}" if p.get("measure", "amount") == "amount"
-              else f"- {p['rule_ids'][0]} and {p['rule_ids'][1]}: both decide the same kind of case by its {p['measure']} but state different {p['why']}")
+    pairs = [(f"- {p['rule_ids'][0]} and {p['rule_ids'][1]}: both compare the amount of a {p['case']} purchase and state different {p['why']}" if p.get("measure", "amount") == "amount"
+              else f"- {p['rule_ids'][0]} and {p['rule_ids'][1]}: both compare the {p['measure']} of the same kind of case and state different {p['why']}")
+             + (f"; outcomes {p['outcomes'][0]} / {p['outcomes'][1]}" if p.get("outcomes") else "")
              + (f" (case read from: {', '.join(p['case_from'])})" if p.get("case_from") else "") for p in all_pairs]
+    listed = {frozenset(p["rule_ids"]) for p in all_pairs}
+    overlaps = [o for o in overlapping_deciders(rules) if frozenset(o["rule_ids"]) not in listed]   # H9: different fields, same decision, different actors
+    pairs += [f"- {o['rule_ids'][0]} and {o['rule_ids'][1]}: both give the same kind of outcome ({o['outcome']}) with different actors and read different fields, so "
+              f"one case can meet both conditions; check whether such a case would get two different deciders" for o in overlaps]
+    stated = stated_exception_leads(rules)
+    pairs += [f"- {x['narrower_rule_id']} acts on a narrower case of {x['rule_id']}, which already states the exception {x['stated']}: if {x['narrower_rule_id']} is that "
+              f"stated case, no exception is missing" for x in stated]
+    all_pairs = list(all_pairs) + overlaps + stated
     lines, used = [], 0
     for r in rules:
         cond = r.get("condition")

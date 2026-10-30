@@ -1,3 +1,7 @@
+# R23 (2026-10-30): the request assistant uses the configuration that met its acceptance (agent evaluation on a sealed set, protocol 62.1): request.qa /
+# request.assistant / request.assistant.recover on gemini-3.8-flash, thinking LOW; the answer call at the global endpoint (19 s, config/request_assistant.json
+# recovery.primary_deadline_s), one recovery call at the `us` multi-region (list price 1.65 / 8.25 per 1M) with the time left, job deadline 42 s; its own
+# output caps 2,048 sent / 4,096 reserved (role_*_max_output_tokens); every other role keeps the global caps below. Still a proposal, NOT deployed.
 # Production AI configuration of the Final build (shape and values proposed for the owner-approved first operating month; NOT deployed).
 # Copy outside version control, mount it from the platform's secret store and point RIPPLE_BUDGET_CONFIG_PATH at it. It uses its OWN ledger
 # (the production database); the evaluation configuration and mandate ledger are never reused. Re-read the model price on deploy day:
@@ -6,19 +10,26 @@
 # safety limit, not a spending target. Every job reserves its worst case before the call and settles the provider-reported usage after it;
 # at the cap a paid action is refused with a reason (data and saved results stay readable).
 # Semantic retrieval: on (RIPPLE_SEMANTIC_RETRIEVAL=vertex); a business question may then make the answer call plus up to 3 semantic calls,
-# hence max_provider_calls_per_job 4 and per_job_cap_usd 0.16 (worst case 4 x 0.03792 = 0.15168; a recorded question costs about 0.005).
+# hence max_provider_calls_per_job 4.
+# R5 (owner decision 2026-10-28; acceptance A113 MET): knowledge.gap_proposals runs on gemini-3.8-flash (thinking LOW). The reservation prices EVERY job at the
+# priciest configured model x the call ceiling, priced here at the 3.8 Flash STANDARD rate that applies from 2027-01-01 (1.50 / 7.50 USD per 1M; the introductory
+# 0.75 / 3.75 applies through 2026-12-31) so the ledger never undercounts across the price change: 4 x (24,000 x 0.0015 + 12,288 x 0.0075) / 1k = 4 x 0.12816 =
+# 0.51264 USD -> per_job_cap_usd 0.52 (a hold released at settlement, not a spend). Measured: a gap-proposal call about 2,400 input / 300 output tokens = about
+# 0.0024 USD at the introductory rate (recorded here about 0.0048); a Flash-Lite question about 0.0012-0.005.
 default_model_id: gemini-3.5-flash-lite
 role_model_ids:
   extraction: gemini-3.5-flash-lite
-  knowledge.gap_proposals: gemini-3.5-flash-lite
+  knowledge.gap_proposals: gemini-3.8-flash          # R5 / A113: P-02 closed on this model (Flash-Lite kept reporting complementary pairs)
   gap.answer_interpret: gemini-3.5-flash-lite
   knowledge.qa: gemini-3.5-flash-lite
   retrieval.semantic: gemini-3.5-flash-lite
   change.understand: gemini-3.5-flash-lite
   change.impact_deps: gemini-3.5-flash-lite
   change.draft_guidance: gemini-3.5-flash-lite
-  request.qa: gemini-3.5-flash-lite
-  request.assistant: gemini-3.5-flash-lite
+  request.qa: gemini-3.8-flash                       # R23: the accepted request-assistant route
+  request.assistant: gemini-3.8-flash
+  request.assistant.recover: gemini-3.8-flash        # R23: the one recovery call (same prompt, pack and rights) at the `us` multi-region
+  request.assistant.complete: gemini-3.5-flash-lite   # R17: the one supplementary call of a request.qa job (parts left open by the first pass)
   knowledge.mining: gemini-3.5-flash-lite
   gap.interview: gemini-3.5-flash-lite
   gap.interview_question: gemini-3.5-flash-lite
@@ -44,14 +55,37 @@ role_thinking_levels:
   knowledge.mining: LOW
   document.wording: LOW
   gap.interview: MINIMAL
+  request.assistant.complete: MINIMAL   # R17: the completion only fills the open parts from named facts
+  request.assistant: LOW            # DEC-0009 (2026-10-27): the level every measured request-assistant run used (RQA-V12, rqa_hk_acc_v1)
+  request.assistant.recover: LOW
 model_prices:
   gemini-3.5-flash-lite:
     input_usd_per_1k: "0.0003"
     output_usd_per_1k: "0.0025"
-price_snapshot_date: "2026-10-17"
+  gemini-3.8-flash:
+    input_usd_per_1k: "0.0015"
+    output_usd_per_1k: "0.0075"
+  gemini-3.8-flash@us:                # R23: the recovery call's multi-region list price (no introductory discount assumed)
+    input_usd_per_1k: "0.00165"
+    output_usd_per_1k: "0.00825"
+price_snapshot_date: "2026-10-28"
 price_snapshot_max_age_days: 30
 request_timeout_seconds: 120
-per_job_cap_usd: "0.16"
+# R11 (owner decision 2026-10-28): the request assistant's own deadline (an operating bound, not a latency result); other roles keep the 120 s above
+role_request_timeouts:
+  request.assistant: 42             # R23: the accepted job deadline (the answer call itself is cut at 19 s by config/request_assistant.json)
+  request.assistant.recover: 42
+  request.assistant.complete: 45
+role_locations:
+  request.assistant.recover: us
+# R23: the request assistant's own output caps, as measured (2,048 sent, 4,096 reserved: a 2x thinking overshoot fits); other roles keep the global caps
+role_max_output_tokens:
+  request.assistant: 4096
+  request.assistant.recover: 4096
+role_generation_max_output_tokens:
+  request.assistant: 2048
+  request.assistant.recover: 2048
+per_job_cap_usd: "0.52"
 total_cap_usd: "10.00"
 max_input_tokens_per_call: 24000
 max_output_tokens: 12288

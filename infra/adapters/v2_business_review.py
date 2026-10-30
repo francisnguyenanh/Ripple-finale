@@ -69,7 +69,7 @@ def current_draft(store, tenant_id, workspace_id, change_id):
     got = v2_business_change.draft_for_intent(store, tenant_id, workspace_id, change_id, proposed_dependencies=deps, dependency_state=dep_state)
     draft, written_with_evidence = _guidance(store, tenant_id, workspace_id, change_id, got["draft"])
     draft = bd.merge_clarifications(draft, list_clarifications(store, tenant_id, workspace_id, change_id))
-    return draft, written_with_evidence, got
+    return draft, written_with_evidence, dict(got, probe=probe, dep_state=dep_state)
 
 
 def _knowledge_moved(store, tenant_id, workspace_id, pin) -> bool:
@@ -183,7 +183,8 @@ def review_view(store, tenant_id, workspace_id, change_id, *, account_id: str, r
         can["apply_source_edits"] = True
     return {"draft": draft, "guidance_written_with_evidence": written_with_evidence, "report": parts["report"], "intent": parts["intent"], "titles": parts["titles"], "decisions": decisions,
             "can": can, "knowledge_moved": moved, "requester_id": rec.get("requested_by"), "policy": policy, "edits_hash": bd.edits_hash(draft),
-            "committed": committed, "source": source, "completion": v2_business_commit.completion(draft, committed, source_apply=source["job"])}
+            "committed": committed, "source": source, "completion": v2_business_commit.completion(draft, committed, source_apply=source["job"]),
+            "probe": parts["probe"], "dep_state": parts["dep_state"], "perms": perms}
 
 
 def _clean(text, limit, what):

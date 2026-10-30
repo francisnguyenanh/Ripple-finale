@@ -52,7 +52,7 @@ def test_a_threshold_moved_past_another_actors_threshold_on_the_same_field_is_he
     kept = holds(rules, change("rule-head", rules, {"value": 2500000, "unit": "JPY"}))                      # 1M -> 2.5M stays below 3M: no hold
     assert kept == []
     equal = holds(rules, change("rule-head", rules, {"value": 3000000, "unit": "JPY"}))                     # landing exactly on the other threshold changes the order too
-    assert [h["hold"] for h in equal] == ["approval_order_inverted"]
+    assert [h["hold"] for h in equal] == ["approval_tiers_start_together"]                                 # R2-05a: held, but as tiers starting together, not an inversion
 
 
 def test_no_hold_for_the_same_actor_a_different_field_or_a_rule_that_only_shares_the_number():

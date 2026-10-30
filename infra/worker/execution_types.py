@@ -104,6 +104,11 @@ class ExecutionOutcome:
     input_tokens: int | None = None
     output_tokens: int | None = None
     thought_tokens: int | None = None
+    #: R7: the provider service tier the call was SERVED at (None = standard); the worker prices the attempt at that tier's key
+    service_tier: str | None = None
+    #: R19: optional per-call pricing for an attempt whose calls differ (model, tier, reported or missing usage): one entry per call made,
+    #: {"price_key", "input_tokens", "output_tokens"}; a missing side is priced at its ceiling for THAT call only. Absent = the attempt-level fields above.
+    priced_calls: tuple | None = None
 
 
 @dataclass

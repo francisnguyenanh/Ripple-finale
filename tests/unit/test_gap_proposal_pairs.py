@@ -43,7 +43,7 @@ def test_a_withdrawn_rule_and_two_rules_that_agree_make_no_pair_and_the_prompt_l
     assert bp.candidate_pairs([dict(CODE_CAPEX, status="SUPERSEDED"), POLICY_CAPEX]) == []
     assert bp.candidate_pairs([CODE_CAPEX, dict(CODE_CAPEX, rule_id="rule-code-capex-2")]) == []
     prompt = bp.build_prompt(FROZEN, [POLICY_CAPEX, CODE_CAPEX], [], [], can_read_evidence=False, max_chars=FROZEN["limits"]["max_prompt_chars"])
-    assert "<pairs>\n- rule-code-capex and rule-policy-capex: both decide a CAPEX purchase by its amount but state different thresholds 2000000 and 5000000; actors role-finance and role-finance-controller (case read from: condition literal, scope)\n</pairs>" in prompt
+    assert "<pairs>\n- rule-code-capex and rule-policy-capex: both compare the amount of a CAPEX purchase and state different thresholds 2000000 and 5000000; actors role-finance and role-finance-controller; outcomes x / x (case read from: condition literal, scope)\n</pairs>" in prompt
     assert "whatever words or field names each source uses" in prompt and "would not catch" not in prompt
     empty = bp.build_prompt(FROZEN, [HIGH_RISK], [], [], can_read_evidence=False, max_chars=FROZEN["limits"]["max_prompt_chars"])
     assert "<pairs>\n(none)\n</pairs>" in empty
@@ -185,7 +185,7 @@ def test_contract_3_other_quantities_pair_inside_a_concept_only_and_the_contract
     assert [p["rule_ids"] for p in pairs] == [["rule-ret-store", "rule-ret-web"]] and pairs[0]["measure"] == "days"
     assert bp.candidate_pairs([dict(store, concept_ids=[]), dict(web, concept_ids=[])]) == []                       # no shared concept: no pair
     props = FROZEN["output_schema"]["properties"]
-    assert FROZEN["version"] == 3 and props["gaps"]["items"]["properties"]["kind"]["enum"] == ["missing_exception", "conflicting_facts"]
+    assert FROZEN["version"] == 5 and props["gaps"]["items"]["properties"]["kind"]["enum"] == ["missing_exception", "conflicting_facts"]
     assert props["relations"]["items"]["properties"]["relation"]["enum"] == ["depends_on", "exception_to", "implements"]
 
 

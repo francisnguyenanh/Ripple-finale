@@ -37,7 +37,7 @@ EXTRA = {
     ("change_risk_memo", "prompt_template"): {"status": "insufficient", "statements": [], "open_questions": [NOTE]},
     ("ma_synthesis_memo", "prompt_template"): {"status": "insufficient", "statements": [], "open_questions": [NOTE]},
     # request assistant (2026-10-20): the panel shows "The facts do not answer this" with the simulated note; a real answer needs an approved live window
-    ("request_assistant", "prompt_template"): {"outcome": "insufficient_context", "answer_blocks": [], "limitations": [NOTE]},   # answer/5: no authority field from a model
+    ("request_assistant", "prompt_template"): {"outcome": "insufficient_context", "asks": [], "unrecorded": [], "limitations": [NOTE]},   # answer/6 (the answer/5 shape is a schema violation since R16)
 }
 RUBRIC_DECLINES = {"You are the SCENARIO DESIGNER": {"status": "UNSURE", "scenarios": [], "notes": [NOTE]},
                    "You are the ASSUMPTION CRITIC": {"status": "UNSURE", "findings": [], "disputes": [], "notes": [NOTE]},

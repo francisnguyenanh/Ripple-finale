@@ -68,3 +68,26 @@ def test_without_evidence_rights_no_path_or_excerpt_and_other_people_and_a_chang
     assert d.status_code == 200, d.text
     stale = source(q, approver, atid, amid, arefs["impact"]).json()
     assert stale["available"] is False and stale["reason"] == "stale_context" and "sources" not in json.dumps(stale)
+
+
+def test_r12_the_server_computed_range_is_cited_in_the_proposal_mood_and_its_source_is_the_rule_it_was_computed_from(ra_env):
+    """R12 (context/4): the computed range fact ("rule_change:draft:NNN:range") is kept when written as a proposal and its source is the same stored rule as the
+    draft's Before / After fact (it was computed from that rule's conditions); context/3 had no such fact, and a key ending in ":range" resolved to nothing."""
+    q = ra_env
+    cid, approver = prepared(q)
+
+    def cite_range(p):
+        rng = next(l.split(" ", 1)[0] for l in p.split("\n") if l.startswith("F") and "[rule_change] Computed by the server for the rule" in l)
+        draft = next(l.split(" ", 1)[0] for l in p.split("\n") if l.startswith("F") and "[rule_change] Before:" in l)
+        return answer(blocks=[("If approved, requests from 1,000,000 up to, not including, 1,500,000 JPY would no longer need manager review.", [rng], "interpretation"),
+                              ("The draft would raise the threshold.", [draft], "fact")])
+    use(q, cite_range)
+    t = thread(q, approver, cid)
+    ask(q, approver, t["thread_id"], "Which requests would this change affect?", "key-r12-0101", 0)
+    m = settle(q, approver, t["thread_id"])["messages"][0]
+    assert m["state"] == "answered" and m["answer"]["rejected"] == [], m["answer"]
+    by_text = {c["text"][:40]: r for r, c in m["citations"].items()}
+    rng = next(r for t_, r in by_text.items() if t_.startswith("Computed by the server for the rule"))
+    draft = next(r for t_, r in by_text.items() if t_.startswith("Before:"))
+    a, b = source(q, approver, t["thread_id"], m["message_id"], rng).json(), source(q, approver, t["thread_id"], m["message_id"], draft).json()
+    assert a["available"] is True and a["kind"] == "rule_change" and a["sources"] == b["sources"] and a["sources"]

@@ -24,7 +24,9 @@ Switching off never means "no cost at all": storage, backups, images and (option
    import the last dump into a new database, then compare row counts with the counts recorded at export (see section 5) before going on.
 3. Schema: run the one-shot migrate job (`python -m tools.db_migrate --apply`) with the image of this window; it is idempotent and forward-only.
 4. Configuration: the production budget configuration (`config/ai_closed_loop/final_budgets.production.example.yaml` as the shape) mounted from the secret store:
-   explicit `enabled_roles` (never `all`), the approved total cap, prices re-read on the day (`price_snapshot_max_age_days`).
+   explicit `enabled_roles` (never `all`), the approved total cap, prices re-read on the day (`price_snapshot_max_age_days`). Gap proposals run on
+   `gemini-3.8-flash` (2026-10-28); the example prices it at the standard rate that applies from 2027-01-01, and the per-job cap (0.52) must stay at or above the
+   reservation of the priciest configured model x 4 calls, or every job is refused (`budget_invariants.problems` reports it before arming).
 5. Keep AI off while checking: `RIPPLE_PROVIDER_MODE=LIVE_DISARMED` on web and worker.
 
 ### 1a. Database connection envelope (decide before opening access)

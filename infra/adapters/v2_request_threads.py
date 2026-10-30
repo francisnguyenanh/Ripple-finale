@@ -114,11 +114,12 @@ def _settle(store, tenant, ws, m, current_auth) -> dict:
     st = rec.get("execution_status")
     if st == "COMPLETED" and isinstance(rec.get("execution_result"), dict):
         ans = {k: rec["execution_result"].get(k) for k in ("status", "outcome", "blocks", "rejected", "limitations", "next_actions", "as_of", "manifest_hash",
-                                                           "answer_schema", "checks_version", "locale", "context_version", "explained_fact_kinds", "blocker_coverage", "authority_accounting")}
+                                                           "answer_schema", "checks_version", "locale", "context_version", "explained_fact_kinds", "blocker_coverage", "authority_accounting", "parts", "policy_refusal",
+                                                           "limitation_support")}                    # checks/30: what a kept limitation rests on (absent in older answers)
     elif st in ("FAILED", "CANCELLED", "REJECTED"):
         ans = {"status": "unavailable" if st == "FAILED" else "cancelled", "reason": rec.get("execution_reason"), "blocks": [], "rejected": [], "limitations": []}
     else:
-        return m
+        return dict(m, phase="running" if st == "RUNNING" else "queued")              # R11: whether Stop can still take effect
     with store._tx() as cur:
         cur.execute("UPDATE v2_request_messages SET answer=%s, answered_at=now() WHERE tenant_id=%s AND workspace_id=%s AND message_id=%s AND answer IS NULL",
                     (Json(ans), tenant, ws, m["message_id"]))
@@ -139,16 +140,33 @@ def _legacy_view(answer: dict) -> dict:
     return {**answer, "blocks": kept, "legacy_checks": True, "legacy_withheld": len(blocks) - len(kept), "legacy_note": LEGACY_NOTE}
 
 
+def reason_code(reason) -> str:
+    """R11: a stable code for why no answer came, for the page's plain-language text (the stored reason stays as recorded)."""
+    r = str(reason or "")
+    if "ProviderTimeoutError" in r:
+        return "provider_timeout"                                                         # no answer before the deadline, or an answer after it (not used)
+    if r.startswith("provider_attempt_limit_reached"):
+        return "attempt_limit"                                                            # an earlier attempt's outcome is unknown (worker stopped); none is repeated
+    if r.startswith("provider_execution_failed"):
+        return "provider_failed"
+    if "cancel" in r:
+        return "cancelled"
+    return "not_answered"
+
+
 def _public(m, current_auth, pack) -> dict:
     out = {"message_id": m["message_id"], "seq": m["seq"], "question": m["question"], "created_at": m["created_at"], "as_of": m["as_of"]}
     if m["auth"] != current_auth:
         return {**out, "state": "withheld", "reason": "Your access to this request changed after this question; the answer is withheld. Ask again to get an answer for your current access."}
     if m["answer"] is None:
-        return {**out, "state": "pending"}
+        return {**out, "state": "pending", "phase": m.get("phase", "queued")}
     answer = _legacy_view(m["answer"])
+    if answer.get("status") in ("unavailable", "cancelled"):
+        answer = {**answer, "reason_code": reason_code(answer.get("reason")), "reference": m["message_id"]}   # the reference support uses to find the job
     facts = {f["id"]: f for f in pack["facts"]} if m["manifest_hash"] == pack["manifest_hash"] else {}
+    refs = [r for b in answer.get("blocks") or [] for r in b["fact_refs"]] + [r for s in answer.get("limitation_support") or [] for r in s.get("fact_refs") or []]
     return {**out, "state": "answered" if answer.get("status") not in ("unavailable", "cancelled") else answer["status"], "answer": answer,
-            "current": m["manifest_hash"] == pack["manifest_hash"], "citations": facts and {r: facts[r] for b in answer.get("blocks") or [] for r in b["fact_refs"] if r in facts}}
+            "current": m["manifest_hash"] == pack["manifest_hash"], "citations": facts and {r: facts[r] for r in refs if r in facts}}   # checks/30: + what a kept limitation rests on
 
 
 def read_thread(store, tenant, ws, tid, authority) -> dict:
@@ -239,7 +257,7 @@ def _rules_for_fact(store, tenant, ws, family, rid, authority, fact) -> list:
         from infra.adapters import v2_business_review
         view = v2_business_review.review_view(store, tenant, ws, rid, account_id=authority["account_id"], roles=authority.get("roles"))
         try:
-            rule_id = ((view or {}).get("draft") or {})["rule_changes"][int(key.rsplit(":", 1)[1])]["rule_id"]
+            rule_id = ((view or {}).get("draft") or {})["rule_changes"][int(key.split(":")[2])]["rule_id"]   # R12: "...:NNN:range" (computed from that rule) has the same source
         except (KeyError, IndexError, ValueError, TypeError):
             return []
         _view, snap = v2_business._latest_view(store, tenant, ws)
@@ -365,14 +383,23 @@ def cancel(store, tenant, ws, tid, mid, authority) -> dict:
     m = next((x for x in _messages(store, tenant, ws, tid) if x["message_id"] == mid), None)
     if m is None:
         raise TenantScopeError(THREAD_NOT_FOUND)
+    # R11: Stop says what it did. Only a question still waiting in the queue is cancelled (no provider call, nothing charged); one already being answered keeps
+    # running (the provider call cannot be withdrawn), its result and cost are kept; nothing is claimed about stopping the provider or the charge
+    outcome = "finished"
     if m["answer"] is None:
-        try:
-            store.request_cancel(tenant, ws, m["job_id"], reason="cancelled by the person who asked")
-        except Exception:                                                                     # noqa: BLE001 - already running or finished: the result (and its cost) is kept
-            pass
+        st = (store.job_record(tenant, ws, m["job_id"]) or {}).get("execution_status")
+        if st == "QUEUED":
+            try:
+                store.request_cancel(tenant, ws, m["job_id"], reason="cancelled by the person who asked")
+            except Exception:                                                                 # noqa: BLE001 - started or finished meanwhile: read the state below
+                pass
+            after = (store.job_record(tenant, ws, m["job_id"]) or {}).get("execution_status")     # said only as the record now shows it
+            outcome = "cancelled" if after == "CANCELLED" else "running" if after == "RUNNING" else "finished"
+        elif st == "RUNNING":
+            outcome = "running"
         with store._tx() as cur:
-            _audit(cur, tenant, ws, AUDIT["cancel"], authority["account_id"], {"thread_id": tid, "message_id": mid, "job_id": m["job_id"]})
-    return read_thread(store, tenant, ws, tid, authority)
+            _audit(cur, tenant, ws, AUDIT["cancel"], authority["account_id"], {"thread_id": tid, "message_id": mid, "job_id": m["job_id"], "outcome": outcome})
+    return {**read_thread(store, tenant, ws, tid, authority), "cancel": {"message_id": mid, "outcome": outcome}}
 
 
 def now_iso() -> str:

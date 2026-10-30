@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from infra.worker.budget_config import actual_call_cost_usd, worst_case_model_id
+from infra.worker.budget_config import worst_case_call_usd
 
 
 def attempts(config) -> int:
@@ -25,7 +25,7 @@ def max_total_provider_calls(config) -> int:
 
 
 def worst_call_usd(config) -> Decimal:
-    return actual_call_cost_usd(config, model_id=worst_case_model_id(config), input_tokens=None, output_tokens=None)
+    return worst_case_call_usd(config)                                                      # R23: each role at its own output ceiling
 
 
 def job_reservation_usd(config) -> Decimal:

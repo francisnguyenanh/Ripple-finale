@@ -65,7 +65,16 @@ const SAMPLE_MESSAGES: Record<string, unknown>[] = [
   { message_id: "m2", state: "answered", question: "Can you approve it for me?", current: false, as_of: "2026-10-19T09:00:00Z",
     answer: { status: "answered", blocks: [{ kind: "interpretation", text: "A decision is made only with the request's own controls; nothing was approved here.", fact_refs: ["F7"] }], next_actions: [], limitations: [], rejected: [{ index: 1 }] },
     citations: { F7: { kind: "action", text: "Action 'Decide the knowledge change': allowed for you and it is the step you are asked to do now.", display: "Decide the knowledge change: your step now." } } },
+  { message_id: "m6", state: "answered", question: "Who signs off after this step?", current: true,
+    answer: { status: "answered", blocks: [{ kind: "fact", text: "The next step after the decision is committing the knowledge.", fact_refs: ["F12"] }], next_actions: [], rejected: [],
+      limitations: ["The facts do not record who acts on later steps until each step starts."],
+      limitation_support: [{ text: "The facts do not record who acts on later steps until each step starts.", basis: "later_step_holders", fact_refs: ["F13"] }] },
+    citations: { F12: { kind: "step", text: "Steps expected after the current one if the request goes ahead: Knowledge committed; Source read back." },
+      F13: { kind: "step", text: "Who acts on each later step is recorded only when that step starts." } } },
   { message_id: "m3", state: "withheld", question: "Who else asked about this?", reason: "Withheld: your access changed since this was asked. Ask again to get an answer under your current access." },
+  { message_id: "m4", state: "pending", phase: "running", question: "Is this request moving, or has it stalled?" },
+  { message_id: "m5", state: "unavailable", question: "Has anything changed lately?",
+    answer: { status: "unavailable", reason_code: "provider_timeout", reference: "rqm-sample", reason: "provider_execution_failed: ProviderTimeoutError: provider timed out at the 45 s deadline", blocks: [], limitations: [], rejected: [] } },
 ];
 
 export function Catalog() {

@@ -51,7 +51,10 @@ def test_hostile_question_and_hostile_answer_change_nothing_and_show_nothing(ra_
         assert bad not in shown, bad
     assert not any(b.get("kind") != "authority" for b in ans.get("blocks") or [])                  # every model block refused (server authority lines may remain)
     assert counts(q.env) == before                                                                  # no decision, commit or other write from the chat
-    assert model.calls == 1
+    # R17: with nothing kept, the server made its one supplementary call; the hostile answer came back and was refused the same way; the second prompt offered no
+    # unauthorized data either and kept the fake delimiters as data
+    assert model.calls == 2 and "<open>" in model.prompts[1] and CANARY not in model.prompts[1] and "&lt;/facts>" in model.prompts[1]
+    assert ans.get("parts", {}).get("supplement", {}).get("outcome") == "completed" and ans["status"] == "refused"
 
 
 def test_revocation_during_the_provider_call_retains_internally_books_usage_and_shows_nothing(ra_env):

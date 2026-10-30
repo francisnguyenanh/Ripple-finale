@@ -18,6 +18,7 @@ import { CoveragePanel, prepareCoverage } from "./Coverage";
 import { ApproveJobButton, JobLine, useCreateStage } from "./StageBits";
 import type { Gap, Job, Rec } from "./types";
 import { isDone, jobState, isTerminal } from "./types";
+import { EquivalentStep } from "@/components/EquivalentStep";
 
 export const draftResult = (j: Job | null): Rec | null => (j && jobState(j) === "COMPLETED" ? (j.execution_result ?? null) : null);
 
@@ -141,10 +142,10 @@ function GapItem({ g, draftId, arts }: { g: Gap; draftId: string; arts: string[]
               }}>Save as comment (not authoritative)</Button>
             )}
             {s.can("change.prepare") && arts.length > 0 && (
-              <Button data-testid="gap-suggest" title={aiWhy(s, "gap.answer")} disabled={pending || !s.aiKind("gap.answer")} onClick={async () => {
+              <><Button data-testid="gap-suggest" title={aiWhy(s, "gap.answer")} disabled={pending || !s.aiKind("gap.answer")} onClick={async () => {
                 const r = await create("gap.answer", newId("ui-suggest"), { question: g.text, question_id: `suggest:${g.gap_id}`, artifact_ids: arts });
                 if (r) await refresh();
-              }}>Ask the AI to suggest (model call, needs approval)</Button>
+              }}>Ask the AI to suggest (model call, needs approval)</Button><EquivalentStep kind="gap.answer" to="ask" /></>
             )}
             {s.can("knowledge.confirm") && (
               <Button variant="primary" data-testid="gap-confirm" disabled={pending} onClick={async () => {
@@ -263,7 +264,7 @@ export function DraftStage() {
       <JobLine name="draft" job={d?.draft ?? null} usePhase retry />
       {s.can("change.prepare") && (
         <div className="flex flex-wrap gap-2">
-          <Button variant="primary" data-testid="action-run-draft" title={aiWhy(s, "change.draft")} disabled={!confirmed || running || pending || !s.aiKind("change.draft")} onClick={() => generate(false)}>Generate GenAI draft</Button>
+          <Button variant="primary" id="action-run-draft" data-testid="action-run-draft" title={aiWhy(s, "change.draft")} disabled={!confirmed || running || pending || !s.aiKind("change.draft")} onClick={() => generate(false)}>Generate GenAI draft</Button><EquivalentStep kind="change.draft" to="change" />
           {r && !lin?.revised_by && <Button data-testid="action-revise-draft" title={aiWhy(s, "change.draft")} disabled={!confirmed || running || pending || !s.aiKind("change.draft")} onClick={() => generate(true)}>Revise this draft with confirmed feedback (uses the paid model)</Button>}
           <ApproveJobButton job={d?.draft ?? null} label="Approve this model call (a different person than the requester)" testid="action-approve-draft" />
         </div>

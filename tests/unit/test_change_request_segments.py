@@ -595,3 +595,119 @@ def test_hk_aev2_a_reversal_is_asked_when_the_model_writes_the_boolean_as_text()
           "condition": {"not": {"field": "work_order.on_public_road", "op": "eq", "value": "true"}}}
     out = _c8(permit, req, [op])
     assert out["status"] == "CLARIFY" and out["rejected"][0]["reason"] == "desired_not_supported:reverses_the_rule"
+
+
+def test_r2_a_negation_over_the_measured_field_flips_the_rule_whatever_the_value_and_a_band_still_reads():
+    """R2-05b (HK-AEV2 U-07, 2026-10-27): "crew overtime should only go to the depot manager once it passes 30 hours a month" was written as
+    NOT(hours > 30) for the rule "hours > 20" (READY, would have put the rule on the other side). Now asked; a band (all of > 20 and not > 30) still reads."""
+    ot = _rule("rule-ot", "Field crew overtime above 20 hours in a month needs the depot manager", {"field": "crew.overtime_hours_month", "op": "gt", "value": 20, "unit": "hours"})
+    req = "Crew overtime should only go to the depot manager once it passes 30 hours a month."
+    flip = {"kind": "add_or_change_condition", "rule_id": "rule-ot", "candidate_rule_ids": [], "desired": None, "parts": ["P1"], "user_quote": req.rstrip("."),
+            "condition": {"not": {"field": "crew.overtime_hours_month", "op": "gt", "value": 30}}}
+    out = _c8(ot, req, [flip])
+    assert out["status"] == "CLARIFY" and not out["operations"] and out["rejected"][0]["reason"] == "desired_not_supported:reverses_the_rule"
+    band = dict(flip, condition={"all": [{"field": "crew.overtime_hours_month", "op": "gt", "value": 20, "unit": "hours"},
+                                         {"not": {"field": "crew.overtime_hours_month", "op": "gt", "value": 30, "unit": "hours"}}]},
+                user_quote="Crew overtime between 20 and 30 hours goes to the depot manager")
+    assert _c8(ot, "Crew overtime between 20 and 30 hours goes to the depot manager.", [band])["status"] == "READY"
+    other_field = dict(flip, condition={"not": {"field": "crew.on_call", "op": "eq", "value": True}}, user_quote="Crew overtime goes to the depot manager unless the crew is on call")
+    unless = _c8(ot, "Crew overtime goes to the depot manager unless the crew is on call.", [other_field])
+    assert not any(r["reason"] == "desired_not_supported:reverses_the_rule" for r in unless["rejected"])                # a NOT over another field is not a flip
+
+
+def test_a109_an_inverted_comparison_without_not_is_a_reversal_and_a_moved_or_banded_limit_is_not():
+    """Hardening A109 (AEV7-U-04 / U-05): "close a slope when its score is not below 3" for a rule on "< 3" was proposed READY as ">= 3", and "only when the
+    refund is not 200 CHF or more" for ">= 200" as "< 200" — the rule would apply in the opposite cases. Refused `reverses_the_rule` (asked). Negatives: the same
+    side with a new value, a band keeping the current limit, a condition on another field."""
+    from core.change_intelligence.v2.business_change import _inverts_direction as inv
+    assert inv({"field": "slope.score", "op": "lt", "value": 3}, {"field": "slope.score", "op": "gte", "value": 3})
+    assert inv({"field": "refund.chf", "op": "gte", "value": 200}, {"field": "refund.chf", "op": "lt", "value": 200})
+    assert inv({"field": "refund.chf", "op": "gte", "value": 200}, {"field": "refund.chf", "op": "lte", "value": 150})       # another value, still the other side
+    assert not inv({"field": "slope.score", "op": "lt", "value": 3}, {"field": "slope.score", "op": "lt", "value": 2})
+    assert not inv({"field": "q", "op": "lte", "value": 0}, {"any": [{"field": "q", "op": "lte", "value": 0}, {"field": "q", "op": "gt", "value": 3000}]})
+    assert not inv({"field": "h", "op": "gt", "value": 20}, {"all": [{"field": "h", "op": "gt", "value": 20}, {"field": "x", "op": "eq", "value": True}]})
+    assert not inv({"field": "h", "op": "gt", "value": 20}, {"field": "k", "op": "lt", "value": 5})
+
+
+def test_r5_reversal_regression_through_resolve_with_valid_near_misses_multi_ops_and_actors():
+    """R5 (2026-10-28, before the fresh understanding acceptance): the reversal guard through the real resolve. A reversal with or without NOT is asked; a moved
+    limit on the same side, a band, a set_value read of "once it passes N" / "not before N", a condition on another field and a restatement stay READY (the
+    guard must not turn hard cases into questions); several operations and near-identical rules; vague actors asked, a named role accepted."""
+    score = _rule("rule-slope", "Slopes with a stability score below 3 are closed by the patrol lead", {"field": "slope.score", "op": "lt", "value": 3})
+    def cond(req, c, rule=score):
+        return {"kind": "add_or_change_condition", "rule_id": rule["rule_id"], "candidate_rule_ids": [], "desired": None, "parts": ["P1"], "user_quote": req.rstrip("."), "condition": c}
+    def st(req, c, rule=score):
+        return _c8(rule, req, [cond(req, c, rule)])
+    rev = "desired_not_supported:reverses_the_rule"
+    # reversals: with NOT, without NOT, with another value on the other side
+    for req, c in (("Close a slope when its score is not below 3.", {"not": {"field": "slope.score", "op": "lt", "value": 3}}),
+                   ("Close a slope when its score is not below 3.", {"field": "slope.score", "op": "gte", "value": 3}),
+                   ("Close a slope when its score is 3 or more.", {"field": "slope.score", "op": "gt", "value": 3})):
+        out = st(req, c)
+        assert out["status"] == "CLARIFY" and not out["operations"] and out["rejected"][0]["reason"] == rev, (req, c, out["rejected"])
+    # valid edits that must stay READY
+    for req, c in (("Close a slope when its score is below 4.", {"field": "slope.score", "op": "lt", "value": 4}),
+                   ("Close a slope when its score is 3 or below.", {"field": "slope.score", "op": "lte", "value": 3}),
+                   ("Close a slope when its score is below 3 or the wind is above 80.", {"any": [{"field": "slope.score", "op": "lt", "value": 3}, {"field": "slope.wind_kmh", "op": "gt", "value": 80}]}),
+                   ("Close a slope when its score is below 3 and it is in the north sector.", {"all": [{"field": "slope.score", "op": "lt", "value": 3}, {"field": "slope.sector", "op": "eq", "value": "NORTH"}]}),
+                   ("Close a slope when its score is between 1 and 3.", {"all": [{"field": "slope.score", "op": "gte", "value": 1}, {"field": "slope.score", "op": "lt", "value": 3}]})):
+        out = st(req, c)
+        assert out["status"] == "READY" and not any(r["reason"] == rev for r in out["rejected"]), (req, out["status"], out["rejected"], out["questions"])
+    # "once it passes N" / "not before N" are value changes on the same side
+    ot = _rule("rule-ot", "Field crew overtime above 20 hours in a month needs the depot manager", {"field": "crew.overtime_hours_month", "op": "gt", "value": 20, "unit": "hours"})
+    for req in ("Crew overtime should only go to the depot manager once it passes 30 hours a month.", "Crew overtime should not go to the depot manager before 30 hours a month."):
+        op = {"kind": "set_value", "rule_id": "rule-ot", "candidate_rule_ids": [], "desired": {"value": 30, "unit": "hours"}, "parts": ["P1"], "user_quote": req.rstrip(".")}
+        assert _c8(ot, req, [op])["status"] == "READY", req
+    # several operations: a valid one beside a reversal is not proposed alone (the request is asked); two valid ones are both kept
+    refund = dict(_rule("rule-refund", "Season pass refunds of 200 CHF or more are approved by the guest services manager", {"field": "refund.amount_chf", "op": "gte", "value": 200, "unit": "CHF"}),
+                  actor_ref="role-guest-services-manager")
+    req2 = "Close a slope when its score is below 4, and refunds of 150 CHF or more go to the guest services manager."
+    ops = [dict(cond("Close a slope when its score is below 4", {"field": "slope.score", "op": "lt", "value": 4}), parts=["P1"]),
+           {"kind": "set_value", "rule_id": "rule-refund", "candidate_rule_ids": [], "desired": {"value": 150, "unit": "CHF"}, "parts": ["P2"],
+            "user_quote": "refunds of 150 CHF or more go to the guest services manager"}]
+    both = _c8(score, req2, ops, others=[refund])
+    assert both["status"] == "READY" and len(both["operations"]) == 2, (both["status"], both["rejected"], both["questions"])
+    req3 = "Close a slope when its score is below 4, and approve refunds only when they are not 200 CHF or more."
+    mixed = _c8(score, req3, [ops[0], dict(cond("approve refunds only when they are not 200 CHF or more", {"field": "refund.amount_chf", "op": "lt", "value": 200, "unit": "CHF"}, refund), parts=["P2"])],
+                others=[refund])
+    assert mixed["status"] == "CLARIFY" and any(r["reason"] == rev and r["rule_id"] == "rule-refund" for r in mixed["rejected"])
+    # near-identical rules: a word only one carries picks it; none is asked (the server never picks)
+    north = dict(_rule("rule-slope-north", "North sector slopes with a stability score below 3 are closed by the patrol lead",
+                       {"all": [{"field": "slope.score", "op": "lt", "value": 3}, {"field": "slope.sector", "op": "eq", "value": "NORTH"}]}), actor_ref=score["actor_ref"], outcome=score["outcome"])
+    vague_rule = _c8(score, "Close slopes when their score is below 4.", [cond("Close slopes when their score is below 4", {"field": "slope.score", "op": "lt", "value": 4})], others=[north])
+    assert vague_rule["status"] == "CLARIFY" and vague_rule["rejected"][0]["reason"] == "ambiguous_rule"
+    named = _c8(score, "Close north sector slopes when their score is below 4.",
+                [cond("Close north sector slopes when their score is below 4", {"all": [{"field": "slope.score", "op": "lt", "value": 4}, {"field": "slope.sector", "op": "eq", "value": "NORTH"}]}, north)],
+                others=[north])
+    assert named["status"] == "READY", (named["rejected"], named["questions"])
+    # actors: indefinite words and pronouns are asked; a named role is accepted
+    for req, who in (("Someone senior should close the slopes instead of the patrol lead.", "role-someone-senior"),
+                     ("She should close the slopes instead of the patrol lead.", "role-she")):
+        op = {"kind": "set_actor", "rule_id": "rule-slope", "candidate_rule_ids": [], "desired": who, "parts": ["P1"], "user_quote": req.rstrip(".")}
+        out = _c8(score, req, [op])
+        assert out["status"] == "CLARIFY" and out["rejected"][0]["reason"] == "desired_not_supported:actor_not_named", (req, out["rejected"])
+    req = "The mountain operations manager should close the slopes instead of the patrol lead."
+    ok = _c8(score, req, [{"kind": "set_actor", "rule_id": "rule-slope", "candidate_rule_ids": [], "desired": "role-mountain-operations-manager", "parts": ["P1"], "user_quote": req.rstrip(".")}])
+    assert ok["status"] == "READY", (ok["rejected"], ok["questions"])
+
+
+def test_a113_a_boolean_turned_around_is_a_reversal_and_other_boolean_edits_are_not():
+    """A113 (AEV9-U-03): "inspect commercial connections in exactly the opposite case" for a rule on certificate_valid eq false was proposed READY as eq "true".
+    Now asked. Negatives: a boolean condition added on another field, a band, the same condition restated, an ordinary value move."""
+    from core.change_intelligence.v2.business_change import _flips_boolean as flip
+    cur = {"field": "connection.backflow_certificate_valid", "op": "eq", "value": False}
+    assert flip(cur, {"field": "connection.backflow_certificate_valid", "op": "eq", "value": "true"})
+    assert flip(cur, {"field": "connection.backflow_certificate_valid", "op": "eq", "value": True})
+    assert flip(cur, {"field": "connection.backflow_certificate_valid", "op": "ne", "value": False})
+    assert flip({"all": [cur, {"field": "connection.kind", "op": "eq", "value": "COMMERCIAL"}]},
+                {"all": [dict(cur, value=True), {"field": "connection.kind", "op": "eq", "value": "COMMERCIAL"}]})
+    assert not flip(cur, cur)                                                                          # restated
+    assert not flip(cur, {"all": [cur, {"field": "connection.kind", "op": "eq", "value": "COMMERCIAL"}]})   # a condition added
+    assert not flip(cur, {"field": "connection.flow_ls", "op": "eq", "value": True})                 # another field
+    assert not flip({"field": "h", "op": "gt", "value": 20}, {"field": "h", "op": "gt", "value": 30})  # a value move
+    rule = _rule("rule-backflow", "Commercial connections without a valid backflow certificate are inspected", cur)
+    req = "Please turn the backflow rule around: inspect commercial connections in exactly the opposite case to what the rule says today."
+    op = {"kind": "add_or_change_condition", "rule_id": "rule-backflow", "candidate_rule_ids": [], "desired": None, "parts": ["P1"], "user_quote": req.rstrip("."),
+          "condition": {"field": "connection.backflow_certificate_valid", "op": "eq", "value": "true"}}
+    out = _c8(rule, req, [op])
+    assert out["status"] == "CLARIFY" and out["rejected"][0]["reason"] == "desired_not_supported:reverses_the_rule"
