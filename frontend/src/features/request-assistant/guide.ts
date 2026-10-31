@@ -24,13 +24,25 @@ function lower(s: string): string { return s ? s[0].toLowerCase() + s.slice(1) :
 function norm(s: string): string { return s.replace(/\s+/g, " ").trim().toLowerCase(); }
 
 /** Server action code -> the test id of the EXISTING control on the owning page that the chip focuses (never clicks). Unknown or absent = no target (safe fallback). */
-const TARGETS: Record<string, Record<string, string>> = {
+const TARGETS: Record<string, Record<string, string | string[]>> = {
   business_change: { approve_knowledge: "rev-reason", approve_file_writes: "rev-reason", commit_knowledge: "rev-commit", apply_source_edits: "rev-apply-source",
                      clarify: "rev-clarify-ref" },
+  // EUI-02 (2026-10-31): the intent family's controls on the Changes page. `change.prepare` serves whichever stage is next; the candidates are listed in stage
+  // order and the first one the page renders for this reader is the target (the page renders a stage's control only when that stage is the next one).
+  intent_flow: { "intent.confirm_own": "action-confirm-intent",
+                 "change.prepare": ["action-run-draft", "action-prepare-proposal-from-draft", "action-prepare-proposal", "action-run-review", "action-prepare-approval",
+                                    "action-apply", "action-submit-work-proof"] },
 };
 
+/** The test id(s) of the control a server action code points at on the owning page; the first candidate rendered on the page is the one to focus. */
+export function actionTargets(family: string, action: string): string[] {
+  const t = TARGETS[family]?.[action];
+  return t === undefined ? [] : Array.isArray(t) ? t : [t];
+}
+
 export function actionTarget(family: string, action: string): string | null {
-  return TARGETS[family]?.[action] ?? null;
+  const t = actionTargets(family, action);
+  return t.length ? t[0] : null;
 }
 
 /** EUI-02/03: where a cited fact is shown on the SAME page, from its kind and the server's typed key (never from its text). No new read: the target is a section

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 from typing import Iterable, Mapping
+from core.change_intelligence.v2.prompt_render import render_once
 
 CLASSES = ("policy_candidate", "metadata", "ambiguous")
 MODEL_KEYS = {"status", "items", "notes"}
@@ -43,7 +44,7 @@ def build_prompt(frozen: Mapping, values: Iterable[Mapping], rules: Iterable[Map
     vlines = "\n".join(f"- ref={v['evidence_ref']} | value: {v['value']} | file: {v.get('file')} | location: {v.get('location')}"
                        + (f" | column header: {v['header']}" if v.get("header") else "") + (f" | row label: {v['row_label']}" if v.get("row_label") else "") for v in values) or "(none)"
     rlines = "\n".join(f"- id={r['rule_id']} | {r.get('title')} | when: {condition_text(r['condition']) if r.get('condition') is not None else 'not stated'}" for r in rules) or "(none)"
-    prompt = frozen["unbound_prompt_template"].replace("{values}", vlines).replace("{rules}", rlines)
+    prompt = render_once(frozen["unbound_prompt_template"], {"values": vlines, "rules": rlines})
     if len(prompt) > frozen["limits"]["max_prompt_chars"]:
         raise ValueError("context_too_large")
     return prompt

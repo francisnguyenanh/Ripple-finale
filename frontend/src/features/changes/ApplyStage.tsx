@@ -3,7 +3,7 @@ import * as React from "react";
 import { Download } from "lucide-react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Callout, Card, Field, Fingerprint, Muted, StatePill, Tech, TechField, TextArea, TextInput, usePlain } from "@/components/bits";
+import { Callout, Card, Field, Fingerprint, Muted, Select, StatePill, Tech, TechField, TextArea, TextInput, usePlain } from "@/components/bits";
 import { basename, humanize, newId } from "@/lib/fmt";
 import { downloadArtifact } from "@/lib/download";
 import { useAction } from "@/lib/useAction";
@@ -271,9 +271,9 @@ export function QueryStage() {
             <summary className="cursor-pointer text-sm font-medium">Advanced: choose the files to search</summary>
             <div className="grid gap-2 mt-3">
               <Field label="Sources to search (hold Ctrl to pick several)">
-                <select multiple id="fld-query-art" data-testid="field-query-artifact" className="border border-border rounded-sm bg-bg px-3 py-2 min-h-24" value={scope} onChange={(e) => setPicked(Array.from(e.target.selectedOptions).map((o) => o.value))}>
+                <Select multiple id="fld-query-art" data-testid="field-query-artifact" className="min-h-24" value={scope} onChange={(e) => setPicked(Array.from(e.target.selectedOptions).map((o) => o.value))}>
                   {(d.arts ?? []).map((a) => <option key={a.artifact_id} value={a.artifact_id}>{a.logical_path}</option>)}
-                </select>
+                </Select>
               </Field>
               {narrowed && <div><Button data-testid="query-all-files" onClick={() => setPicked(null)}>Search all files again</Button></div>}
             </div>

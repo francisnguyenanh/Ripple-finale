@@ -43,6 +43,14 @@ class FileBlobs:
             if os.path.exists(tmp):
                 os.unlink(tmp)
 
+    def delete_immutable(self, digest: str) -> bool:
+        """DOC-03 retention (2026-10-31): remove the bytes at a digest (an operator action, audited by the caller). True when something was removed."""
+        path = self._path(digest)
+        if not path.exists():
+            return False
+        path.unlink()
+        return True
+
     def read(self, digest: str) -> bytes:
         data = self._path(digest).read_bytes()
         if "sha256:" + hashlib.sha256(data).hexdigest() != digest:

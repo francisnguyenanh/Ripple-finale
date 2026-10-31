@@ -144,7 +144,9 @@ def build_journey(f: Mapping) -> dict:
     bv = comp.get("behavioral_verification")
     steps.append(_step("behaviour", "done" if bv == "verified" else "todo", "Behaviour is not tested by the product." if bv != "verified" else "Verified outside the product.", ""))
     ur = f.get("user_result")
-    steps.append(_step("user_result", "done" if ur == "accept" else ("rejected" if ur == "reject" else "todo"), "No result decision is recorded for this change." if not ur else f"Result decision: {ur}.", ""))
+    steps.append(_step("user_result", "done" if ur == "accept" else ("rejected" if ur == "reject" else "todo"),
+                       "No result decision is recorded for this change." if not ur else f"Result decision: {ur}.", f.get("user_result_reason") or "",
+                       by=f.get("user_result_by"), at=f.get("user_result_at")))
 
     scope = "NARROW" if comp.get("source_sync") == "not_required" and comp.get("code_sync") == "not_required" else "FULL"
     by_key = {s["key"]: s for s in steps}

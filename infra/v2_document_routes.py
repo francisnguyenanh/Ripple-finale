@@ -145,6 +145,10 @@ def read_business_document_content(request: Request, artifact_id: str, workspace
         state = _authorized_state(store, authority, workspace_id, artifact_id)
         if state["freshness"] not in ("available", "stale"):
             return JSONResponse({"error": "the document is not available", "code": state["freshness"]}, status_code=409, headers=_NO_STORE)
+        retired = docs.retired_at(store, authority["tenant_id"], workspace_id, artifact_id)            # DOC-03 retention: a retired row is not served even when
+        if retired:                                                                                     # its bytes still exist because another row shares them
+            return JSONResponse({"error": "the document's bytes were retired by the operator under the retention policy; request the document again on the current knowledge",
+                                 "code": "retired", "retired_at": retired}, status_code=410, headers=_NO_STORE)
         blob_store = _blob_store()
         if blob_store is None:
             return _error("document bytes unavailable: no blob store is configured", 503)

@@ -21,6 +21,7 @@ from typing import Iterable, Mapping
 
 from core.change_intelligence.v2 import document_ast as da
 from core.change_intelligence.v2.serialize import canonical_hash
+from core.change_intelligence.v2.prompt_render import render_once
 
 SCHEMA = "ripple-doc-variant/1"
 AUDIENCES = ("executive", "sop", "audit")
@@ -125,9 +126,11 @@ def build_prompt(frozen: Mapping, audience: str, pack: Mapping) -> str:
     questions = "\n".join(f"- id={q['id']} [{q['status']}/{q['priority']}] {q['question']} (rules: {', '.join(q['rules'])})" for q in pack["questions"]) or "(none)"
     overview = json.dumps(pack["overview"], sort_keys=True)
     sections = "\n".join(f"- {s}: {cfg['headings'][s]}" for s in cfg["sections"])
-    prompt = frozen["prompt_template"].replace("{audience}", audience).replace("{guidance}", cfg["guidance"]).replace("{mandatory}", ", ".join(cfg["mandatory"])) \
-        .replace("{sections}", sections).replace("{overview}", overview).replace("{facts}", facts).replace("{questions}", questions).replace("{narrative}", ", ".join(cfg["narrative"]) or "none")         .replace("{limits}", f"at most {frozen['limits']['max_sections']} sections, {frozen['limits']['max_paragraphs_per_section']} paragraphs per section, "
-                             f"{frozen['limits']['max_paragraph_chars']} characters and {frozen['limits']['max_claims_per_paragraph']} claims per paragraph")
+    prompt = render_once(frozen["prompt_template"], {
+        "audience": audience, "guidance": cfg["guidance"], "mandatory": ", ".join(cfg["mandatory"]), "sections": sections, "overview": overview, "facts": facts,
+        "questions": questions, "narrative": ", ".join(cfg["narrative"]) or "none",
+        "limits": f"at most {frozen['limits']['max_sections']} sections, {frozen['limits']['max_paragraphs_per_section']} paragraphs per section, "
+                  f"{frozen['limits']['max_paragraph_chars']} characters and {frozen['limits']['max_claims_per_paragraph']} claims per paragraph"})
     if len(prompt) > frozen["limits"]["max_prompt_chars"]:
         raise ValueError("context_too_large")
     return prompt

@@ -58,7 +58,7 @@ def _trace(dsn: str, request_id: str) -> int:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="List or cancel queued jobs of one workspace.")
-    ap.add_argument("command", choices=("list", "cancel-queued", "trace", "replay-parked"))
+    ap.add_argument("command", choices=("list", "cancel-queued", "trace", "replay-parked", "backfill-candidates"))
     ap.add_argument("--kind", default="")
     ap.add_argument("--tenant", default="")
     ap.add_argument("--workspace", default="")
@@ -98,6 +98,19 @@ def main(argv=None) -> int:
         parked = _Store(dsn, _NB()).parked_outbox(a.tenant, a.workspace)
         print(f"parked outbox events {len(parked)}" + ("".join(f"\n  PARKED   {p['kind']:24} id={p['id']}" for p in parked)))
         if a.command == "list":
+            return 0
+        if a.command == "backfill-candidates":                     # REL-03 (2026-10-31): index the candidates of extraction jobs that predate migration v2_043
+            store = _Store(dsn, _NB())
+            with store._tx() as cur:
+                cur.execute("""SELECT count(*) FROM v2_jobs j WHERE j.tenant_id=%s AND j.workspace_id=%s AND j.kind='extraction' AND j.execution_status='COMPLETED'
+                               AND j.execution_result IS NOT NULL AND NOT EXISTS (SELECT 1 FROM v2_extraction_candidates c
+                               WHERE c.tenant_id=j.tenant_id AND c.workspace_id=j.workspace_id AND c.job_id=j.job_id)""", (a.tenant, a.workspace))
+                pending = cur.fetchone()[0]
+            if not a.apply:
+                print(f"dry run: {pending} completed extraction job(s) without index rows would be indexed (no job is changed)")
+                return 0
+            done = store.backfill_candidate_index(a.tenant, a.workspace)
+            print(f"indexed {done['candidates']} candidate(s) of {done['jobs']} job(s); the JSONB records are unchanged")
             return 0
         if a.command == "replay-parked":
             from infra.worker import job_worker

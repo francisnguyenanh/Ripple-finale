@@ -4,7 +4,7 @@ import * as React from "react";
 import { Check, Minus } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Callout, Card, Field, Muted, Tech, TechField, TextArea, TextInput } from "@/components/bits";
+import { Callout, Card, Field, Muted, Select, Tech, TechField, TextArea, TextInput } from "@/components/bits";
 import { StatusBadge } from "@/components/StatusBadge";
 import { newId } from "@/lib/fmt";
 import { useAction } from "@/lib/useAction";
@@ -66,9 +66,9 @@ function Create({ onCreated }: { onCreated: () => void }) {
           <Field label="Workspace name" hint="3 to 80 characters, for example Harbor Treasury"><TextInput data-testid="workspace-name" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} /></Field>
           <Field label="What is it for?" hint="Optional: the system or process, and which sources belong here"><TextArea data-testid="workspace-description" value={desc} maxLength={500} rows={3} onChange={(e) => setDesc(e.target.value)} /></Field>
           {((opts.projects ?? []) as Rec[]).length > 1 ? (
-            <Field label="Project"><select data-testid="workspace-project" className="border border-border rounded-sm bg-bg px-2 py-1.5 min-h-9" value={project} onChange={(e) => { setProject(e.target.value); setPicked({}); }}>
+            <Field label="Project"><Select data-testid="workspace-project" className="px-2 py-1.5 min-h-9" value={project} onChange={(e) => { setProject(e.target.value); setPicked({}); }}>
               {((opts.projects ?? []) as Rec[]).map((p) => <option key={p.project_id} value={p.project_id}>{p.project_id}</option>)}
-            </select></Field>
+            </Select></Field>
           ) : <Muted>Project: <strong>{project}</strong></Muted>}
           <fieldset className="grid gap-2">
             <legend className="text-sm font-semibold">Who else gets access</legend>
@@ -78,9 +78,9 @@ function Create({ onCreated }: { onCreated: () => void }) {
               <div key={a} className="flex flex-wrap items-center gap-3 text-sm">
                 <label className="flex items-center gap-2"><input type="checkbox" data-testid="workspace-member" data-account={a} checked={a in picked} onChange={(e) => setPicked((p) => { const n = { ...p }; if (e.target.checked) n[a] = roles[0]?.role as string; else delete n[a]; return n; })} />{a}</label>
                 {a in picked && (
-                  <select aria-label={`Role for ${a}`} data-testid="workspace-member-role" className="border border-border rounded-sm bg-bg px-2 py-1 min-h-9" value={picked[a]} onChange={(e) => setPicked((p) => ({ ...p, [a]: e.target.value }))}>
+                  <Select aria-label={`Role for ${a}`} data-testid="workspace-member-role" className="px-2 py-1 min-h-9" value={picked[a]} onChange={(e) => setPicked((p) => ({ ...p, [a]: e.target.value }))}>
                     {roles.map((r) => <option key={r.role} value={r.role}>{r.label}</option>)}
-                  </select>
+                  </Select>
                 )}
               </div>
             ))}

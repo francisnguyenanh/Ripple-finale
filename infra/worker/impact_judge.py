@@ -34,6 +34,7 @@ from infra.worker.execution_types import (is_timeout_exception,
     ProviderRateLimitError, ProviderTimeoutError,
 )
 from infra.worker.live_analysis import generate_and_close, _client_for_model, _field, _token_count
+from core.change_intelligence.v2.prompt_render import render_once
 
 CONFIG_PATH = pathlib.Path(__file__).resolve().parents[2] / "config" / "ai10_impact_judge.json"
 _MODEL_KEYS = {"depends", "evidence_quote", "reason"}
@@ -131,13 +132,9 @@ class ImpactJudgeExecutor:
                 raise NonRetryableExecutionError("source_artifact_unavailable") from exc
         if not body.strip():
             raise NonRetryableExecutionError("source_artifact_empty")
-        prompt = frozen["prompt_template"]
-        for key, val in (("{subject}", target.get("subject")), ("{predicate}", target.get("predicate")),
-                         ("{value}", target.get("value")), ("{unit}", target.get("unit")),
-                         ("{target_path}", tart.get("logical_path") or tart["artifact_id"]),
-                         ("{artifact_path}", path)):
-            prompt = prompt.replace(key, str(val))
-        prompt = prompt.replace("{artifact_text}", body)       # last: the artifact text is never re-expanded
+        prompt = render_once(frozen["prompt_template"], {"subject": target.get("subject"), "predicate": target.get("predicate"), "value": target.get("value"),
+                                                         "unit": target.get("unit"), "target_path": tart.get("logical_path") or tart["artifact_id"],
+                                                         "artifact_path": path, "artifact_text": body})       # one pass: the artifact text is never re-expanded
         if math.ceil(len(prompt.encode("utf-8")) / 2) > config.max_input_tokens_per_call:
             raise NonRetryableExecutionError("budget_exceeded", "source prompt exceeds input ceiling")
         ctx.request_context.update(judge_obs=obs, judge_config_sha=sha,

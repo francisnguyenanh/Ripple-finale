@@ -18,6 +18,7 @@ from core.change_intelligence.v2.business_change import safe_text
 from core.change_intelligence.v2.business_graph import edge_id
 from core.change_intelligence.v2.business_impact import DEP_RELATIONS, DEP_STATUSES, rule_refs
 from core.change_intelligence.v2.serialize import canonical_hash
+from core.change_intelligence.v2.prompt_render import render_once
 
 PROPOSAL_KEYS = {"status", "gaps", "relations", "notes"}
 GAP_ITEM_KEYS = {"kind", "rule_ids", "question", "evidence_refs"}
@@ -407,8 +408,8 @@ def build_prompt_with_coverage(frozen: Mapping, rules: Iterable[Mapping], asked:
             used += len(s)
         return kept
     shown_pairs, shown_asked, shown_edges = fit(pairs), fit(asked), fit(edges)
-    prompt = (frozen["prompt_template"].replace("{rules}", "\n".join(lines) or "(none)").replace("{asked}", "\n".join(shown_asked) or "(none)")
-              .replace("{edges}", "\n".join(shown_edges) or "(none)").replace("{pairs}", "\n".join(shown_pairs) or "(none)"))
+    prompt = render_once(frozen["prompt_template"], {"rules": "\n".join(lines) or "(none)", "asked": "\n".join(shown_asked) or "(none)",
+                                                     "edges": "\n".join(shown_edges) or "(none)", "pairs": "\n".join(shown_pairs) or "(none)"})
     count = lambda shown: sum(1 for s in shown if s != "- (more not shown)")                                   # noqa: E731
     coverage = {"rules": {"shown": len(lines), "total": len(rules)}, "pairs": {"shown": count(shown_pairs), "total": len(all_pairs)},
                 "questions": {"shown": count(shown_asked), "total": len(asked)}, "relations": {"shown": count(shown_edges), "total": len(edges)},

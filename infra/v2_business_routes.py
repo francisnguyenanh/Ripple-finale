@@ -1598,6 +1598,39 @@ def read_business_change_source(request: Request, change_id: str, workspace_id: 
         return _error(str(exc), 404)
 
 
+@router.post("/v2/business/changes/{change_id}/result")
+@db_route
+def record_business_change_result(request: Request, change_id: str):
+    """SYN-04 user result: the person who asked records whether a committed change gives the result they asked for (`decision: accept|reject`, reason required for
+    reject). One audit event; nothing is applied, undone or re-run. Requester only; 409 before the commit."""
+    if not _origin_ok(request):
+        return _error("origin refused", 403)
+    identity, store = _identity_store(), _v2_store()
+    if identity is None or store is None:
+        return _error("v2 unavailable", 503)
+    body = _json_body_sync(request)
+    workspace_id = body.get("workspace_id")
+    try:
+        authority = _authority(identity, request, workspace_id if isinstance(workspace_id, str) else "")
+        require_human_actor(authority)
+        require(authority, "project.read")
+        if not isinstance(workspace_id, str) or not change_id.startswith("chg-") or body.get("decision") not in ("accept", "reject"):
+            return _error("workspace_id and decision (accept|reject) required", 400)
+        tenant = authority["tenant_id"]
+        _change_record_for(store, tenant, workspace_id, change_id, authority)
+        from infra.adapters import v2_business_journey
+        result = v2_business_journey.record_result(store, tenant, workspace_id, change_id, actor_id=authority["account_id"], roles=authority.get("roles"), decision=body["decision"], reason=str(body.get("reason") or ""))
+        return JSONResponse(result, headers=_NO_STORE)
+    except IdentityDenied as exc:
+        return _denied(exc)
+    except PermissionDenied as exc:
+        return _error(f"permission denied: {exc}", 403)
+    except TenantScopeError as exc:
+        return _error(str(exc), 404)
+    except v2_business.BusinessKnowledgeRefused as exc:
+        return JSONResponse({"error": str(exc), "code": exc.code}, status_code=403 if exc.code == "not_the_requester" else 409 if exc.code != "invalid_field" else 400, headers=_NO_STORE)
+
+
 @router.post("/v2/business/changes/{change_id}/source/apply")
 @db_route
 def choose_business_change_source_mode(request: Request, change_id: str):

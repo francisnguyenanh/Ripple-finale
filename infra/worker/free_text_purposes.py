@@ -22,6 +22,7 @@ import re
 from infra import chat_safety, v2_chat_store as chat
 from infra.chat_numbers import numbers_with_quotes
 from infra.worker.change_draft import _canon_json, _clip
+from core.change_intelligence.v2.prompt_render import render_once
 
 CONFIG_PATH = pathlib.Path(__file__).resolve().parents[2] / "config" / "free_text_interpret.json"
 PURPOSES = ("knowledge_qa", "gap_reply", "draft_feedback", "whatif", "question_reply")
@@ -226,8 +227,7 @@ def build_context(store, tenant: str, ws: str, purpose: str, context_ref: dict |
 
 def build_prompt(purpose: str, context: dict, conversation: str) -> tuple[str, dict, str]:
     cfg, sha = load_config()
-    p = cfg["purposes"][purpose]["prompt"].replace("{common}", cfg["common"]).replace("{context}", _canon_json(context)) \
-        .replace("{conversation}", conversation)
+    p = render_once(cfg["purposes"][purpose]["prompt"], {"common": cfg["common"], "context": _canon_json(context), "conversation": conversation})
     return p, _schema(), sha
 
 

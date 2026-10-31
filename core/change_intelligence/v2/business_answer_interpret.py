@@ -14,6 +14,7 @@ from typing import Iterable, Mapping, Optional
 from core.change_intelligence.v2 import business_answers as ba
 from core.change_intelligence.v2 import business_knowledge as bk
 from core.change_intelligence.v2.business_change import PERSONAL_PRONOUNS, _covered, _norm, _segments, numbers_in, read_typed_condition, safe_text
+from core.change_intelligence.v2.prompt_render import render_once
 
 STATUSES = ("OK", "NEEDS_CLARIFICATION", "UNSUPPORTED")
 MODEL_KEYS = {"status", "kind", "text", "condition", "quote", "uncovered", "ruled_out", "message", "uncertainty"}
@@ -484,5 +485,5 @@ def build_prompt(frozen: Mapping, gap: Mapping, rules: Iterable[Mapping], text: 
         used += len(line)
     options = "\n".join(f"- {o['rule_id']}: {o.get('label')}" for o in gap.get("options") or []) or "(none)"
     fields = ", ".join(sorted(condition_fields(rules) if fields is None else fields)) or "(none)"
-    return (frozen["prompt_template"].replace("{gap_kind}", gap["kind"]).replace("{question}", gap["question"]).replace("{options}", options)
-            .replace("{fields}", fields).replace("{coverage}", coverage_note(coverage)).replace("{rules}", "\n".join(lines) or "(none)").replace("{text}", text))
+    return render_once(frozen["prompt_template"], {"gap_kind": gap["kind"], "question": gap["question"], "options": options, "fields": fields,
+                                                   "coverage": coverage_note(coverage), "rules": "\n".join(lines) or "(none)", "text": text})

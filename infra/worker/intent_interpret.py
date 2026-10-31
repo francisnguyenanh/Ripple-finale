@@ -30,6 +30,7 @@ from infra.worker.execution_types import (
 )
 from infra.worker.gap_answer import _model_object, load_frozen_config as _gap_config
 from infra.worker.live_analysis import generate_and_close, _client_for_model, _field, _token_count
+from core.change_intelligence.v2.prompt_render import render_once
 
 EXECUTOR_ID = "intent.interpret.v1"
 ROLE = "intent.interpret"
@@ -233,8 +234,7 @@ class IntentInterpretExecutor:
                                        ii_limits=lim, ii_plimits=plim, ii_sha=psha)
             return ExecutionRequest(prompt=prompt, schema=schema, provider_calls_planned=1, external=True)
         rules = _known_rules(ctx, ctx.job.get("pinned_source_revision_id"), lim["max_known_rules"])
-        prompt = (frozen["prompt_template"].replace("{rules}", "\n".join(_canon_json(r) for r in rules) or "(none stored)")
-                  .replace("{conversation}", convo))
+        prompt = render_once(frozen["prompt_template"], {"rules": "\n".join(_canon_json(r) for r in rules) or "(none stored)", "conversation": convo})
         if extraction._input_token_bound(prompt, frozen["output_schema"]) > config.max_input_tokens_per_call:
             raise NonRetryableExecutionError("budget_exceeded", "interpretation request exceeds input ceiling")
         ctx.request_context.update(ii_user_text=" \n".join(t["text"] for t in users), ii_rules=rules, ii_patterns=patterns,

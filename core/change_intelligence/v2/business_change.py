@@ -1108,9 +1108,12 @@ def _check_desired(kind, desired, rule, req_numbers, req_norm):
         if isinstance(value, bool) or not _is_number(value) or float(str(value).replace(",", "")) not in req_numbers:
             raise ValueError("number_not_in_request")
         if leaf.get("unit") and unit is not None:
-            unit = _unit_key(unit, leaf.get("unit"))             # by class: aliases, plurals, degree words on the rule's scale (A68, contract 8)
-        if leaf.get("unit") and unit != leaf.get("unit"):
-            raise ValueError("unit_differs_from_the_rule")
+            # by class, on BOTH sides: aliases, plurals, degree words on the rule's scale (A68, contract 8). The rule's own unit is whatever the extraction wrote
+            # from the sources ("yen" from "1,000,000 yen"); the desired unit is canonicalised by `_clean_units` ("yen" -> "JPY"): comparing the canonical desired
+            # form with the rule's raw spelling refused every wording of the same currency (staging 2026-10-31, C22 journey: "JPY" and "yen" both asked back).
+            if _unit_key(unit, leaf.get("unit")) != _unit_key(leaf.get("unit"), leaf.get("unit")):
+                raise ValueError("unit_differs_from_the_rule")
+            unit = leaf.get("unit")                              # written the way the rule writes it
         # only a check at exactly zero ("zero or less"): a rule at <= -2.5 C is an ordinary threshold (UNDERSTAND-V10 U10-01 was refused by the first version)
         zero_bound = leaf.get("op") in ("lte", "lt") and _is_number(leaf.get("value")) and float(str(leaf["value"]).replace(",", "")) == 0
         if _bounds_the_other_side(req_norm, float(str(value).replace(",", "")), leaf.get("op"), zero_bound):

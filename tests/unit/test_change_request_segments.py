@@ -426,6 +426,19 @@ def test_degrees_on_a_rule_kept_in_celsius_is_the_rule_scale():
     assert _resolve(yen, "Refunds from 25,000 degrees.", [bad])["rejected"][0]["reason"] == "desired_not_supported:unit_differs_from_the_rule"
 
 
+def test_the_same_currency_in_the_rules_own_spelling_or_its_code_is_accepted_and_written_as_the_rule_writes_it():
+    """Staging 2026-10-31 (C22 journey on a fresh extraction): the rule's unit was "yen" as the sources write it; the person's "1,500,000 JPY" and "1,500,000 yen"
+    were both asked back because only the desired side was canonicalised before the comparison."""
+    yen = _rule("rule-yen2", "Purchase request requires manager approval at least 1,000,000 yen", {"field": "purchase_request.amount", "op": "gte", "value": 1000000, "unit": "yen"})
+    for wording, unit in (("Set the threshold to 1,500,000 yen.", "yen"), ("Raise the threshold from 1,000,000 to 1,500,000 JPY.", "JPY")):
+        op = {"kind": "set_value", "rule_id": "rule-yen2", "candidate_rule_ids": [], "desired": {"value": 1500000, "unit": unit}, "user_quote": wording.rstrip(".")}
+        out = _resolve(yen, wording, [op])
+        assert out["status"] == "READY", (wording, out["rejected"])
+        assert out["operations"][0]["desired"] == {"value": 1500000, "unit": "yen"}                    # the rule's own spelling is kept
+    usd = {"kind": "set_value", "rule_id": "rule-yen2", "candidate_rule_ids": [], "desired": {"value": 1500000, "unit": "USD"}, "user_quote": "Set the threshold to 1,500,000 USD"}
+    assert _resolve(yen, "Set the threshold to 1,500,000 USD.", [usd])["rejected"][0]["reason"] == "desired_not_supported:unit_differs_from_the_rule"
+
+
 # ---- contract 8: server-numbered parts, model classification, server grounding (2026-10-24, after UNDERSTAND-V9..V12) -----------------------------------------
 
 def _c8(rule, request, operations, parts=(), others=()):

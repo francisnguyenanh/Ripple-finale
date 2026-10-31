@@ -3,7 +3,7 @@
 import * as React from "react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Callout, Card, Field, Muted, Tech, TextInput } from "@/components/bits";
+import { Callout, Card, Field, Muted, Select, Tech, TextInput } from "@/components/bits";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useAction } from "@/lib/useAction";
 import { PageHeader } from "@/pages/Page";
@@ -85,14 +85,14 @@ export function HarborPage() {
               <Field key={k} label={l}><TextInput value={form[k]} onChange={set(k)} data-testid={`harbor-in-${k}`} /></Field>
             ))}
             <Field label="Process">
-              <select className="h-9 rounded-md border border-border bg-bg px-2" value={form.process} onChange={set("process")} data-testid="harbor-in-process">
+              <Select className="h-9 min-h-9 px-2" value={form.process} onChange={set("process")} data-testid="harbor-in-process">
                 <option value="STANDARD">Standard</option><option value="EMERGENCY">Emergency</option>
-              </select>
+              </Select>
             </Field>
             <Field label="Category">
-              <select className="h-9 rounded-md border border-border bg-bg px-2" value={form.category} onChange={set("category")} data-testid="harbor-in-category">
+              <Select className="h-9 min-h-9 px-2" value={form.category} onChange={set("category")} data-testid="harbor-in-category">
                 <option value="OPEX">OPEX</option><option value="CAPEX">CAPEX</option>
-              </select>
+              </Select>
             </Field>
           </div>
         </Card>
@@ -100,14 +100,14 @@ export function HarborPage() {
           {revs.length === 0 ? <Muted>No version of this workspace holds Harbor's approval.yaml yet.</Muted> : (
             <div className="grid gap-3">
               <Field label="Before">
-                <select className="h-9 w-full rounded-md border border-border bg-bg px-2" value={before} onChange={(e) => setBefore(e.target.value)} data-testid="harbor-before">
+                <Select className="h-9 min-h-9 w-full px-2" value={before} onChange={(e) => setBefore(e.target.value)} data-testid="harbor-before">
                   {revs.map((r) => <option key={String(r.source_revision_id)} value={String(r.source_revision_id)}>{label(r)}</option>)}
-                </select>
+                </Select>
               </Field>
               <Field label="After">
-                <select className="h-9 w-full rounded-md border border-border bg-bg px-2" value={after} onChange={(e) => setAfter(e.target.value)} data-testid="harbor-after">
+                <Select className="h-9 min-h-9 w-full px-2" value={after} onChange={(e) => setAfter(e.target.value)} data-testid="harbor-after">
                   {revs.map((r) => <option key={String(r.source_revision_id)} value={String(r.source_revision_id)}>{label(r)}</option>)}
-                </select>
+                </Select>
               </Field>
               <Button onClick={go} disabled={pending || !before || !after} data-testid="harbor-run">{pending ? "Running..." : "Run through Harbor"}</Button>
               <Tech><div className="text-xs text-muted" data-testid="harbor-code-rev">code: {Object.entries(((cfgs?.code as Rec)?.files ?? {}) as Rec).map(([f, h]) => `${f} ${String(h).slice(0, 12)}`).join(" · ")}</div></Tech>

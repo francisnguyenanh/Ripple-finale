@@ -41,6 +41,13 @@ def _shot(page, name, el=None):                                                 
         page.screenshot(path=os.path.join(target, f"{name}.png"), full_page=False)
 
 
+def _expand_all(page):
+    """Open every finished stage (they fold to a summary line once done)."""
+    b = tid(page, "stages-expand-all")
+    if b.count() and b.get_attribute("aria-pressed") != "true":
+        b.click()
+
+
 @pytest.fixture
 def ch(env, monkeypatch):
     return build(env, monkeypatch, finguide_scope={"category": "all"})
@@ -143,12 +150,18 @@ def test_full_harbor_loop_in_the_new_interface_with_a_clean_business_view(env, c
         _pump(admin, env)
         _open(requester, requester.url)
         expect(tid(requester, "state-proposal")).to_have_attribute("data-state", "COMPLETED", timeout=WAIT)
-        expect(tid(requester, "diff-view")).to_be_visible()
+        _expand_all(requester)                                                    # SCN-08: finished stages are collapsed until the reader expands them
+        expect(tid(requester, "diff-withheld")).to_be_visible()                      # SEC-01: the exact file diff is served to approvers and evidence readers only
+        assert tid(requester, "diff-view").count() == 0
+        expect(tid(requester, "diff-withheld")).to_contain_text("fingerprints above identify the change")
         assert_business_clean(requester, "proposal")
         url = requester.url
 
         # ---- 5. the approver states the expected result independently; the requester reviews and prepares the approval
         _open(approver, url)
+        _expand_all(approver)
+        expect(tid(approver, "diff-view")).to_be_visible()                          # SEC-01: the approver reads the exact diff
+        assert approver.locator("[data-testid=diff-line][data-kind=add]").count() >= 1
         tid(approver, "contract-advanced").locator("summary").click()                         # the manual path (Advanced) still works
         tid(approver, "field-contract-path").fill(APPROVAL)
         tid(approver, "field-contract-locator").fill(Y)

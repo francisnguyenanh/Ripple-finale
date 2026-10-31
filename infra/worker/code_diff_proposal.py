@@ -22,6 +22,7 @@ from infra.worker.change_draft import _canon_json
 from infra.worker.code_change import _git, repo_config
 from infra.worker.execution_types import ExecutionContext, ExecutionOutcome, ExecutionRequest, NonRetryableExecutionError, ProviderCallBudget
 from infra.worker.explain import call_pinned_json
+from core.change_intelligence.v2.prompt_render import render_once
 
 EXECUTOR_ID = "code.diff_proposal.v1"
 KIND = ROLE = "code.diff_proposal"
@@ -115,7 +116,7 @@ class CodeDiffProposalExecutor:
                                    cp_coverage={"offered_files": sorted(offered), "withheld": withheld, "items_offered": len(shown_items), "operations": sorted(ops)})
         if not offered:
             return ExecutionRequest(prompt=None, schema=None, provider_calls_planned=0, external=False)       # nothing may be offered: no call
-        prompt = frozen["prompt_template"].replace("{change}", change).replace("{recommendations}", recs).replace("{files}", files)
+        prompt = render_once(frozen["prompt_template"], {"change": change, "recommendations": recs, "files": files})
         from infra.worker import extraction
         if len(prompt) > int(limits["max_prompt_chars"]) or extraction._input_token_bound(prompt, frozen["output_schema"]) > config.max_input_tokens_per_call:
             raise NonRetryableExecutionError("budget_exceeded", "the files exceed the input ceiling")

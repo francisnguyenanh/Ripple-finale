@@ -17,6 +17,7 @@ from infra.adapters import v2_business
 from infra.worker.change_draft import _canon_json
 from infra.worker.execution_types import ExecutionContext, ExecutionOutcome, ExecutionRequest, NonRetryableExecutionError, ProviderCallBudget
 from infra.worker.explain import call_pinned_json
+from core.change_intelligence.v2.prompt_render import render_once
 
 EXECUTOR_ID = "source.correspondence.v1"
 KIND = ROLE = "source.correspondence"
@@ -108,7 +109,7 @@ class SourceCorrespondenceExecutor:
         if not old:
             return ExecutionRequest(prompt=None, schema=None, provider_calls_planned=0, external=False)     # nothing on the old side to reconnect: no call
         old_block, new_block = sc.prompt_block(old, new)
-        prompt = frozen["prompt_template"].replace("{old}", old_block).replace("{new}", new_block)
+        prompt = render_once(frozen["prompt_template"], {"old": old_block, "new": new_block})
         from infra.worker import extraction
         if len(prompt) > int(frozen["limits"]["max_prompt_chars"]) or extraction._input_token_bound(prompt, frozen["output_schema"]) > config.max_input_tokens_per_call:
             raise NonRetryableExecutionError("budget_exceeded", "the excerpts exceed the input ceiling")

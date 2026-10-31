@@ -2,35 +2,35 @@
   "schema": "ripple-public-preview-provenance/1",
   "source_repository": "private development repository (not named here)",
   "source_branch": "final-dev",
-  "source_commit": "4b877c9b25d3e127f3b8cf7479fca8ef62656b5d",
+  "source_commit": "e7a3ed9276821b0d26cc16cc0d208cd631bde070",
   "export_manifest": "SUBMISSION_MANIFEST.json",
-  "export_manifest_sha256": "9557956a076b60f1b1a22fc3419ca11c0161e6183ada57129831c9de340150ff",
-  "export_manifest_sha256_git": "aa4868686f6135057f5b7bbd956aecc401edf355b5e71359919aba122a7bbc4a",
+  "export_manifest_sha256": "3389f17476ac5a55697577d6c5c9102edd667bb8b6b08d20af899d533571ceba",
+  "export_manifest_sha256_git": "c5f274ca870e18f9c5e3394b1acc598c371949c8e648d6c793869d77fde4edb0",
   "export_manifest_hash_note": "export_manifest_sha256 is the manifest file as written on disk by the export (CRLF). Under the shipped .gitattributes (text=auto eol=lf) Git stores and checks it out with LF, so a downloaded or checked-out manifest hashes to export_manifest_sha256_git. Same content; the manifest is unchanged. The manifest does not list itself.",
-  "export_overall_sha256": "10241f100824a2b3aaddedaff9784b00aa009b86a874ed58a5565ad334536dbe",
-  "export_file_count": 1606,
+  "export_overall_sha256": "c2d7f2bdd3076bf7d62064503ecbf7f1f7acb683b8ae5a121c9bbc39d0e936e1",
+  "export_file_count": 1624,
   "export_tool": {
     "tool_sha256": "e4a43fea5048b4386b80742f763ef0be87ca96c187b46d0f2e822ba3a3121923",
-    "policy_sha256": "21ae01f53daef2eb60c35d1acd6b0008729aa40e321c73ba2f23e53a01da3f48",
+    "policy_sha256": "f51270b0144025217fdb71d6f799933431136425c1a3d2531cb0f68105f69cfe",
     "note": "equal to the export tool and policy files at the source commit"
   },
   "eol_policy": "Shipped .gitattributes: '* text=auto eol=lf'; reference_system/** and the Harbor sample input '-text' (exact bytes); Harbor sample data 'text eol=crlf'. Manifest hashes are raw bytes.",
-  "approval": "The owner approved source 4b877c9b (candidate C19) as the preview source and authorised this publication (2026-10-31). A source preview update, not a production go-ahead, release, submission or deployment. The full SHA equals the manifest's source_commit; the later records commit face39df is not the payload.",
+  "approval": "The owner approved source e7a3ed92 (candidate C28) as the preview source and authorised this publication (2026-11-01). A source preview update, not a production go-ahead, release, submission or deployment. The full SHA equals the manifest's source_commit; the later records commit ecec338c is not the payload.",
   "previous_public": {
-    "commit": "88a56ffecc034a4c52705f27c91ff7c55d4038d0",
-    "source_commit": "35f56afb9606b80a18b188fe776e38602e11743e",
-    "export_overall_sha256": "aa6c793522f3e249e60a2b5e5ca68357300f409e4c5a0293ea1e81c2d025c6ec",
-    "readme_sha256_published": "49c758ec32d82c7b9fba24f916c42d1d721ac0c73423ec5de94fb849c9845bc0",
-    "note": "The provenance record of that commit describes that tree and remains in its history. Earlier public commits: 8e8a28a, 370ad0d, bd28842, 6e6de87, 5b7007e, 03b2ba6, 34b05ef, c72d700, 8dcbba2, 20f5de6 (tag preview-3), 0aff169 (preview-2), 840ca8b (preview-1)."
+    "commit": "f153f326d1ac3eeb69ed49a3e9097d3c5a15d148",
+    "source_commit": "4b877c9b25d3e127f3b8cf7479fca8ef62656b5d",
+    "export_overall_sha256": "10241f100824a2b3aaddedaff9784b00aa009b86a874ed58a5565ad334536dbe",
+    "readme_sha256_published": "0671d7a8e2324e2412ed6a414ac3b0a2251c7283ea99e969fe774abee5e30236",
+    "note": "The provenance record of that commit describes that tree and remains in its history. Earlier public commits: 88a56ff, 8e8a28a, 370ad0d, bd28842, 6e6de87, 5b7007e, 03b2ba6, 34b05ef, c72d700, 8dcbba2, 20f5de6 (tag preview-3), 0aff169 (preview-2), 840ca8b (preview-1)."
   },
   "update_from_previous_public": {
     "method": "snapshot synchronisation from the manifest-listed files of the clean export of the source commit (nothing executed inside the export); no history from the development repository was merged",
-    "product_files_added": 21,
-    "product_files_changed": 47,
+    "product_files_added": 19,
+    "product_files_changed": 65,
     "product_files_removed": 1,
-    "product_files_note": "69 product files, equal file by file to the development repository's diff between the previous and this source commit outside the development folder (14 product commits); README.md unchanged in the source and kept as the overlay; the built bundle index is replaced (index-CKlhZ3SV.js sha256 0d8f07828594fada0b078eecb27613f752d5405bb1c0bb0f03e7be803e3fa7eb; built by the development process, not rebuilt here); one migration added (infra/migrations/v2_042_login_failures.sql); scan allow-list unchanged",
+    "product_files_note": "85 product files, equal file by file to the development repository's diff between the previous and this source commit outside the development folder (21 product commits; development candidates between them were not published); the development hand-off of the intermediate candidate 7876e8f gave 78 files for the same range, a count taken before its last fixes; the actual diff is used here. README.md unchanged in the source and kept as the overlay; the built bundle index is replaced (index-BqJSx4R-.js sha256 fb9006f9b0ee633f0fedebe8f16647b792b33f8a667d788d297fc58963d95193; built by the development process, not rebuilt here); three migrations added (v2_043_extraction_candidates.sql, v2_044_subject_keys.sql, v2_045_subject_key_material.sql); requirements.lock.txt added (the export policy gained an include rule for it); scan allow-list unchanged",
     "files_removed": [
-      "app/ui_next/assets/index-CSFEzSjG.js"
+      "app/ui_next/assets/index-CKlhZ3SV.js"
     ],
     "replaced_from_export": [
       "SUBMISSION_MANIFEST.json"
@@ -39,9 +39,9 @@
   "public_changes": [
     {
       "path": "README.md",
-      "reason": "preview-specific statements: snapshot; a new section on hardening (read rights, sign-in protection, worker fencing and accounting, execution lease, commit recheck, unprivileged runtime, budget preflight, checks/31 provenance) and the staging verification complete in the measured topology (Cloud Run Osaka + Cloud SQL Tokyo, identity-token ingress), not the production topology; D8 with an operator-confirmed typed condition through the product routes, not produced by the extraction model; D17(b) not applicable on the live build; D18's support-line branch local evidence only; the request assistant's v8 acceptance inherited by dependency, not a new acceptance; infrastructure cost as an estimate; REL-03 / REL-06 proposal only and the deferred items kept apart; known limits; production D1-D24 not run, production topology not checked, no production go-ahead; the previous sections relabelled to their snapshots; no human-rated, independently validated, perfect or enterprise production-ready claim",
+      "reason": "preview-specific statements: snapshot; a new section on bounded reads, the erasure envelope (off by default; logical erasure versus cryptographic erasure within the database; backups before a shred and derived copies as stated limits), single-pass prompt rendering with the prompt archaeology counts (3,598 jobs = 649 + 1,143 + 1,806; 656 renders within the 1,792 rebuildable jobs; no full replay claimed) and image hardening; local tests and smoke on this snapshot's image, the delta tests and rollback rehearsals on 7876e8f, the fresh live journey S1-S17 on 7876e8f (synthetic, operator-simulated, inherited by dependency, not run in the cloud on this snapshot); AI acceptance inherited, not new; 49 HIGH operating-system image findings without a published fix kept open with the production re-scan gate; the code-extension boundary without a VM-class executor; staging topology differs from production; production not deployed, no go-ahead; the previous sections relabelled to their snapshots; no human-rated, independently validated, vulnerability-free or enterprise production-ready claim",
       "sha256_in_export": "8a8ea72f5ee7a7f374d2c05b63ab625a3ec7d3cae8e78c39bc9e63667b3989ea",
-      "sha256_published": "0671d7a8e2324e2412ed6a414ac3b0a2251c7283ea99e969fe774abee5e30236",
+      "sha256_published": "16dcbd1d65b4297592a0f8d64d8f0fce0305849d977152ff3760f95d612c9c5e",
       "sha256_published_scope": "README.md as committed in the public commit that contains this file (LF bytes, identical to the Git blob)"
     }
   ],
@@ -52,16 +52,16 @@
   "manifest_scope": "SUBMISSION_MANIFEST.json describes the export of the source commit and is kept unchanged. README.md was rewritten after export (public_changes) and this file was added; every other listed file is reproduced byte for byte by a checkout (checks_for_this_tree).",
   "evidence_policy": "This repository is for reading source, README and progress. Product verification is done in the development repository; results quoted in the README come from its record for the version named there. For this update only packaging and content checks were made; no tests, build, database, server or browser were run.",
   "checks_for_this_tree": {
-    "date": "2026-10-31",
-    "export_verified_at": "2026-10-31T13:20:47+09:00",
+    "date": "2026-11-01",
+    "export_verified_at": "2026-11-01T05:49:24+09:00",
     "runs": [
       {
         "check": "export tool of the source commit: verify on the export directory (no bytecode written)",
-        "result": "exit 0; files=1607 (1606 payload + manifest) problems=0 broken_relative_links=0; publication scan of the final tree including the manifest exit 0"
+        "result": "exit 0; files=1625 (1624 payload + manifest) problems=0 broken_relative_links=0; publication scan of the final tree including the manifest exit 0; tool sha256 unchanged, policy sha256 f51270b0... (one include rule added for requirements.lock.txt)"
       },
       {
         "check": "export tool of the source commit: eol-check on the export directory",
-        "result": "exit 0; 1606 files, 2 checkouts (autocrlf true and false), problems 0"
+        "result": "exit 0; 1624 files, 2 checkouts (autocrlf true and false), problems 0"
       },
       {
         "check": "cache and runtime residue in the export directory before and after these checks (__pycache__, .pyc, .pytest_cache, node_modules, .git, .env, development folder)",
@@ -69,11 +69,11 @@
       },
       {
         "check": "delta cross-check: files changed between the previous and this source commit outside the development folder, against the staged diff",
-        "result": "69 files and 14 product commits; identical file lists (the expected 69 from the hand-off matches)"
+        "result": "85 files and 21 product commits; identical file lists and statuses (19 added, 65 changed, 1 removed)"
       },
       {
         "check": "every manifest-listed export file against the committed blob of the source commit (line endings normalised)",
-        "result": "1606 of 1606 equal; none missing"
+        "result": "1624 of 1624 equal; none missing"
       },
       {
         "check": "content of the copy against the manifest: raw bytes of every listed file, checked out with core.autocrlf=true and with core.autocrlf=false",
@@ -84,12 +84,12 @@
         "result": "none found"
       },
       {
-        "check": "bundle: app/ui_next/index.html points to index-CKlhZ3SV.js, rolldown-runtime-CbXtAM7H.js, vendor-jrBj6edc.js, style-DToRh9N1.css; every hashed chunk and font they reference (17) is present",
+        "check": "bundle: app/ui_next/index.html points to index-BqJSx4R-.js, rolldown-runtime-CbXtAM7H.js, vendor-jrBj6edc.js, style-DToRh9N1.css; every hashed chunk and font they reference (17) is present, none unreferenced",
         "result": "ok"
       },
       {
         "check": "README relative links, in-page anchors and table cell counts; no internal references, machine paths or ledger detail",
-        "result": "228 links, 0 missing targets, 0 unknown anchors; every table row has its table's cell count"
+        "result": "238 links, 0 missing targets, 26 anchors, 0 unknown anchors; every table row has its header's cell count; no internal references, machine paths or ledger identifiers"
       },
       {
         "check": "publication scan of the committed tree: python -B -m tools.pitch_pack.scan <checkout> --allowlist tools/pitch_pack/scan_allowlist.json (the tree's scanner and allow-list, unchanged)",
@@ -97,10 +97,10 @@
       },
       {
         "check": "diff review against the previous public commit before commit and push",
-        "result": "69 product files, SUBMISSION_MANIFEST.json, README.md and this file"
+        "result": "85 product files, SUBMISSION_MANIFEST.json, README.md and this file"
       }
     ],
-    "raw_byte_result": "1605 of 1606 listed files equal the manifest sha256 byte for byte under both settings; README.md differs (public_changes); extra files: PUBLIC_PREVIEW_PROVENANCE.json and SUBMISSION_MANIFEST.json",
+    "raw_byte_result": "1623 of 1624 listed files equal the manifest sha256 byte for byte under both settings; README.md differs (public_changes); extra files: PUBLIC_PREVIEW_PROVENANCE.json and SUBMISSION_MANIFEST.json",
     "scan_result": "exit 0 on the tree including SUBMISSION_MANIFEST.json, README.md and this file; allow-list unchanged",
     "not_run": "pytest, frontend build and tests, database, rehearsal server and browser (not part of the preview process; the built bundle was not rebuilt)",
     "note": "Self-check on one machine, not independent validation."
@@ -108,13 +108,21 @@
   "corrections": [
     {
       "path": "README.md",
-      "correction": "section 12 said the pattern scanner ran with an 'unchanged allow-list'; the allow-list gained two source entries in the previous update (35f56af, each scoped to one test file and one exact synthetic value). The sentence now describes the allow-list as it is."
+      "correction": "section 4d said 'New in this snapshot' although it was added in snapshot 6a0bf30 (public commit 03b2ba6); relabelled to that snapshot."
+    },
+    {
+      "path": "README.md",
+      "correction": "section 12 said 'local images were smoke-tested, not pushed'; the images of earlier staging candidates were pushed to temporary staging registries (deleted with their projects). The sentence now says this snapshot's image was not pushed and where earlier images went."
+    },
+    {
+      "path": "README.md (disclosure, payload unchanged)",
+      "correction": "the shipped docs/release/FINAL_CLAIMS_EVIDENCE_LIMITS.md still lists dependency-hash enforcement at image build as not done, while the shipped Dockerfile installs with --require-hashes from requirements.lock.txt; the README states this; the payload file is not edited."
     }
   ],
-  "export_file_count_note": "1606 listed payload files; with SUBMISSION_MANIFEST.json the export holds 1607 files",
-  "export_uncommitted_note": "the manifest records source_tree_had_uncommitted_changes_ignored = true (only committed content is exported); checked for this tree: every listed file equals the committed blob of the source commit (1606 of 1606, line endings normalised)",
+  "export_file_count_note": "1624 listed payload files (the manifest's file_count and its files list); with SUBMISSION_MANIFEST.json the export holds 1625 files. The inventory and scan-report files kept next to the export directory by the development process are not in the manifest and are not published",
+  "export_uncommitted_note": "the manifest records source_tree_had_uncommitted_changes_ignored = true (only committed content is exported); checked for this tree: every listed file equals the committed blob of the source commit (1624 of 1624, line endings normalised)",
   "local_image": {
-    "digest": "sha256:f70e77a76edf70c012987a4b074f0ec66c76627e7beab1484fd90e4d9de32fab",
-    "note": "local evidence image built by the development process from this export and used for the staging verification (staging registry removed with its project); not a production image; cited from the development record, not checked here"
+    "digest": "sha256:4ee585f949fbcd5d773eeadfec39e00ab4ab2f1082588404ec8a626650ff0b9f",
+    "note": "local evidence image built by the development process from this export (labels name the source and export hash); not pushed to any registry, not deployed; the production image is to be built from the same export in the production registry and recorded by its own digest; cited from the development record, not checked here"
   }
 }

@@ -33,6 +33,7 @@ from infra.worker.execution_types import (
 )
 from infra.worker.gap_answer import _model_object, load_frozen_config as _gap_config
 from infra.worker.live_analysis import generate_and_close, _client_for_model, _field, _token_count
+from core.change_intelligence.v2.prompt_render import render_once
 
 THINKING_LEVEL = "LOW"
 EXECUTOR_ID = "change.draft.v1"
@@ -346,8 +347,7 @@ class ChangeDraftExecutor:
             req_obj["analyst_note"] = ("confirmed_clarifications are assumptions decided by the named person for THIS request; "
                                        "treat them as given, never as source evidence, and cite only from the evidence list.")
         request_txt = _canon_json(req_obj)
-        prompt = (frozen["prompt_template"].replace("{request}", request_txt)
-                  .replace("{findings}", findings).replace("{evidence}", rendered))
+        prompt = render_once(frozen["prompt_template"], {"request": request_txt, "findings": findings, "evidence": rendered})
         bound = extraction._input_token_bound(prompt, frozen["output_schema"])
         if bound > config.max_input_tokens_per_call:
             raise NonRetryableExecutionError(

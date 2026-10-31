@@ -5,6 +5,10 @@ from core.change_intelligence.v2 import business_journey as bj
 from core.change_intelligence.v2 import code_recommendation
 from infra.adapters import v2_business, v2_business_review
 from infra.adapters.v2_policy import permissions_for
+from psycopg2.extras import Json
+
+RESULT_EVENT = "CHANGE_RESULT_DECIDED"
+RESULT_DECISIONS = ("accept", "reject")
 
 
 def _understanding(rec) -> dict:
@@ -51,6 +55,43 @@ def journey_view(store, tenant_id, workspace_id, change_id, *, account_id: str, 
         pending = bview.get("pending")
         facts["readback"] = {"target_statuses": statuses, "pending_snapshot": bool(pending and (pending["snapshot"].get("coverage") or {}).get("origin") == "rebase")}
         facts["documents"] = {"freshness": v2_business.knowledge_status(store, tenant_id, workspace_id)["documents"]["freshness"]}
+        ur = latest_result(store, tenant_id, workspace_id, change_id)
+        if ur:
+            facts["user_result"], facts["user_result_by"], facts["user_result_reason"], facts["user_result_at"] = ur["decision"], ur["by"], ur["reason"], ur["at"]
     out = bj.build_journey({**facts, "labels": labels if "evidence.read" in perms else {}})
     out["change_id"] = change_id
     return out
+
+
+def latest_result(store, tenant_id, workspace_id, change_id) -> dict | None:
+    """SYN-04 user result: the latest recorded result decision of the person who asked (audit event, append-only; a later decision supersedes), or None."""
+    with store._tx() as cur:
+        cur.execute("""SELECT actor_id, payload, created_at FROM v2_audit WHERE tenant_id=%s AND workspace_id=%s AND event_type=%s AND payload->>'change_id'=%s
+                       ORDER BY id DESC LIMIT 1""", (tenant_id, workspace_id, RESULT_EVENT, change_id))
+        row = cur.fetchone()
+    if row is None:
+        return None
+    return {"decision": row[1].get("decision"), "reason": row[1].get("reason") or "", "by": row[0], "at": row[2].isoformat()}
+
+
+def record_result(store, tenant_id, workspace_id, change_id, *, actor_id: str, roles, decision: str, reason: str) -> dict:
+    """The person who asked records whether the result of a committed change is what they asked for (`accept`) or not (`reject`, reason required). One audit
+    event; nothing else changes (no job, no rule, no file). Only the requester may record it; only after the knowledge was committed."""
+    if decision not in RESULT_DECISIONS:
+        raise v2_business.BusinessKnowledgeRefused("invalid_field", "decision must be accept or reject")
+    reason = " ".join(str(reason or "").split())[:500]
+    if decision == "reject" and not reason:
+        raise v2_business.BusinessKnowledgeRefused("invalid_field", "a rejected result needs a reason")
+    rec = store.job_record(tenant_id, workspace_id, change_id)
+    if rec.get("requested_by") != actor_id:
+        raise v2_business.BusinessKnowledgeRefused("not_the_requester", "only the person who asked for the change records its result")
+    view = v2_business_review.review_view(store, tenant_id, workspace_id, change_id, account_id=actor_id, roles=roles)
+    if view is None or not view.get("committed"):
+        raise v2_business.BusinessKnowledgeRefused("knowledge_not_committed", "the result can be judged once the knowledge change is committed")
+    prior = latest_result(store, tenant_id, workspace_id, change_id)
+    if prior and prior["decision"] == decision and prior["reason"] == reason:
+        return {"change_id": change_id, "decision": decision, "replayed": True}
+    with store._tx() as cur:
+        cur.execute("INSERT INTO v2_audit (tenant_id, workspace_id, event_type, actor_id, payload) VALUES (%s,%s,%s,%s,%s)",
+                    (tenant_id, workspace_id, RESULT_EVENT, actor_id, Json({"change_id": change_id, "decision": decision, "reason": reason, "business_revision": view["committed"].get("business_revision")})))
+    return {"change_id": change_id, "decision": decision, "replayed": False}

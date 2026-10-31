@@ -282,6 +282,9 @@ class PostgresV2Store:
         sql += "\n" + (migrations_dir / "ah05_job_correlation.sql").read_text(encoding="utf-8")      # AH-05 HTTP -> job correlation (additive)
         sql += "\n" + (migrations_dir / "ah02_review_note_index.sql").read_text(encoding="utf-8")    # AH-02 measured partial index for review-note lookups
         sql += "\n" + (migrations_dir / "v2_042_login_failures.sql").read_text(encoding="utf-8")     # SEC-02 (2026-10-30): failed-login counters with lock state (additive)
+        sql += "\n" + (migrations_dir / "v2_043_extraction_candidates.sql").read_text(encoding="utf-8")  # REL-03 (2026-10-31): the current-candidate index (additive, derived)
+        sql += "\n" + (migrations_dir / "v2_044_subject_keys.sql").read_text(encoding="utf-8")          # REL-06 (2026-10-31): per-subject key history for text envelopes (append-only)
+        sql += "\n" + (migrations_dir / "v2_045_subject_key_material.sql").read_text(encoding="utf-8")   # REL-06 review fix (2026-10-31): key material in a mutable store, deleted by the shred
         with self._tx() as cur:
             cur.execute(sql)
 
@@ -1366,18 +1369,64 @@ class PostgresV2Store:
                 WHERE tenant_id=%s AND workspace_id=%s AND refresh_id=%s""",
                 (Json(impact), tenant_id, workspace_id, refresh_id))
 
+    @staticmethod
+    def _index_candidates(cur, tenant_id: str, workspace_id: str, job_id: str, result: Mapping[str, object], completed_at=None) -> int:
+        """REL-03 (2026-10-31): write the candidates an extraction job persisted in its `execution_result` as rows of `v2_extraction_candidates`
+        (one per candidate, keyed by job and candidate id; idempotent on replay). The JSONB stays the record; the rows are the index the readers scan.
+        `completed_at` defaults to now() (the finishing transaction); a backfill passes the job's last attempt time so the newest-job order is kept."""
+        n = 0
+        for cand in (dict(result).get("candidates") or []):
+            if not isinstance(cand, dict) or not cand.get("candidate_id") or not cand.get("artifact_revision_id"):
+                continue
+            cur.execute("""INSERT INTO v2_extraction_candidates (tenant_id, workspace_id, job_id, source_revision_id, artifact_id, candidate_id, candidate, completed_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, COALESCE(%s, now())) ON CONFLICT (tenant_id, workspace_id, job_id, candidate_id) DO NOTHING""",
+                        (tenant_id, workspace_id, job_id, str(cand.get("source_revision_id") or ""), str(cand["artifact_revision_id"]), str(cand["candidate_id"]), Json(cand), completed_at))
+            n += 1
+        return n
+
+    def backfill_candidate_index(self, tenant_id: str, workspace_id: str) -> dict:
+        """REL-03: index the candidates of every COMPLETED extraction job of the workspace that has none in `v2_extraction_candidates` yet (a database
+        migrated with existing jobs), stamped with the job's last attempt time. Idempotent; never changes a job. -> {jobs, candidates}."""
+        jobs = cands = 0
+        with self._tx() as cur:
+            cur.execute("""SELECT j.job_id, j.execution_result,
+                       (SELECT max(a.recorded_at) FROM v2_job_attempts a WHERE a.tenant_id=j.tenant_id AND a.workspace_id=j.workspace_id AND a.job_id=j.job_id)
+                FROM v2_jobs j
+                WHERE j.tenant_id=%s AND j.workspace_id=%s AND j.kind='extraction' AND j.execution_status='COMPLETED' AND j.execution_result IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM v2_extraction_candidates c WHERE c.tenant_id=j.tenant_id AND c.workspace_id=j.workspace_id AND c.job_id=j.job_id)
+                ORDER BY j.job_id""", (tenant_id, workspace_id))
+            for job_id, result, at in cur.fetchall():
+                jobs += 1
+                cands += self._index_candidates(cur, tenant_id, workspace_id, job_id, _as_object(result) or {}, completed_at=at)
+        return {"jobs": jobs, "candidates": cands}
+
+    def _unindexed_extraction_jobs(self, cur, tenant_id: str, workspace_id: str) -> list[tuple]:
+        """The completed extraction jobs that predate the index (no rows of their own): read from their JSONB (the fallback until a backfill ran)."""
+        cur.execute("""SELECT j.job_id, j.payload, j.execution_result FROM v2_jobs j
+            WHERE j.tenant_id=%s AND j.workspace_id=%s AND j.kind='extraction' AND j.execution_status='COMPLETED' AND j.execution_result IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM v2_extraction_candidates c WHERE c.tenant_id=j.tenant_id AND c.workspace_id=j.workspace_id AND c.job_id=j.job_id)
+            ORDER BY j.job_id""", (tenant_id, workspace_id))
+        return cur.fetchall()
+
     def extraction_candidate_index(self, tenant_id: str, workspace_id: str) -> list[dict]:
         """Every COMPLETED `extraction` job with its persisted candidates (identity,
-        artifact, quotes). Read-only; the candidates live inside each job's own
-        `execution_result`, never in a table of their own."""
+        artifact, quotes). Read-only. REL-03 (2026-10-31): read from the relational index
+        `v2_extraction_candidates` (an index range scan per workspace); jobs that predate
+        the index are read from their own `execution_result` until a backfill ran."""
         with self._tx() as cur:
-            cur.execute("""SELECT job_id, payload, execution_result FROM v2_jobs
-                WHERE tenant_id=%s AND workspace_id=%s AND kind='extraction'
-                  AND execution_status='COMPLETED' AND execution_result IS NOT NULL
-                ORDER BY job_id""", (tenant_id, workspace_id))
-            rows = cur.fetchall()
-        out = []
-        for job_id, payload, result in rows:
+            cur.execute("""SELECT c.job_id, j.payload, c.candidate FROM v2_extraction_candidates c
+                JOIN v2_jobs j ON j.tenant_id=c.tenant_id AND j.workspace_id=c.workspace_id AND j.job_id=c.job_id
+                WHERE c.tenant_id=%s AND c.workspace_id=%s AND j.execution_status='COMPLETED'
+                ORDER BY c.job_id, c.candidate_id""", (tenant_id, workspace_id))
+            indexed = cur.fetchall()
+            legacy = self._unindexed_extraction_jobs(cur, tenant_id, workspace_id)
+        per_job: dict[str, dict] = {}
+        for job_id, payload, cand in indexed:
+            payload, cand = _as_object(payload) or {}, _as_object(cand) or {}
+            entry = per_job.setdefault(job_id, {"job_id": job_id, "artifact_id": payload.get("artifact_id"), "source_role": payload.get("source_role"), "candidates": []})
+            entry["candidates"].append({"candidate_id": cand["candidate_id"], "artifact_id": cand.get("artifact_revision_id"),
+                                        "quotes": [e.get("quote") for e in (cand.get("evidence") or []) if isinstance(e, dict) and isinstance(e.get("quote"), str)]})
+        for job_id, payload, result in legacy:
             payload, result = _as_object(payload) or {}, _as_object(result) or {}
             candidates = []
             for cand in (result.get("candidates") or []):
@@ -1388,9 +1437,8 @@ class PostgresV2Store:
                     "artifact_id": cand.get("artifact_revision_id"),
                     "quotes": [e.get("quote") for e in (cand.get("evidence") or [])
                                if isinstance(e, dict) and isinstance(e.get("quote"), str)]})
-            out.append({"job_id": job_id, "artifact_id": payload.get("artifact_id"),
-                        "source_role": payload.get("source_role"), "candidates": candidates})
-        return out
+            per_job[job_id] = {"job_id": job_id, "artifact_id": payload.get("artifact_id"), "source_role": payload.get("source_role"), "candidates": candidates}
+        return [per_job[j] for j in sorted(per_job)]
 
     def active_decisions_for_targets(self, tenant_id: str, workspace_id: str,
                                      targets) -> list[dict]:
@@ -2423,15 +2471,38 @@ class PostgresV2Store:
                  tenant_id, workspace_id, digest))
             return bool(cur.fetchone()[0])
 
-    def audit_events(self, tenant_id: str, workspace_id: str) -> list[dict]:
+    def audit_events(self, tenant_id: str, workspace_id: str, *, limit: int | None = None, before_id: int | None = None) -> list[dict]:
+        """Every event of the workspace in id order (the historical read), or, with `limit`, one keyset page: the `limit` newest events whose id is below
+        `before_id` (REL-03, 2026-10-31; the page is returned oldest-first like the full read). `audit_page` adds the paging fields; this method stays the
+        plain list every existing caller reads."""
+        return self.audit_page(tenant_id, workspace_id, limit=limit, before_id=before_id)["events"]
+
+    def audit_page(self, tenant_id: str, workspace_id: str, *, limit: int | None = None, before_id: int | None = None) -> dict:
+        """-> {events (oldest-first), has_more, next_before}. Without `limit`: every event, `has_more` False. With `limit`: the newest `limit` events with
+        id < `before_id` (every event when `before_id` is None), by an index range on (tenant_id, workspace_id, id); `has_more` says older events exist;
+        `next_before` is the smallest id of the page (pass it back to read the next older page: an event written meanwhile has a larger id than every
+        cursor, so paging back never repeats or skips one)."""
         self.head(tenant_id, workspace_id)
         with self._tx() as cur:
-            cur.execute("""SELECT id, event_type, actor_id, payload, created_at
-                FROM v2_audit WHERE tenant_id=%s AND workspace_id=%s
-                ORDER BY id""", (tenant_id, workspace_id))
-            # SCN-12 / plan 17: the recorded time of each event (additive), so activity lists show when it happened instead of no time at all
-            return [{"id": row[0], "event_type": row[1], "actor_id": row[2],
-                     "payload": _as_object(row[3]), "created_at": row[4].isoformat() if row[4] is not None else None} for row in cur.fetchall()]
+            if limit is None:
+                cur.execute("""SELECT id, event_type, actor_id, payload, created_at
+                    FROM v2_audit WHERE tenant_id=%s AND workspace_id=%s
+                    ORDER BY id""", (tenant_id, workspace_id))
+                rows, has_more = cur.fetchall(), False
+            else:
+                n = max(1, int(limit))
+                if before_id is None:
+                    cur.execute("""SELECT id, event_type, actor_id, payload, created_at FROM v2_audit WHERE tenant_id=%s AND workspace_id=%s
+                        ORDER BY id DESC LIMIT %s""", (tenant_id, workspace_id, n + 1))
+                else:
+                    cur.execute("""SELECT id, event_type, actor_id, payload, created_at FROM v2_audit WHERE tenant_id=%s AND workspace_id=%s AND id < %s
+                        ORDER BY id DESC LIMIT %s""", (tenant_id, workspace_id, int(before_id), n + 1))
+                rows = cur.fetchall()
+                has_more, rows = len(rows) > n, list(reversed(rows[:n]))
+        # SCN-12 / plan 17: the recorded time of each event (additive), so activity lists show when it happened instead of no time at all
+        events = [{"id": row[0], "event_type": row[1], "actor_id": row[2],
+                   "payload": _as_object(row[3]), "created_at": row[4].isoformat() if row[4] is not None else None} for row in rows]
+        return {"events": events, "has_more": has_more, "next_before": (rows[0][0] if has_more and rows else None)}
 
     def create_job(self, tenant_id: str, workspace_id: str, job_id: str,
                    kind: str, payload: Mapping[str, object], *,
@@ -3667,7 +3738,7 @@ class PostgresV2Store:
         with self._tx() as cur:
             if fence is not None:
                 self._assert_fence(cur, tenant_id, workspace_id, fence, alive=False)    # REL-02: outbox row first, then the job row, then the ledger
-            cur.execute("""SELECT execution_status, cancel_requested_at FROM v2_jobs
+            cur.execute("""SELECT execution_status, cancel_requested_at, kind FROM v2_jobs
                 WHERE tenant_id=%s AND workspace_id=%s AND job_id=%s FOR UPDATE""",
                 (tenant_id, workspace_id, job_id))
             row = cur.fetchone()
@@ -3717,6 +3788,8 @@ class PostgresV2Store:
                  tenant_id, workspace_id, job_id))
             if cur.rowcount != 1:
                 raise StoreConflict("job execution changed concurrently")
+            if written == "COMPLETED" and row[2] == "extraction" and result is not None:
+                self._index_candidates(cur, tenant_id, workspace_id, job_id, result)     # REL-03: the current-candidate index, same transaction, idempotent
             if written == "CANCELLED" and row[1] is not None:
                 cur.execute("""UPDATE v2_jobs SET status='CANCELLED'
                     WHERE tenant_id=%s AND workspace_id=%s AND job_id=%s

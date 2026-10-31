@@ -146,9 +146,13 @@ def _audit_conflict(store, tenant_id, workspace_id, refresh_id, job_id, kind, er
 
 
 def _create_reextraction(store, tenant_id, workspace_id, job_id: str, payload: dict) -> str | None:
-    """Create the (single, deterministic) re-extraction job through the same admission
-    (`check_job_admission`, project budget reservation, concurrency ceiling) the public
-    route applies to an extraction. Returns a non-convergence note or None."""
+    """Create the (single, deterministic) re-extraction job through the same admission the public
+    route applies to an extraction (`check_job_admission`, project budget reservation) EXCEPT the
+    per-workspace concurrency ceiling: that ceiling bounds what people submit; a re-extraction is the
+    system's own bounded follow-up of a committed refresh (one per changed artifact) and the refresh's
+    own invalidation jobs are queued at the same moment, so counting them would refuse the follow-up
+    the refresh exists for (staging 2026-10-31: limit 1, 9 queued, the worker died on the refusal).
+    Returns a non-convergence note or None."""
     try:
         existing = store.job_record(tenant_id, workspace_id, job_id)
     except TenantScopeError:
@@ -162,7 +166,7 @@ def _create_reextraction(store, tenant_id, workspace_id, job_id: str, payload: d
     try:
         config = job_quota.load_worker_budget_config()
         job_quota.check_job_admission(config, job_kind="extraction")
-        limit, reservation = job_quota.load_concurrency_limit(), job_quota.compute_budget_reservation(config)
+        reservation = job_quota.compute_budget_reservation(config)
     except job_quota.JobQuotaError as exc:
         return f"re-extraction not scheduled: {exc}"
     from infra.worker.budget_config import BudgetExceeded
@@ -172,12 +176,10 @@ def _create_reextraction(store, tenant_id, workspace_id, job_id: str, payload: d
             store.create_job(tenant_id, workspace_id, job_id, "extraction", payload,
                              expected_version=head.version,
                              idempotency_key=f"job-create-{job_id}",
-                             max_concurrent_jobs=limit, budget_reservation=reservation)
+                             max_concurrent_jobs=None, budget_reservation=reservation)
             return None
         except BudgetExceeded as exc:
             return f"re-extraction not scheduled: project budget exhausted ({exc})"
-        except ConcurrencyLimitExceeded:
-            raise  # transient: the event is redelivered and retried (bounded by attempts)
         except StoreConflict:
             try:
                 store.job_record(tenant_id, workspace_id, job_id)

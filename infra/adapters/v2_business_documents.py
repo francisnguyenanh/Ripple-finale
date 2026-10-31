@@ -151,7 +151,18 @@ def read_content(store, tenant_id, workspace_id, artifact_id) -> tuple[bytes, di
 
 LIST_LIMIT = 200
 RETENTION_POLICY = ("Generated documents are immutable per knowledge version and are kept; nothing deletes them automatically in Final. Removal by knowledge version age is an "
-                    "operator action (runbook), never a job. A revoked right stops serving a document; it does not delete it.")
+                    "operator action (runbook: `python -m tools.documents_retention retire --keep-versions N`), never a job: it removes the bytes of documents older than the "
+                    "newest N accepted versions, keeps every row and hash, writes one audit event per document, and the content route then answers 410 `retired` (the bytes are not recreated: "
+                    "documents are generated on the current knowledge only). A revoked right stops serving a document; it does not delete it.")
+
+
+def retired_at(store, tenant_id, workspace_id, artifact_id) -> str | None:
+    """DOC-03: when the operator retired this document's bytes (audit event DOCUMENT_RETIRED), its recorded time; None otherwise."""
+    with store._tx() as cur:
+        cur.execute("""SELECT created_at FROM v2_audit WHERE tenant_id=%s AND workspace_id=%s AND event_type='DOCUMENT_RETIRED' AND payload->>'artifact_id'=%s
+                       ORDER BY id DESC LIMIT 1""", (tenant_id, workspace_id, artifact_id))
+        row = cur.fetchone()
+    return row[0].isoformat() if row else None
 
 
 def list_documents(store, tenant_id, workspace_id, *, snapshot_id: str | None = None) -> dict:

@@ -14,6 +14,7 @@ from infra.adapters.v2_policy import permissions_for
 from infra.worker import extraction
 from infra.worker.execution_types import ExecutionContext, ExecutionOutcome, ExecutionRequest, NonRetryableExecutionError, ProviderCallBudget
 from infra.worker.explain import call_pinned_json
+from core.change_intelligence.v2.prompt_render import render_once
 
 EXECUTOR_ID = "ma.specialist.v1"
 JOIN_EXECUTOR_ID = "ma.join.v1"
@@ -63,10 +64,10 @@ def build_prompt(frozen: dict, context: dict, role: str, rebuttal_claims: list |
                              + [f"- protected command exit {c.get('exit')}: {_clip(c.get('output_tail'), 500)}" for c in (fb.get("commands") or [])[:3]]
                              + [f"- generated case {g.get('name')}: {g.get('reading')} (base {g.get('base')}, patched {g.get('patched')})" for g in (fb.get("regressions") or [])[:6]])
         sites = "\n".join(f"- path={s['path']} line={s['line']} literal={s['literal']}" for s in repair.get("sites") or []) or "(no site found for the current value)"
-        analyses = analyses + frozen["repair_template"].replace("{feedback}", feedback).replace("{sites}", sites)
-    prompt = frozen["prompt_template"].replace("{rubric}", frozen["rubrics"][role]).replace("{change}", change).replace("{rules}", rules).replace("{counterevidence}", counter) \
-        .replace("{open_questions}", open_q).replace("{refs}", "\n".join(f"- {r}" for r in refs) or "(none)").replace("{rebuttal}", rebuttal).replace("{analyses}", analyses) \
-        .replace("{code}", code).replace("{output_instruction}", instruction)
+        analyses = analyses + render_once(frozen["repair_template"], {"feedback": feedback, "sites": sites})
+    prompt = render_once(frozen["prompt_template"], {"rubric": frozen["rubrics"][role], "change": change, "rules": rules, "counterevidence": counter,
+                                                     "open_questions": open_q, "refs": "\n".join(f"- {r}" for r in refs) or "(none)", "rebuttal": rebuttal,
+                                                     "analyses": analyses, "code": code, "output_instruction": instruction})
     if len(prompt) > frozen["limits"]["max_prompt_chars"]:
         raise NonRetryableExecutionError("context_too_large", "the authorized context exceeds the prompt ceiling")
     return prompt

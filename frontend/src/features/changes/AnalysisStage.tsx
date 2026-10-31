@@ -4,7 +4,7 @@ import { SimulationAnalysisCard } from "@/features/explain/SimulationAnalysisCar
 import * as React from "react";
 import { api, ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Callout, HowItWorks, Muted, Tech, usePlain } from "@/components/bits";
+import { Callout, HowItWorks, Muted, Select, Tech, usePlain } from "@/components/bits";
 import { basename, humanize, newId, ruleTitle } from "@/lib/fmt";
 import { useSession } from "@/session";
 import { aiWhy } from "@/lib/aiKinds";
@@ -280,10 +280,10 @@ export function AnalysisStage() {
       )}
       {mayRun && targetOptions.length > 1 && (
         <label className="text-sm block" data-testid="impact-target-picker">Several extracted rules match this change. Choose the one to analyse:{" "}
-          <select value={picked} onChange={(e) => setPicked(e.target.value)} className="border rounded px-2 py-1">
+          <Select value={picked} onChange={(e) => setPicked(e.target.value)} className="px-2 py-1 min-h-9">
             <option value="">Select a rule</option>
             {targetOptions.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-          </select></label>
+          </Select></label>
       )}
       {isDone(d.impact) && <ImpactReport res={d.impact!.execution_result ?? {}} relationJobs={rel?.jobs ?? 0} />}
       {isDone(d.impact) && ((d.impact!.execution_result?.unknown ?? []) as Rec[]).length > 0 && !d.simulation && s.can("ai.use") && mayRun && (

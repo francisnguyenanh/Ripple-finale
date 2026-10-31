@@ -12,6 +12,7 @@ import re
 from typing import Iterable, Mapping, Optional
 
 from core.change_intelligence.v2.serialize import canonical_hash
+from core.change_intelligence.v2.prompt_render import render_once
 
 SCHEMA = "ripple-gap-interview/1"
 STATES = ("OPEN", "READY_TO_CONFIRM", "UNRESOLVED", "CONFIRMED", "STALE", "CLOSED")
@@ -215,9 +216,9 @@ def build_question_prompt(frozen: Mapping, gap: Mapping, rules: Iterable[Mapping
     last = turns[-1] if turns else {}
     unc = "; ".join(last.get("uncovered") or []) or "none"
     contra = "; ".join(f"{c.get('field')}: {c.get('values')}" for c in (last.get("contradictions") or [])) or "none"
-    prompt = frozen["prompt_template"].replace("{gap_kind}", str(gap.get("kind"))).replace("{question}", str(gap.get("question"))).replace("{rules}", "\n".join(lines) or "(none)") \
-        .replace("{transcript}", tr).replace("{reading_status}", str(last.get("reading_status"))).replace("{uncovered}", unc).replace("{contradictions}", contra) \
-        .replace("{deterministic}", str(deterministic.get("question", "")))
+    prompt = render_once(frozen["prompt_template"], {"gap_kind": str(gap.get("kind")), "question": str(gap.get("question")), "rules": "\n".join(lines) or "(none)",
+                                                     "transcript": tr, "reading_status": str(last.get("reading_status")), "uncovered": unc, "contradictions": contra,
+                                                     "deterministic": str(deterministic.get("question", ""))})
     if len(prompt) > frozen["limits"]["max_prompt_chars"]:
         raise ValueError("context_too_large")
     return prompt

@@ -40,5 +40,13 @@ class ImmutableGCSBlobs:
             if blob.download_as_bytes() != content:
                 raise ValueError("existing blob at digest key is corrupted")
 
+    def delete_immutable(self, digest: str) -> bool:
+        """DOC-03 retention (2026-10-31): remove the object at a digest (an operator action, audited by the caller). True when something was removed."""
+        blob = self._blob(digest)
+        if not blob.exists():
+            return False
+        blob.delete()
+        return True
+
     def read(self, digest: str) -> bytes:
         return self._blob(digest).download_as_bytes()

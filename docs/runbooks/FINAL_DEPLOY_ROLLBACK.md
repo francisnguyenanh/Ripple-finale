@@ -9,7 +9,8 @@ target platform, project and access model are the owner's decision. Recovery of 
 - Before building: `export_submission.py verify` and `eol-check` on the export return 0; `python -m pytest tests/contract tests/unit -q` inside the export passes.
 
 ## 2. Image and configuration
-- Image: the repository `Dockerfile` (Python 3.11 slim, pinned `requirements.txt`, one `uvicorn infra.judge:app` worker on port 8080). Deploy by **image digest**, not tag.
+- Image: the repository `Dockerfile` (Python 3.11 slim pinned by digest, `git` installed for the CI drift check and Git sync, dependencies installed hash-locked from `requirements.lock.txt`, one `uvicorn infra.judge:app` worker on port 8080). Deploy by **image digest**, not tag.
+- Dependencies: `requirements.txt` holds the direct pins a person edits; `requirements.lock.txt` is generated from it for the image platform and holds every transitive package with its sha256 (`pip install --require-hashes` refuses anything else). To change a dependency: edit `requirements.txt`, regenerate the lock inside the same base image (`docker run --rm -v <dir>:/out python:3.11-slim@<the Dockerfile digest> sh -c "pip install -q pip-tools && pip-compile --generate-hashes --no-annotate --strip-extras --no-header -o /out/requirements.lock.txt /out/requirements.txt"`), rebuild, run the image suites, record the new digest. The lock pins what the previous floating transitive resolution happened to install; it is not a mass upgrade of the direct pins.
 - The worker runs the same image with `python -m infra.worker.service` (`RIPPLE_V2_DSN`, `RIPPLE_WORKER_TENANT_ID` / `RIPPLE_WORKER_WORKSPACE_ID` or `RIPPLE_WORKER_WORKSPACES`, `RIPPLE_WORKER_POLL_SECONDS`; `GET /healthz` for the liveness probe); jobs are leased with fencing (see the recovery runbook).
 - Configuration by environment variable only; secrets from the platform's secret store, never in env files or the image:
   - database DSN and session secret (secrets);

@@ -3,6 +3,7 @@
 // calls send back the binding the server gave, so a revised draft or moved knowledge is refused by the server, never by this page alone. All text is rendered as plain text.
 import * as React from "react";
 import { api, ApiError } from "@/lib/api";
+import { useNotify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Callout, Field, Muted, Select, StatePill, Tech, TextArea } from "@/components/bits";
 import { TrustStateSummary } from "@/components/decision/TrustStateSummary";
@@ -385,6 +386,9 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
               </li>
             ))}
           </ol>
+          {journey.knowledge_only_complete === true && data.requester_id === s.account && ((journey.steps ?? []) as Rec[]).some((st) => st.key === "user_result" && st.state === "todo") && (
+            <ResultDecision ws={ws} cid={cid} onDone={() => setTick((t) => t + 1)} />
+          )}
           {journey.next ? <p data-testid="rev-journey-next"><strong>Next:</strong> {String((journey.next as Rec).what)} <Muted>({String((journey.next as Rec).who)})</Muted></p>
                         : <p data-testid="rev-journey-next">{journey.rejected ? "This change was rejected; nothing else happens to it." : "No next step is open."}</p>}
           <Muted testid="rev-journey-statement">{String(journey.statement)}</Muted>
@@ -399,5 +403,32 @@ export function BusinessChangeReview({ ws, cid }: { ws: string; cid: string }) {
       </Tech>
     </section>
     </>
+  );
+}
+
+// SYN-04 user result: the person who asked says whether the committed change gives what they asked for. One recorded decision; nothing is applied, undone or re-run.
+function ResultDecision({ ws, cid, onDone }: { ws: string; cid: string; onDone: () => void }) {
+  const notify = useNotify();
+  const [reason, setReason] = React.useState("");
+  const [pending, setPending] = React.useState(false);
+  const send = async (decision: "accept" | "reject") => {
+    if (decision === "reject" && !reason.trim()) { notify.status("Say what is different from what you asked for."); return; }
+    setPending(true);
+    try {
+      await api<Rec>("POST", `/v2/business/changes/${q(cid)}/result`, { workspace_id: ws, decision, reason });
+      notify.status(decision === "accept" ? "Recorded: the result is what you asked for." : "Recorded: the result is not what you asked for.");
+      onDone();
+    } catch (e) { notify.fail(e); } finally { setPending(false); }
+  };
+  return (
+    <div data-testid="rev-result" className="grid gap-2 rounded-md border border-border p-3">
+      <p className="font-medium">Is this the result you asked for?</p>
+      <Muted>Your answer is recorded with the change. It does not apply, undo or re-run anything; a "no" tells the knowledge owner what still differs.</Muted>
+      <Field label="If not, what differs"><TextArea data-testid="rev-result-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} /></Field>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="primary" data-testid="rev-result-accept" disabled={pending} onClick={() => void send("accept")}>Yes, this is what I asked for</Button>
+        <Button variant="secondary" data-testid="rev-result-reject" disabled={pending} onClick={() => void send("reject")}>No, it differs</Button>
+      </div>
+    </div>
   );
 }

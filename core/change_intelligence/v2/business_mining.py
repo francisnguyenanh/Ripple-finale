@@ -25,6 +25,7 @@ from typing import Iterable, Mapping, Optional
 from core.change_intelligence.v2 import policy_decision as pd
 from core.change_intelligence.v2.roi_replay import _fields_of
 from core.change_intelligence.v2.serialize import canonical_hash
+from core.change_intelligence.v2.prompt_render import render_once
 
 SCHEMA = "ripple-knowledge-mining/1"
 MODEL_KEYS = {"status", "hypotheses", "notes"}
@@ -153,7 +154,7 @@ def build_candidate_prompt(frozen: Mapping, rules: Iterable[Mapping], planned: I
     lines = [f"- id={r['rule_id']} | {r.get('title')} | who acts: {r.get('actor_ref') or 'not stated'} | when: {condition_text(r['condition'])} | "
              f"what happens: {(r.get('outcome') or {}).get('kind', 'unknown')}" for r in rules]
     pairs = "\n".join(f"- {', '.join(p)}" for p in sorted(sorted(p) for p in planned)) or "(none)"
-    prompt = frozen["candidate_prompt_template"].replace("{rules}", "\n".join(lines) or "(none)").replace("{planned}", pairs)
+    prompt = render_once(frozen["candidate_prompt_template"], {"rules": "\n".join(lines) or "(none)", "planned": pairs})
     if len(prompt) > frozen["limits"]["max_prompt_chars"]:
         raise ValueError("context_too_large")
     return prompt

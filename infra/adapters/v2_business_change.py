@@ -11,6 +11,7 @@ from core.change_intelligence.v2.serialize import canonical_hash
 from core.change_intelligence.v2.store_ports import PublishResult
 from infra.adapters.v2_business import BusinessKnowledgeRefused
 from infra.adapters.v2_postgres import StaleVersion, TenantScopeError, _as_object
+from infra import text_envelope
 
 OPERATION = "business.change_intent"
 EVENT = "BUSINESS_CHANGE_INTENT_CONFIRMED"
@@ -51,8 +52,8 @@ def confirm_change_intent(store, tenant_id, workspace_id, *, actor_id, job_id, p
         content_hash = canonical_hash({"operations": result["operations"], "write_scope": result["write_scope"], "pin": pin})
         cur.execute("""INSERT INTO v2_business_change_intents (tenant_id, workspace_id, intent_id, snapshot_id, business_revision, request_text, operations, write_scope,
                 read_scope, content_hash, confirmed_by) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                    (tenant_id, workspace_id, job_id, pin["snapshot_id"], pin["business_revision"], result["request"], Json(result["operations"]), Json(result["write_scope"]),
-                     Json(result["read_scope"]), content_hash, actor_id))
+                    (tenant_id, workspace_id, job_id, pin["snapshot_id"], pin["business_revision"], text_envelope.seal(cur, tenant_id, workspace_id, actor_id, result["request"]),
+                     Json(result["operations"]), Json(result["write_scope"]), Json(result["read_scope"]), content_hash, actor_id))      # REL-06: the request's words under the confirmer's key
         version = head.version + 1
         cur.execute("UPDATE v2_workspaces SET version=%s WHERE tenant_id=%s AND workspace_id=%s", (version, tenant_id, workspace_id))
         store._record_commit(cur, tenant_id, workspace_id, OPERATION, f"intent-{job_id}", payload_hash, PublishResult(version, job_id), EVENT,
@@ -65,6 +66,8 @@ def read_intent(store, tenant_id, workspace_id, intent_id):
         cur.execute("""SELECT snapshot_id, business_revision, request_text, operations, write_scope, read_scope, content_hash, confirmed_by FROM v2_business_change_intents
             WHERE tenant_id=%s AND workspace_id=%s AND intent_id=%s""", (tenant_id, workspace_id, intent_id))
         row = cur.fetchone()
+        if row is not None:
+            row = (row[0], row[1], text_envelope.open_text(cur, tenant_id, workspace_id, row[2])) + tuple(row[3:])    # REL-06: opened on the way out
     if row is None:
         return None
     return {"intent_id": intent_id, "snapshot_id": row[0], "business_revision": row[1], "request": row[2], "operations": _as_object(row[3]), "write_scope": _as_object(row[4]),

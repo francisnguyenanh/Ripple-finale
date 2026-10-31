@@ -101,6 +101,21 @@ def _may_write(lease: dict | None, account: str) -> bool:
     return bool(lease and lease["active"] and account in ([lease["holder"]] + list(lease["participants"])))
 
 
+LEASE_WRITE_PERMISSIONS = ("intent.create", "source.import", "knowledge.confirm", "change.approve", "change.prepare")
+
+
+def _may_hold_lease(ctx: dict) -> bool:
+    """SEC-04: who may acquire or renew a sandbox lease. With RIPPLE_SANDBOX_LEASE_ACCOUNTS set (comma-separated account ids) only those accounts;
+    otherwise any member whose roles carry a writing permission of the sandbox flows. A viewer never holds the slot."""
+    import os
+    from infra.adapters.v2_policy import permissions_for
+    allow = {a.strip() for a in os.environ.get("RIPPLE_SANDBOX_LEASE_ACCOUNTS", "").split(",") if a.strip()}
+    if allow:
+        return ctx.get("account_id") in allow
+    perms = set(permissions_for(ctx.get("roles")))
+    return any(p in perms for p in LEASE_WRITE_PERMISSIONS)
+
+
 async def sandbox_guard(request: Request) -> None:
     """Global dependency: refuse WRITES to a sandbox workspace unless the caller is on the active lease. No-op when the
     feature is off, for reads, for auth/sandbox routes and for requests that name no sandbox workspace."""
@@ -237,6 +252,10 @@ def sandbox_lease(request: Request):
     if action not in ("acquire", "renew", "release"):
         return _error("action must be acquire, renew or release", 400)
     account, cfg = ctx["account_id"], config()[workspace_id]
+    if action != "release" and not _may_hold_lease(ctx):
+        # SEC-04 (2026-10-31): a lease is the right to WRITE in the sandbox for a while; a read-only member (viewer) cannot take the slot from the
+        # people who can write, and an operator allowlist (RIPPLE_SANDBOX_LEASE_ACCOUNTS) can narrow holders further. Reads never need a lease.
+        return _error("a sandbox lease needs a writing role in this workspace (or an allowlisted account); reading needs no lease", 403)
     participants = [p for p in (body.get("participants") or []) if isinstance(p, str) and p and p != account][:4]
     tenant = ctx["tenant_id"]
     with store._tx() as cur:

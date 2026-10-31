@@ -63,6 +63,7 @@ import uuid
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Callable, Mapping
+_log = logging.getLogger("ripple.worker")
 
 from core.change_intelligence.v2.serialize import canonical_hash
 from core.change_intelligence.v2.store_ports import OutboxClaim
@@ -907,7 +908,15 @@ def claim_and_admit_one(store: PostgresV2Store, tenant_id: str, workspace_id: st
             # Imported lazily: `refresh_impact` imports `verification`, which imports
             # this module.
             from infra.worker.refresh_impact import consume_refresh_published
-            consume_refresh_published(store, tenant_id, workspace_id, claim, worker_id, _ack)
+            try:
+                consume_refresh_published(store, tenant_id, workspace_id, claim, worker_id, _ack)
+            except Exception as exc:                                                          # noqa: BLE001
+                # A transient failure (admission, a moved head, a database error) must not end the worker service: the claim is left
+                # unacknowledged and is redelivered after its lease (bounded by the outbox's attempt count); the loop goes on to the queued
+                # jobs, which is what frees the condition (staging 2026-10-31: the service exited on one such error and every later
+                # execution died on the redelivery, so nothing ever drained).
+                _log.warning("refresh consumer deferred: %s: %s (claim %s left for redelivery)", type(exc).__name__, str(exc)[:160], claim.id)
+                return claim
         else:
             _ack(store, tenant_id, workspace_id, claim, worker_id)             # REL-01: an import / legacy publish has no claim-consumer; its readers use the row id
         return claim

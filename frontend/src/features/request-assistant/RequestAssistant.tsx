@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Callout, Field, Muted, TextArea } from "@/components/bits";
 import { StatusBadge, type Status } from "@/components/StatusBadge";
 import { OriginTag } from "@/components/decision/Origin";
-import { actionStillCurrent, actionTarget, cancelNote, citationTarget, pendingNote, suggestQuestions, unavailableText } from "./guide";
+import { actionStillCurrent, actionTarget, actionTargets, cancelNote, citationTarget, pendingNote, suggestQuestions, unavailableText } from "./guide";
 import { useSession } from "@/session";
 import { useMedia } from "@/lib/useMedia";
 
@@ -112,8 +112,8 @@ export function RequestAssistant({ ws, family, id, tv }: { ws: string; family: "
     } catch (e) { setErr(refusal(e)); }
   };
   const go = (action: string) => {                                                 // navigation only: focus the existing control, never submit it
-    const target = actionStillCurrent(tv, action) ? actionTarget(family, action) : null;
-    const el = target ? document.querySelector<HTMLElement>(`[data-testid="${target}"]`) : null;
+    const candidates = actionStillCurrent(tv, action) ? actionTargets(family, action) : [];
+    const el = candidates.map((c) => document.querySelector<HTMLElement>(`[data-testid="${c}"]`)).find((e): e is HTMLElement => !!e) ?? null;
     if (!el) { setJump("That step's control is not available on this page right now. Use the request's own page and controls."); return; }
     for (let p = el.parentElement; p; p = p.parentElement) if (p instanceof HTMLDetailsElement) p.open = true;
     el.scrollIntoView({ block: "center" });

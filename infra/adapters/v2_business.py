@@ -247,12 +247,23 @@ def current_candidates(store, tenant_id, workspace_id) -> tuple:
     with read_snapshot(store) as cur:
         cur.execute("""SELECT source_revision_id, artifact_id, blob_hash FROM v2_artifact_revisions WHERE tenant_id=%s AND workspace_id=%s""", (tenant_id, workspace_id))
         blobs = {(r[0], r[1]): r[2] for r in cur.fetchall()}
+        current = {aid: h for (rev, aid), h in blobs.items() if rev == head.source_revision_id}
+        # REL-03 (2026-10-31): jobs that predate the candidate index are read from their JSONB (ordered as before: newest completed attempt last); every job
+        # completed since is read from `v2_extraction_candidates`, restricted in SQL to the current revision's files, by an index range scan.
         cur.execute("""SELECT j.execution_result FROM v2_jobs j WHERE j.tenant_id=%s AND j.workspace_id=%s AND j.kind='extraction'
               AND j.execution_status='COMPLETED' AND j.execution_result IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM v2_extraction_candidates c WHERE c.tenant_id=j.tenant_id AND c.workspace_id=j.workspace_id AND c.job_id=j.job_id)
             ORDER BY (SELECT max(a.recorded_at) FROM v2_job_attempts a WHERE a.tenant_id=j.tenant_id AND a.workspace_id=j.workspace_id AND a.job_id=j.job_id)
                      ASC NULLS FIRST, j.job_id ASC""", (tenant_id, workspace_id))             # newest completed attempt last (a person-approved job has no JOB_QUEUED outbox row)
         results = [_as_object(r[0]) or {} for r in cur.fetchall()]
-    current = {aid: h for (rev, aid), h in blobs.items() if rev == head.source_revision_id}
+        cur.execute("""SELECT c.job_id, c.candidate FROM v2_extraction_candidates c
+            JOIN v2_jobs j ON j.tenant_id=c.tenant_id AND j.workspace_id=c.workspace_id AND j.job_id=c.job_id AND j.execution_status='COMPLETED'
+            WHERE c.tenant_id=%s AND c.workspace_id=%s AND c.artifact_id = ANY(%s)
+            ORDER BY c.completed_at ASC, c.job_id ASC, c.candidate_id ASC""", (tenant_id, workspace_id, sorted(current)))
+        by_job: dict = {}
+        for job_id, cand in cur.fetchall():
+            by_job.setdefault(job_id, {"candidates": []})["candidates"].append(_as_object(cand) or {})
+        results.extend(by_job.values())
     per_file: dict = {}                                                       # artifact -> (is current revision, revision, {candidate_id: candidate}); newest job last
     for result in results:
         by_file: dict = {}

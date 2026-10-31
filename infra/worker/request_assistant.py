@@ -19,6 +19,7 @@ from infra.worker.change_draft import _canon_json
 from infra.worker.execution_types import (ExecutionContext, ExecutionOutcome, ExecutionRequest, NonRetryableExecutionError, ProviderCallBudget, ProviderCallCeilingExceeded,
                                           ProviderExecutionError, ProviderRateLimitError, ProviderTimeoutError)
 from infra.worker.explain import call_pinned_json, last_service_tier
+from infra import text_envelope
 
 EXECUTOR_ID = "request.qa.v1"
 ROLE = "request.assistant"
@@ -62,6 +63,8 @@ class RequestAssistantExecutor:
             cur.execute("""SELECT t.created_by, m.question, m.seq FROM v2_request_threads t JOIN v2_request_messages m ON m.tenant_id=t.tenant_id AND m.workspace_id=t.workspace_id
                            AND m.thread_id=t.thread_id WHERE t.tenant_id=%s AND t.workspace_id=%s AND t.thread_id=%s AND m.message_id=%s""", (tenant, ws, p["thread_id"], p["message_id"]))
             row = cur.fetchone()
+            if row is not None:
+                row = (row[0], text_envelope.open_text(cur, tenant, ws, row[1]), row[2])          # REL-06: the stored question may be an envelope
         if row is None or row[0] != p["asked_by"]:
             raise NonRetryableExecutionError("thread_mismatch")
         asker, question, seq = row
@@ -82,7 +85,7 @@ class RequestAssistantExecutor:
         with ctx.store._tx() as cur:                                                          # the person's own earlier turns of THIS thread, kept blocks only
             cur.execute("""SELECT question, answer FROM v2_request_messages WHERE tenant_id=%s AND workspace_id=%s AND thread_id=%s AND seq < %s AND answer IS NOT NULL
                            ORDER BY seq DESC LIMIT %s""", (tenant, ws, p["thread_id"], seq, int(frozen["limits"]["max_history_turns"])))
-            hist = [{"question": r[0], "blocks": ((r[1] if isinstance(r[1], dict) else json.loads(r[1] or "{}")) or {}).get("blocks") or []} for r in reversed(cur.fetchall())]
+            hist = [{"question": text_envelope.open_text(cur, tenant, ws, r[0]), "blocks": ((r[1] if isinstance(r[1], dict) else json.loads(r[1] or "{}")) or {}).get("blocks") or []} for r in reversed(cur.fetchall())]
         perspective = ", ".join(sorted(roles)) or "member"
         try:
             prompt = ra.build_prompt(frozen, pack, hist, question, perspective=perspective)

@@ -12,6 +12,7 @@ import json
 import uuid
 
 from psycopg2.extras import Json
+from infra import text_envelope
 
 MAX_TURN_TEXT = 4000
 MAX_TURNS = 60
@@ -43,7 +44,7 @@ def create(store, tenant: str, ws: str, account: str, text: str, head, *, purpos
             pinned_source_revision_id, pinned_decision_epoch, purpose, context) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (tenant, ws, cid, account, head.source_revision_id, head.decision_epoch, purpose, Json(context) if context else None))
         cur.execute("""INSERT INTO v2_chat_turns (tenant_id, workspace_id, conversation_id, seq, role, text, created_by)
-            VALUES (%s,%s,%s,1,'user',%s,%s)""", (tenant, ws, cid, text[:MAX_TURN_TEXT], account))
+            VALUES (%s,%s,%s,1,'user',%s,%s)""", (tenant, ws, cid, text_envelope.seal(cur, tenant, ws, account, text[:MAX_TURN_TEXT]), account))   # REL-06
     return cid
 
 
@@ -63,8 +64,8 @@ def add_turn(store, tenant, ws, cid, role, text, account=None, *, understanding=
         cur.execute("""INSERT INTO v2_chat_turns (tenant_id, workspace_id, conversation_id, seq, role, text, understanding,
             understanding_version, job_id, created_by) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT DO NOTHING""",
-                    (tenant, ws, cid, seq, role, text[:MAX_TURN_TEXT], Json(understanding) if understanding is not None else None,
-                     version, job_id, account))
+                    (tenant, ws, cid, seq, role, (text_envelope.seal(cur, tenant, ws, account, text[:MAX_TURN_TEXT]) if role == "user" and account else text[:MAX_TURN_TEXT]),
+                     Json(understanding) if understanding is not None else None, version, job_id, account))          # REL-06: a person's own turn under their key
         return seq
 
 
@@ -85,8 +86,8 @@ def get(store, tenant, ws, cid) -> dict | None:
             return None
         cur.execute("""SELECT seq, role, text, understanding, understanding_version, job_id, created_by, created_at FROM v2_chat_turns
             WHERE tenant_id=%s AND workspace_id=%s AND conversation_id=%s ORDER BY seq""", (tenant, ws, cid))
-        turns = [{"seq": r[0], "role": r[1], "text": r[2], "understanding": _obj(r[3]), "version": r[4], "job_id": r[5],
-                  "by": r[6], "at": r[7].isoformat() if r[7] else None} for r in cur.fetchall()]
+        turns = [{"seq": r[0], "role": r[1], "text": text_envelope.open_text(cur, tenant, ws, r[2]), "understanding": _obj(r[3]), "version": r[4], "job_id": r[5],
+                  "by": r[6], "at": r[7].isoformat() if r[7] else None} for r in cur.fetchall()]                    # REL-06: opened on the way out
     latest = next((t for t in reversed(turns) if t["understanding"] is not None), None)
     return {"conversation_id": cid, "created_by": c[0], "created_at": c[1].isoformat(), "status": c[2], "ai_allowance": c[3],
             "ai_used": c[4], "ai_approved_by": c[5], "ai_approved_at": c[6].isoformat() if c[6] else None,
@@ -102,8 +103,8 @@ def list_for(store, tenant, ws, account, *, all_visible: bool) -> list[dict]:
                    AND t.conversation_id=c.conversation_id ORDER BY seq LIMIT 1)
             FROM v2_chat_conversations c WHERE c.tenant_id=%s AND c.workspace_id=%s AND (%s OR c.created_by=%s)
             ORDER BY c.created_at DESC LIMIT 30""", (tenant, ws, all_visible, account))
-        return [{"conversation_id": r[0], "created_by": r[1], "created_at": r[2].isoformat(), "status": r[3], "first_text": (r[4] or "")[:160]}
-                for r in cur.fetchall()]
+        return [{"conversation_id": r[0], "created_by": r[1], "created_at": r[2].isoformat(), "status": r[3],
+                 "first_text": (text_envelope.open_text(cur, tenant, ws, r[4]) or "")[:160]} for r in cur.fetchall()]        # REL-06
 
 
 def grant_allowance(store, tenant, ws, cid, approver, turns, cap, minutes=60) -> dict:

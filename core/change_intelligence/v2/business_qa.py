@@ -13,6 +13,7 @@ import re
 from typing import Iterable, Mapping, Optional
 
 from core.change_intelligence.v2.business_index import rule_is_gate
+from core.change_intelligence.v2.prompt_render import render_once
 
 STATUSES = ("ANSWERED", "PARTIAL", "NEEDS_CLARIFICATION", "ABSTAINED")
 
@@ -429,8 +430,8 @@ def build_prompt(frozen: Mapping, question: str, pack: Mapping, *, previous: Opt
     prev = ""
     if previous:
         prev = f"<previous>\nquestion: {previous['question']}\nanswer: {previous['answer']}\n</previous>\n"
-    prompt = (frozen["prompt_template"].replace("{question}", question).replace("{previous}", prev).replace("{knowledge}", "\n".join(lines) or "(no items)")
-              .replace("{disagreements}", "\n".join(disagree) or "(none)").replace("{open_questions}", "\n".join(open_q) or "(none)"))
+    prompt = render_once(frozen["prompt_template"], {"question": question, "previous": prev, "knowledge": "\n".join(lines) or "(no items)",
+                                                     "disagreements": "\n".join(disagree) or "(none)", "open_questions": "\n".join(open_q) or "(none)"})
     return prompt, {"items_left_out": left_out}
 
 

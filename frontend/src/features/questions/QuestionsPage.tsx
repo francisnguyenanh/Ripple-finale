@@ -332,7 +332,7 @@ export function QuestionsPage() {
         <section aria-labelledby="q-rules" hidden={!visible(sel, "rules")} data-testid="qsection-rules" className="grid gap-4">
           <h2 id="q-rules" className="text-lg font-semibold">Business rules</h2>
           <ReadBusinessRules ws={ws} refreshKey={bizKey} onRead={() => setBizKey((n) => n + 1)} onNext={() => choose("gaps")} />
-          <BusinessRules key={`rules${bizKey}`} ws={ws} />
+          <BusinessRules key={`rules${bizKey}`} ws={ws} onChanged={() => setBizKey((n) => n + 1)} />
           <BusinessUnlinked ws={ws} />
         </section>
         <section aria-labelledby="q-biz" hidden={!visible(sel, "gaps")} data-testid="qsection-gaps" className="grid gap-4">

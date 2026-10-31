@@ -20,6 +20,7 @@ from infra.adapters import v2_request_assistant as vra
 from infra.adapters import v2_request_tasks
 from infra.adapters.v2_policy import PermissionDenied, permissions_for
 from infra.adapters.v2_postgres import TenantScopeError, _as_object
+from infra import text_envelope
 
 CAPABILITY = "request.assistant.ask"
 THREAD_NOT_FOUND = "thread not found"
@@ -68,15 +69,35 @@ def create_thread(store, tenant, ws, family, rid, authority) -> dict:
     return read_thread(store, tenant, ws, tid, authority)
 
 
-def list_threads(store, tenant, ws, family, rid, authority) -> dict:
+THREADS_PAGE_DEFAULT, THREADS_PAGE_MAX = 50, 500
+
+
+def list_threads(store, tenant, ws, family, rid, authority, *, limit: int | None = None, before: str | None = None) -> dict:
+    """The caller's own threads on one request, newest first. REL-03 (2026-10-31): one keyset page of `limit` threads (default 50, at most 500) strictly older
+    than `before` (= the `next_before` of the previous page, `created_at|thread_id`); `has_more` / `next_before` say how to read older ones. Without `limit`
+    and `before` the page is the default size, so every reader is bounded."""
     tv = v2_request_tasks.task_view(store, tenant, ws, family, rid, authority)
     ref = tv["request_ref"].get("canonical_ref") or tv["request_ref"]
+    n = max(1, min(int(limit or THREADS_PAGE_DEFAULT), THREADS_PAGE_MAX))
+    cursor = None
+    if before:
+        try:
+            at, tid = before.rsplit("|", 1)
+            cursor = (at, tid)
+        except ValueError:
+            raise ValueError("before must be a next_before value from this route")
     with store._tx() as cur:
-        cur.execute("""SELECT t.thread_id, t.created_at, (SELECT count(*) FROM v2_request_messages m WHERE m.tenant_id=t.tenant_id AND m.workspace_id=t.workspace_id
-                         AND m.thread_id=t.thread_id) FROM v2_request_threads t WHERE t.tenant_id=%s AND t.workspace_id=%s AND t.created_by=%s AND t.family=%s AND t.request_id=%s
-                       ORDER BY t.created_at DESC""", (tenant, ws, authority["account_id"], ref["family"], ref["id"]))
+        page_where, args = "", (tenant, ws, authority["account_id"], ref["family"], ref["id"])
+        if cursor:
+            page_where, args = " AND (t.created_at, t.thread_id) < (%s::timestamptz, %s)", args + cursor
+        cur.execute(f"""SELECT t.thread_id, t.created_at, (SELECT count(*) FROM v2_request_messages m WHERE m.tenant_id=t.tenant_id AND m.workspace_id=t.workspace_id
+                         AND m.thread_id=t.thread_id) FROM v2_request_threads t WHERE t.tenant_id=%s AND t.workspace_id=%s AND t.created_by=%s AND t.family=%s AND t.request_id=%s{page_where}
+                       ORDER BY t.created_at DESC, t.thread_id DESC LIMIT %s""", args + (n + 1,))
         rows = cur.fetchall()
-    return {"request_ref": ref, "threads": [{"thread_id": r[0], "created_at": r[1].isoformat(), "messages": r[2]} for r in rows], "private": True}
+    has_more, rows = len(rows) > n, rows[:n]
+    next_before = f"{rows[-1][1].isoformat()}|{rows[-1][0]}" if has_more and rows else None
+    return {"request_ref": ref, "threads": [{"thread_id": r[0], "created_at": r[1].isoformat(), "messages": r[2]} for r in rows], "private": True,
+            "has_more": has_more, "next_before": next_before, "limit": n}
 
 
 def _thread(store, tenant, ws, tid, authority) -> dict:
@@ -99,6 +120,7 @@ def _messages(store, tenant, ws, tid) -> list:
         cur.execute("""SELECT message_id, seq, question, asked_by, idempotency_key, payload_hash, job_id, manifest_hash, auth, as_of, answer, answered_at, created_at
                        FROM v2_request_messages WHERE tenant_id=%s AND workspace_id=%s AND thread_id=%s ORDER BY seq""", (tenant, ws, tid))
         rows = cur.fetchall()
+        rows = [(r[0], r[1], text_envelope.open_text(cur, tenant, ws, r[2])) + tuple(r[3:]) for r in rows]        # REL-06: opened on the way out; erased subjects read as a marker
     return [{"message_id": r[0], "seq": r[1], "question": r[2], "asked_by": r[3], "idempotency_key": r[4], "payload_hash": r[5], "job_id": r[6], "manifest_hash": r[7],
              "auth": _as_object(r[8]), "as_of": r[9], "answer": _as_object(r[10]), "answered_at": r[11].isoformat() if r[11] else None, "created_at": r[12].isoformat()} for r in rows]
 
@@ -218,7 +240,8 @@ def ask(store, tenant, ws, tid, authority, *, question, idempotency_key, after_s
         with store._tx() as cur:                                                              # the message row first (seq and key are unique per thread: a racing tab fails here)
             cur.execute("""INSERT INTO v2_request_messages (tenant_id, workspace_id, thread_id, message_id, seq, question, asked_by, idempotency_key, payload_hash, job_id,
                            manifest_hash, auth, as_of) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                        (tenant, ws, tid, mid, last + 1, question, authority["account_id"], idempotency_key, payload_hash, jid, pack["manifest_hash"], Json(pack["auth"]), pack["as_of"]))
+                        (tenant, ws, tid, mid, last + 1, text_envelope.seal(cur, tenant, ws, authority["account_id"], question), authority["account_id"], idempotency_key,
+                         payload_hash, jid, pack["manifest_hash"], Json(pack["auth"]), pack["as_of"]))                              # REL-06: the person's words under their own key
     except psycopg2.IntegrityError:                                                           # a concurrent click of the SAME question won the race: replay it, never a second job
         won = next((m for m in _messages(store, tenant, ws, tid) if m["idempotency_key"] == idempotency_key), None)
         if won is not None and won["payload_hash"] == payload_hash:

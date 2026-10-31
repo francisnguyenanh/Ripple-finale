@@ -43,7 +43,7 @@ const TRIGGER: Record<string, string> = { import: "created by an import", apply:
 const TIMELINE_LIMIT = 40;
 const eventLabel = (e: Rec) => ACT[e.event_type] ?? UNNAMED;
 
-function Timeline({ events, onRetry }: { events: Rec[] | null; onRetry: () => void }) {
+function Timeline({ events, onRetry, hasMore, onOlder, loadingOlder }: { events: Rec[] | null; onRetry: () => void; hasMore?: boolean; onOlder?: () => void; loadingOlder?: boolean }) {
   // `null` = the activity list could not be read. That is never shown as "nothing has happened".
   const [actor, setActor] = React.useState("");
   const [text, setText] = React.useState("");
@@ -55,6 +55,10 @@ function Timeline({ events, onRetry }: { events: Rec[] | null; onRetry: () => vo
     <Card title="What happened, and who did it" testid="history-activity">
       <Muted>Most recent first. A decision is recorded here but changes no file; only an applied change makes a new version of the files.</Muted>
       {events !== null && all.length > TIMELINE_LIMIT && <Muted testid="history-window">Showing the latest {TIMELINE_LIMIT} of the {all.length} events loaded. Older events exist but are not listed on this page; this is not a full audit search.</Muted>}
+      {events !== null && hasMore && onOlder && (                                   // REL-03: the server sends one page of the newest events; older ones are read on request
+        <div><Button onClick={onOlder} disabled={!!loadingOlder} data-testid="history-older">{loadingOlder ? "Loading older events..." : "Show older events"}</Button>
+          <Muted testid="history-older-note">The server lists events in pages; older events are loaded only when you ask.</Muted></div>
+      )}
       {events !== null && windowed.length > 8 && (
         <div className="grid gap-2 md:grid-cols-2" data-testid="history-filter">
           <Field label="Person" hint="Only people who appear in the events listed below."><Select data-testid="history-filter-actor" value={actor} onChange={(e) => setActor(e.target.value)}>
@@ -71,7 +75,7 @@ function Timeline({ events, onRetry }: { events: Rec[] | null; onRetry: () => vo
       ) : ev.length ? (
         <ol className="grid gap-3 border-l border-border pl-4">
           {ev.map((e, i) => (
-            <li key={i} data-event={e.event_type} className="text-sm relative">
+            <li key={i} data-testid="history-event" data-event-id={String(e.id ?? "")} data-event={e.event_type} className="text-sm relative">
               <Clock size={12} aria-hidden="true" className="absolute -left-[1.45rem] top-1 bg-surface text-muted" />
               <strong>{e.actor_id || "the system"}</strong> {eventLabel(e)}{" "}
               <span className="text-muted">{e.created_at ? new Date(e.created_at).toLocaleString() : ""}</span>
@@ -237,10 +241,14 @@ function Body() {
   const approvalRef = React.useRef(approvalId);
   approvalRef.current = approvalId;
 
+  const [older, setOlder] = React.useState<{ has_more: boolean; next_before: number | null }>({ has_more: false, next_before: null });   // REL-03 paging cursor
+  const [loadingOlder, setLoadingOlder] = React.useState(false);
   const load = React.useCallback(async () => {
     try {
       const h = await api<Rec>("GET", `/v2/history/${q(ws)}`);
-      const act = await api<{ events?: Rec[] }>("GET", `/v2/audit/${q(ws)}`).then((a) => a.events ?? []).catch((): Rec[] | null => null);
+      const page = await api<{ events?: Rec[]; has_more?: boolean; next_before?: number | null }>("GET", `/v2/audit/${q(ws)}`).catch((): null => null);
+      const act: Rec[] | null = page ? page.events ?? [] : null;
+      setOlder({ has_more: !!page?.has_more, next_before: page?.next_before ?? null });
       setHist(h); setActivity(act); setErr(null);
       const aid = approvalRef.current;      // read at completion time: an older load must not overwrite a newer one
       if (aid) {
@@ -250,6 +258,16 @@ function Body() {
     } catch (e) { if (e instanceof ApiError) setErr(e); else throw e; }
   }, [ws]);
   React.useEffect(() => { void load(); }, [load, approvalId]);
+  const loadOlder = React.useCallback(async () => {                               // REL-03: the next older page, prepended (oldest-first list)
+    if (!older.has_more || older.next_before == null) return;
+    setLoadingOlder(true);
+    try {
+      const page = await api<{ events?: Rec[]; has_more?: boolean; next_before?: number | null }>("GET", `/v2/audit/${q(ws)}?before_id=${older.next_before}`);
+      setActivity((cur) => [...(page.events ?? []), ...(cur ?? [])]);      // the list is kept oldest-first (the view reverses it): older events go in front
+      setOlder({ has_more: !!page.has_more, next_before: page.next_before ?? null });
+    } catch (e) { if (!(e instanceof ApiError)) throw e; }
+    finally { setLoadingOlder(false); }
+  }, [ws, older]);
 
   const doPreview = React.useCallback(async (target: string) => {
     const r = await run(() => api<Rec>("POST", "/v2/restore/preview", { workspace_id: ws, target_revision_id: target }));
@@ -270,7 +288,7 @@ function Body() {
   const onChanged = async () => { await load(); await flowRefresh(); await s.refresh(); };
   return (
     <div className="grid gap-4">
-      <Timeline events={activity} onRetry={() => void load()} />
+      <Timeline events={activity} onRetry={() => void load()} hasMore={older.has_more} onOlder={() => void loadOlder()} loadingOlder={loadingOlder} />
       {/* SCN-09 second consumer: the versions as a typed table (loaded rows only; sorting by the raw number and time, never the formatted text) */}
       <div className={verId && wide ? "grid gap-4 grid-cols-[minmax(0,1fr)_26rem] items-start" : "grid gap-4"}>
       {verId && <VersionDetail ws={ws} rev={picked} onClose={() => setVerId("")} canRestore={s.can("source.restore")} onPreview={(t) => void doPreview(t)} />}

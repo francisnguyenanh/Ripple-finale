@@ -25,6 +25,7 @@ from core.change_intelligence.v2 import business_knowledge as bk
 from core.change_intelligence.v2.business_impact import classify_file
 from core.change_intelligence.v2.business_index import condition_text
 from core.change_intelligence.v2.serialize import canonical_hash
+from core.change_intelligence.v2.prompt_render import render_once
 
 DRAFT_VERSION = "1.0.0"
 ACTIONS = ("AI_EDIT_SUPPORTED", "MANUAL", "NO_OP", "UNRESOLVED")
@@ -1326,8 +1327,8 @@ def build_guidance_prompt(frozen: Mapping, draft: Mapping, *, can_read_evidence:
             break
         lines.append(line)
         used += len(line)
-    return (frozen["prompt_template"].replace("{request}", str(draft["request"])[:1500]).replace("{changes}", "\n".join(changes) or "(none)")
-            .replace("{rules}", "\n".join(rules) or "(none)").replace("{items}", "\n".join(lines) or "(none)"))
+    return render_once(frozen["prompt_template"], {"request": str(draft["request"])[:1500], "changes": "\n".join(changes) or "(none)",
+                                                   "rules": "\n".join(rules) or "(none)", "items": "\n".join(lines) or "(none)"})
 
 
 # ---- clarifications by people, blockers of a knowledge decision, the file-write binding (CHG-04) ------------------------------------------------------------

@@ -20,6 +20,7 @@ from infra.adapters.v2_identity import IdentityDenied
 from infra.adapters.v2_policy import PermissionDenied, permissions_for, require, require_human_actor
 from infra.adapters.v2_postgres import TenantScopeError
 from infra.v2_policy_routes import _authority, _error, _identity_denied_status, _identity_store, _json_body, _origin_ok, _v2_store
+from infra import text_envelope
 
 router = APIRouter()
 _NO_STORE = {"Cache-Control": "no-store"}
@@ -72,6 +73,8 @@ def review_digest(store, tenant: str, ws: str, proposal_job_id: str, *, newest: 
         cur.execute(f"SELECT DISTINCT actor_id FROM v2_audit WHERE {where}", args)
         reviewers = sorted(r[0] for r in cur.fetchall())
     notes = []
+    with store._tx() as cur:                                                                     # REL-06: notes written as envelopes are opened here
+        rows = [(rid, actor, text_envelope.audit_payload_text_open(cur, tenant, ws, payload), at) for rid, actor, payload, at in rows]
     for rid, actor, payload, at in reversed(rows):
         p = payload if isinstance(payload, dict) else {}
         notes.append({"note_id": rid, "reviewer": actor, "verdict": p.get("verdict"), "text": p.get("text") or "",
@@ -164,7 +167,8 @@ def post_review_note(request: Request):
         with store._tx() as cur:
             cur.execute("""INSERT INTO v2_audit (tenant_id, workspace_id, event_type, actor_id, payload) VALUES (%s,%s,%s,%s,%s)""",
                         (tenant, ws, NOTE_EVENT, authority["account_id"],
-                         Json({"proposal_job_id": pid, "verdict": verdict, "text": text, "source_revision_id": head.source_revision_id})))
+                         Json({"proposal_job_id": pid, "verdict": verdict, "text": text_envelope.seal(cur, tenant, ws, authority["account_id"], text),
+                               "source_revision_id": head.source_revision_id})))                                                  # REL-06: the note under the writer's key
         return JSONResponse(_notes_body(store, tenant, ws, pid), headers=_NO_STORE)
     except IdentityDenied as exc:
         status = _identity_denied_status(exc)
@@ -265,7 +269,7 @@ def _own_requests(store, tenant, ws, me, have_intent: set, drafts: list[dict], t
                          AND t.conversation_id=c.conversation_id AND t.role='assistant' AND t.text='' AND t.job_id IS NOT NULL)
             FROM v2_chat_conversations c WHERE tenant_id=%s AND workspace_id=%s AND created_by=%s AND purpose='change_request'
               AND status IN ('OPEN','CONFIRMED') ORDER BY created_at DESC LIMIT %s""", (tenant, ws, me, OWN_CONVERSATION_LIMIT + 1))
-        rows = cur.fetchall()
+        rows = [(r[0], r[1], r[2], text_envelope.open_text(cur, tenant, ws, r[3]), r[4]) for r in cur.fetchall()]      # REL-06
     if len(rows) > OWN_CONVERSATION_LIMIT and truncated is not None:
         truncated.append("change_request_conversation")              # one row beyond the limit: more exist than this list reads
     rows = rows[:OWN_CONVERSATION_LIMIT]

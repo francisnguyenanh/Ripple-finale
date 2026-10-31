@@ -78,9 +78,14 @@ async def first_ask_assistant(request: Request, family: str, request_id: str):
 
 
 @router.get("/v2/requests/{family}/{request_id}/assistant/threads")
-def list_assistant_threads(request: Request, family: str, request_id: str, workspace_id: str):
-    return _run(request, workspace_id, lambda store, tenant, a: rt.list_threads(store, tenant, workspace_id, family, request_id, a), mutating=False,
-                not_found=v2_request_tasks.NOT_FOUND)
+def list_assistant_threads(request: Request, family: str, request_id: str, workspace_id: str, limit: int | None = None, before: str | None = None):
+    if limit is not None and (limit < 1 or limit > rt.THREADS_PAGE_MAX):
+        return JSONResponse({"error": f"limit must be between 1 and {rt.THREADS_PAGE_MAX}"}, status_code=400)
+    try:
+        return _run(request, workspace_id, lambda store, tenant, a: rt.list_threads(store, tenant, workspace_id, family, request_id, a, limit=limit, before=before),
+                    mutating=False, not_found=v2_request_tasks.NOT_FOUND)
+    except ValueError as exc:                                                       # a malformed `before` cursor (REL-03)
+        return JSONResponse({"error": str(exc)}, status_code=400)
 
 
 @router.get("/v2/request-assistant/threads/{thread_id}")

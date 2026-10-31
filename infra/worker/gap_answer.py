@@ -37,6 +37,7 @@ from infra.worker.execution_types import (is_timeout_exception,
     ProviderRateLimitError, ProviderTimeoutError,
 )
 from infra.worker.live_analysis import generate_and_close, _client_for_model, _field, _token_count
+from core.change_intelligence.v2.prompt_render import render_once
 
 CONFIG_PATH = pathlib.Path(__file__).resolve().parents[2] / "config" / "ai10_gap_answer.json"
 _MODEL_KEYS = {"status", "answer", "states_absence", "evidence", "question_for_human", "scope_examined"}
@@ -246,8 +247,7 @@ class GapAnswerExecutor:
         given = gap_context.build(ctx.store, tenant, ws, intent_id=payload.get("intent_id"), artifact_ids=payload["artifact_ids"],
                                   paths_by_id={a: pth for pth, a in paths.items()}, max_epoch=ctx.job.get("pinned_decision_epoch"), patterns=patterns)
         ctx.request_context["gap_decisions"] = given
-        prompt = (frozen["prompt_template"].replace("{question_id}", payload["question_id"])
-                  .replace("{question}", payload["question"] + given["block"]).replace("{sources}", "\n".join(blocks)))
+        prompt = render_once(frozen["prompt_template"], {"question_id": payload["question_id"], "question": payload["question"] + given["block"], "sources": "\n".join(blocks)})
         if math.ceil(len(prompt.encode("utf-8")) / 2) > config.max_input_tokens_per_call:
             raise NonRetryableExecutionError("budget_exceeded", "source prompt exceeds input ceiling")
         ctx.request_context.update(

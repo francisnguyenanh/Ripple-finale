@@ -165,3 +165,38 @@ def test_a_failed_comparison_is_unavailable_not_choose_two_versions(env, ch, pw_
         ctx.close()
     finally:
         server.stop()
+
+def test_older_events_are_loaded_only_when_asked_and_pages_join_without_a_gap(env, ch, pw_browser, monkeypatch):
+    """REL-03 through the real page: the server lists events in pages (page size forced small here); the first read is one page, "Show older events"
+    asks for the next page by cursor, every event is shown once, nothing is skipped, and no cursor read is made until the person asks. The view hides
+    JOB_QUEUED and membership.grant rows, so the expectation is computed from the database with the same rule."""
+    from infra import v2_policy_routes
+    PAGE = 6
+    HIDDEN = ("JOB_QUEUED", "membership.grant")
+    monkeypatch.setattr(v2_policy_routes, "AUDIT_PAGE_DEFAULT", PAGE)
+
+    def expected(n):
+        with env.store._tx() as cur:
+            cur.execute("SELECT id, event_type FROM v2_audit WHERE tenant_id=%s AND workspace_id=%s ORDER BY id DESC LIMIT %s", (env.tenant, env.ws, n))
+            return [str(r[0]) for r in cur.fetchall() if r[1] not in HIDDEN]
+    server = ServerThread().start()
+    try:
+        page, ctx = _open(pw_browser, server, env, fail=False)
+        expect(tid(page, "history-activity")).to_be_visible(timeout=WAIT)
+        expect(tid(page, "history-older")).to_be_visible(timeout=WAIT)
+        expect(tid(page, "history-older-note")).to_contain_text("loaded only when you ask")
+        first_reads = len(page._audit)
+        assert first_reads >= 1 and all("before_id=" not in u for u in page._audit)         # the first page only; no cursor read before the person asks
+        want1 = expected(PAGE)
+        expect(page.locator("[data-testid=history-event]")).to_have_count(len(want1), timeout=WAIT)
+        ids = page.evaluate("() => Array.from(document.querySelectorAll('[data-event-id]')).map(e => e.dataset.eventId)")
+        assert ids == want1                                                                   # newest first, exactly the first page's visible rows
+        tid(page, "history-older").click()
+        want2 = expected(2 * PAGE)
+        expect(page.locator("[data-testid=history-event]")).to_have_count(len(want2), timeout=WAIT)
+        assert len(page._audit) == first_reads + 1 and "before_id=" in page._audit[-1]        # exactly one more read, by cursor
+        ids = page.evaluate("() => Array.from(document.querySelectorAll('[data-event-id]')).map(e => e.dataset.eventId)")
+        assert ids == want2 and len(set(ids)) == len(ids)                                     # the two pages join without a gap or a duplicate
+        ctx.close()
+    finally:
+        server.stop()

@@ -22,6 +22,7 @@ from infra.worker.change_draft import _canon_json
 from infra.worker.code_change import _git, repo_config
 from infra.worker.execution_types import ExecutionContext, ExecutionOutcome, ExecutionRequest, NonRetryableExecutionError, ProviderCallBudget
 from infra.worker.explain import call_pinned_json
+from core.change_intelligence.v2.prompt_render import render_once
 
 EXECUTOR_ID = "ci.semantic_drift.v1"
 KIND = ROLE = "ci.semantic_drift"
@@ -117,8 +118,8 @@ class SemanticDriftExecutor:
         diff = diff[: int(limits["max_diff_chars"])]
         shown_rules = sorted(rules)[: int(limits["max_rules"])]
         truncation = (f"(The diff was cut at {limits['max_diff_chars']} characters; findings beyond it cannot be reported.)" if truncated else "")
-        prompt = (frozen["prompt_template"].replace("{rules}", "\n".join(sd.rule_line(rules[r]) for r in shown_rules)).replace("{diff}", diff or "(no sendable change)")
-                  .replace("{truncation}", truncation))
+        prompt = render_once(frozen["prompt_template"], {"rules": "\n".join(sd.rule_line(rules[r]) for r in shown_rules), "diff": diff or "(no sendable change)",
+                                                         "truncation": truncation})
         from infra.worker import extraction
         if extraction._input_token_bound(prompt, frozen["output_schema"]) > config.max_input_tokens_per_call:
             raise NonRetryableExecutionError("budget_exceeded", "the diff and the rules exceed the input ceiling")

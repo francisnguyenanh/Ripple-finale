@@ -125,3 +125,19 @@ def test_nothing_sendable_makes_no_call_malformed_output_fails_and_permissions_h
     assert post(q, viewer).status_code == 403 and get(q, viewer, r.json()["job_id"]).status_code == 403
     q.declare(visible_to=["admin_only_role"])
     assert post(q, q.admin, attempt=1).status_code == 404 and get(q, q.admin, r.json()["job_id"]).status_code == 404   # a hidden repository is indistinguishable
+
+
+def test_accepted_knowledge_that_moved_between_request_and_run_fails_the_job_as_policy_moved(drift_env):
+    """Gap closed 2026-10-31 (recorded in LHA_LLM.md as `policy_moved` path exists, no test): the job pins the accepted snapshot at the request; when a decision
+    is revoked before the worker runs (a new accepted revision), the worker refuses before any git read or model call, with the recorded reason."""
+    q = drift_env
+    model = use(q, drift_model)
+    r = post(q, q.admin, attempt=1)
+    assert r.status_code == 200, r.text
+    with q.env.store._tx() as cur:
+        cur.execute("SELECT decision_id FROM v2_business_decisions WHERE tenant_id=%s AND workspace_id=%s AND kind='answer_gap' ORDER BY created_at DESC LIMIT 1", (q.env.tenant, q.env.ws))
+        decision = cur.fetchone()[0]
+    assert q.admin.post("/v2/business/decisions/revoke", json={"workspace_id": q.env.ws, "decision_id": decision, "reason": "moved before the run"}).status_code == 200
+    drain(q.env)
+    st = get(q, q.admin, r.json()["job_id"]).json()
+    assert st["status"] == "failed" and st["reason_code"] == "policy_moved" and model.calls == 0, st

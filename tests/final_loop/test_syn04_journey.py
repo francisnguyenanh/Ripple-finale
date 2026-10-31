@@ -110,3 +110,33 @@ def test_pure_model_never_calls_a_completed_job_or_a_document_completion():
     clarify = {"understanding": {"status": "done", "ready": False, "can_confirm": False, "clarify": True}}
     j = bj.build_journey(clarify)
     assert states(j)["understand"] == "blocked" and j["next"]["step"] == "understand"
+
+
+def test_the_person_who_asked_records_the_user_result_once_the_knowledge_is_committed(qa_env):
+    """SYN-04 user result (2026-10-31; the plan's 'user result decision' axis had no writer): requester only, after the commit, accept or reject with a reason,
+    one audit event per decision, re-sent decision replayed, the journey shows the step done/rejected with who and why; nothing else changes."""
+    q = qa_env
+    cid, approver = prepared(q)
+
+    def result(client, **body):
+        return client.post(f"/v2/business/changes/{cid}/result", json={"workspace_id": q.env.ws, **body})
+    r0 = result(q.req, decision="accept"); assert r0.status_code == 409, r0.text                                # not committed yet
+    b = review(q, approver, cid).json()["binding"]
+    assert decide(q, approver, cid, b).status_code == 200 and commit(q, q.admin, cid, b).status_code == 200
+    drain(q.env)
+    assert states(journey(q, q.req, cid))["user_result"] == "todo"
+    assert result(approver, decision="accept").status_code == 403                                             # not the person who asked
+    assert result(q.req, decision="maybe").status_code == 400
+    assert result(q.req, decision="reject").status_code == 400                                                # a rejection needs a reason
+    r = result(q.req, decision="reject", reason="The threshold shows but the memo still says 1,000,000.")
+    assert r.status_code == 200 and r.json()["replayed"] is False
+    j = journey(q, q.admin, cid)
+    step = next(s for s in j["steps"] if s["key"] == "user_result")
+    assert step["state"] == "rejected" and step["by"] == q.env.req and "memo" in step["why"] and j["fully_implemented"] is False
+    assert result(q.req, decision="reject", reason="The threshold shows but the memo still says 1,000,000.").json()["replayed"] is True
+    assert result(q.req, decision="accept").status_code == 200                                                # a later decision supersedes
+    step = next(s for s in journey(q, q.req, cid)["steps"] if s["key"] == "user_result")
+    assert step["state"] == "done" and step["by"] == q.env.req
+    with q.env.store._tx() as cur:
+        cur.execute("SELECT count(*) FROM v2_audit WHERE tenant_id=%s AND workspace_id=%s AND event_type='CHANGE_RESULT_DECIDED' AND payload->>'change_id'=%s", (q.env.tenant, q.env.ws, cid))
+        assert cur.fetchone()[0] == 2

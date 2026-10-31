@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionStillCurrent, actionTarget, cancelNote, citationTarget, pendingNote, suggestQuestions, unavailableText } from "./guide";
+import { actionStillCurrent, actionTarget, actionTargets, cancelNote, citationTarget, pendingNote, suggestQuestions, unavailableText } from "./guide";
 
 const ob = (o: Record<string, unknown>) => ({ code: "decide_knowledge", label: "Decide the knowledge change", state: "current", obligation_me: false, eligible_me: false, ...o });
 
@@ -27,6 +27,8 @@ describe("action targets", () => {
     expect(actionTarget("business_change", "approve_knowledge")).toBe("rev-reason");
     expect(actionTarget("business_change", "made_up")).toBeNull();
     expect(actionTarget("intent_flow", "approve_knowledge")).toBeNull();
+    expect(actionTarget("intent_flow", "intent.confirm_own")).toBe("action-confirm-intent");                       // EUI-02: the intent family's controls
+    expect(actionTargets("intent_flow", "change.prepare")).toEqual(["action-run-draft", "action-prepare-proposal-from-draft", "action-prepare-proposal", "action-run-review", "action-prepare-approval", "action-apply", "action-submit-work-proof"]);
     const tv = { permitted_actions: [{ action: "approve_knowledge", allowed: true, current: true }, { action: "commit_knowledge", allowed: true, current: false }] };
     expect(actionStillCurrent(tv, "approve_knowledge")).toBe(true);
     expect(actionStillCurrent(tv, "commit_knowledge")).toBe(false);

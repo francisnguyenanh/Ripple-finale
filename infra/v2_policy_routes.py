@@ -1877,24 +1877,47 @@ def _readable_audit(store, tenant: str, workspace_id: str, events: list[dict], m
     return out
 
 
+AUDIT_PAGE_DEFAULT, AUDIT_PAGE_MAX, _AUDIT_PAGE_FETCHES = 200, 1000, 50
+
+
 @router.get("/v2/audit/{workspace_id}")
-def workspace_audit(request: Request, workspace_id: str):
+def workspace_audit(request: Request, workspace_id: str, limit: int | None = None, before_id: int | None = None, all: str | None = None):
+    """REL-03 (2026-10-31): a bounded read. Without `all=1` the response is one keyset page of the newest readable events (`limit`, default 200, at most
+    1000; `before_id` = the `next_before` of the previous page); `has_more` and `next_before` say how to read older ones. The per-reader rules of SCN-12
+    (`_readable_audit`) are applied BEFORE the page is cut: hidden rows never shorten a page and never move the cursor past a readable row. `all=1` keeps
+    the historical full read for tools and tests."""
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return _error("v2 unavailable", 503)
+    if limit is not None and (limit < 1 or limit > AUDIT_PAGE_MAX):
+        return _error(f"limit must be between 1 and {AUDIT_PAGE_MAX}", 400)
+    if before_id is not None and before_id < 1:
+        return _error("before_id must be a positive event id", 400)
     try:
         authority = _authority(identity, request, workspace_id)
         require(authority, "project.read")
+        tenant, me, perms = authority["tenant_id"], authority["account_id"], permissions_for(authority.get("roles"))
         # Every event of the workspace, membership grants / revocations included, comes from the one `v2_audit` table with its id and recorded time. The identity
         # store's `membership.*` list reads the same rows; merging it listed each membership event twice, the copy without id or time (PC-06, 2026-10-26).
-        combined = _readable_audit(store, authority["tenant_id"], workspace_id, store.audit_events(authority["tenant_id"], workspace_id),
-                                   authority["account_id"], permissions_for(authority.get("roles")))
+        if all == "1" and limit is None and before_id is None:
+            combined, has_more, next_before, paged = _readable_audit(store, tenant, workspace_id, store.audit_events(tenant, workspace_id), me, perms), False, None, False
+        else:
+            want, cursor, combined, has_more, next_before, paged = int(limit or AUDIT_PAGE_DEFAULT), before_id, [], False, None, True
+            for _ in range(_AUDIT_PAGE_FETCHES):                              # readable rows are collected until the page is full or the history is exhausted
+                page = store.audit_page(tenant, workspace_id, limit=want - len(combined), before_id=cursor)
+                combined = _readable_audit(store, tenant, workspace_id, page["events"], me, perms) + combined
+                has_more, next_before, cursor = page["has_more"], page["next_before"], page["next_before"]
+                if not page["has_more"] or len(combined) >= want:
+                    break
         # Defense in depth: never surface raw secrets even if a future event
         # type accidentally carried one.
         for event in combined:
             event.get("payload", {}).pop("credential", None)
             event.get("payload", {}).pop("credential_digest", None)
-        return JSONResponse({"events": combined}, headers={"Cache-Control": "no-store"})
+        body = {"events": combined}
+        if paged:
+            body.update(has_more=has_more, next_before=next_before, limit=want)
+        return JSONResponse(body, headers={"Cache-Control": "no-store"})
     except IdentityDenied:
         return _error("sign in required", 401)
     except PermissionDenied as exc:

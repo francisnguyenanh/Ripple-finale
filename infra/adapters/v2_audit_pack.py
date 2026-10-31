@@ -90,6 +90,8 @@ def build(store, tenant_id, workspace_id, *, change_id: str | None, can_read_evi
         audit_sql = "SELECT id, event_type, actor_id, payload, created_at FROM v2_audit WHERE tenant_id=%s AND workspace_id=%s" + (
             " AND (payload->>'intent_id'=%s OR payload->>'change_id'=%s)" if change_id else "") + " ORDER BY id LIMIT %s"
         audit = _rows(cur, audit_sql, (tenant_id, workspace_id, change_id, change_id, MAX_ROWS + 1) if change_id else (tenant_id, workspace_id, MAX_ROWS + 1))
+        from infra import text_envelope                                                   # REL-06: a note of an erased subject exports as its marker
+        audit = [dict(r, payload=text_envelope.audit_payload_text_open(cur, tenant_id, workspace_id, r.get("payload"))) if isinstance(r, dict) else r for r in audit]
         cur.execute("SELECT count(*) FROM v2_audit WHERE tenant_id=%s AND workspace_id=%s", (tenant_id, workspace_id))
         audit_total = cur.fetchone()[0]
         jobs = []

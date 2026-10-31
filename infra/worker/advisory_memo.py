@@ -17,6 +17,7 @@ from infra.adapters import v2_business, v2_business_change
 from infra.worker.change_draft import _canon_json
 from infra.worker.execution_types import ExecutionContext, ExecutionOutcome, ExecutionRequest, NonRetryableExecutionError, ProviderCallBudget
 from infra.worker.explain import call_pinned_json
+from core.change_intelligence.v2.prompt_render import render_once
 
 RISK_KIND = RISK_ROLE = "change.risk_memo"
 SYNTH_KIND = SYNTH_ROLE = "ma.synthesis_memo"
@@ -122,7 +123,7 @@ class _MemoExecutor:
         limit = int(frozen["limits"]["max_pack_items"])
         must = [p for p in pack if p["must_address"]]
         pack = (must + [p for p in pack if not p["must_address"]])[:max(limit, len(must))]       # must-address facts are never cut to fit the cap
-        prompt = frozen["prompt_template"].replace("{change}", change_text).replace("{facts}", am.prompt_lines(pack))
+        prompt = render_once(frozen["prompt_template"], {"change": change_text, "facts": am.prompt_lines(pack)})
         if len(prompt) > int(frozen["limits"]["max_prompt_chars"]) * 2:
             raise NonRetryableExecutionError("budget_exceeded", "the facts exceed the memo's prompt limit")
         from infra.worker import extraction
