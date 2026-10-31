@@ -42,7 +42,7 @@ def test_the_live_shape_is_asks_with_parts_flattened_for_the_checks_and_anything
                 {"outcome": "answered", "asks": [], "unrecorded": [1], "limitations": []}):
         with pytest.raises(ValueError):
             ra.validate_model_object(bad, LIM5)
-    assert ra.ANSWER_SCHEMA == "request-assistant-answer/6" and ra.CHECKS_VERSION == "request-assistant-checks/30" and {"request-assistant-checks/19", "request-assistant-checks/20", "request-assistant-checks/21"} <= ra.COMPATIBLE_CHECKS
+    assert ra.ANSWER_SCHEMA == "request-assistant-answer/6" and ra.CHECKS_VERSION == "request-assistant-checks/31" and {"request-assistant-checks/19", "request-assistant-checks/20", "request-assistant-checks/21"} <= ra.COMPATIBLE_CHECKS
 
 
 # ---- the facts that answer each kind of part (deterministic from kinds and keys) ---------------------------------------------------------------------------------

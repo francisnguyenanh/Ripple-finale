@@ -99,7 +99,8 @@ def shared_hit(dsn: str, keys: list[tuple[str, int]], now: float | None = None) 
         try:
             with conn.cursor() as cur:
                 if not _shared_ready:
-                    cur.execute("CREATE TABLE IF NOT EXISTS v2_rate_windows (key TEXT NOT NULL, window_start BIGINT NOT NULL, hits INTEGER NOT NULL, PRIMARY KEY (key, window_start))")
+                    if os.environ.get("RIPPLE_LOGIN_SCHEMA_AUTO", "1") != "0":      # the table is migration v2_042's; production (0) issues no DDL on a request
+                        cur.execute("CREATE TABLE IF NOT EXISTS v2_rate_windows (key TEXT NOT NULL, window_start BIGINT NOT NULL, hits INTEGER NOT NULL, PRIMARY KEY (key, window_start))")
                     _shared_ready = True
                 wait = 0
                 for key, limit in keys:
@@ -128,65 +129,52 @@ def _login_limits() -> tuple[int, int, int]:
 
 @contextlib.contextmanager
 def _login_conn():
+    """A transaction-mode connection for the login counters (SEC-02: every decision and write is one transaction in `infra/login_protection.py`).
+    The table is owned by the schema (migration v2_042); RIPPLE_LOGIN_SCHEMA_AUTO=0 (production) makes this path issue no DDL."""
     global _login_ready
-    from infra import db_pool
+    from infra import db_pool, login_protection
     with db_pool.connection(_shared_dsn()) as conn:
-        conn.autocommit = True
+        conn.autocommit = False
         try:
             if not _login_ready:
-                with conn.cursor() as cur:
-                    cur.execute("CREATE TABLE IF NOT EXISTS v2_login_failures (key TEXT NOT NULL, window_start BIGINT NOT NULL, failures INTEGER NOT NULL, PRIMARY KEY (key, window_start))")
+                if os.environ.get("RIPPLE_LOGIN_SCHEMA_AUTO", "1") != "0":
+                    login_protection.ensure_schema(conn)
                 _login_ready = True
             yield conn
         finally:
-            conn.autocommit = False
+            try:
+                conn.rollback()
+            except Exception:                                   # noqa: BLE001
+                pass
 
 
 _login_ready = False
 
 
 def login_wait(account, source, now: float | None = None) -> int:
-    """Shared (all instances) failed-login counter: seconds to wait, 0 = not locked. RAISES on a database error: the caller must treat that as locked (fail closed)."""
-    acct_max, src_max, window = _login_limits()
-    t = time.time() if now is None else now
-    w = int(t // window)
-    keys = [("a:" + (account if isinstance(account, str) else "")[:200], acct_max), ("s:" + (source or "")[:100], src_max)]
+    """Shared (all instances) lock state: seconds to wait, 0 = not locked. RAISES on a database error: the caller must treat that as locked (fail closed)."""
+    from infra import login_protection
     with _login_conn() as conn:
-            with conn.cursor() as cur:
-                wait = 0
-                for key, limit in keys:
-                    if limit <= 0:
-                        continue
-                    cur.execute("SELECT failures FROM v2_login_failures WHERE key=%s AND window_start=%s", (key, w))
-                    row = cur.fetchone()
-                    if row and row[0] >= limit:
-                        wait = max(wait, int((w + 1) * window - t) + 1)
-                return wait
+        return login_protection.shared_wait(conn, account, source, now)
 
 
-def login_failure(account, source, now: float | None = None) -> None:
-    _, _, window = _login_limits()
-    w = int((time.time() if now is None else now) // window)
+def login_failure(account, source, now: float | None = None) -> bool:
+    """Record a failed credential check in the shared counters; True when the row ceiling refused a new key (answer 429)."""
+    from infra import login_protection
     with _login_conn() as conn:
-            with conn.cursor() as cur:
-                for key in ("a:" + (account if isinstance(account, str) else "")[:200], "s:" + (source or "")[:100]):
-                    cur.execute("INSERT INTO v2_login_failures (key, window_start, failures) VALUES (%s,%s,1) ON CONFLICT (key, window_start) DO UPDATE SET failures = v2_login_failures.failures + 1", (key, w))
-                if random.random() < 0.02:
-                    cur.execute("DELETE FROM v2_login_failures WHERE window_start < %s", (w - 3,))
+        return login_protection.shared_failure(conn, account, source, now)
 
 
 def login_clear(account) -> None:
+    from infra import login_protection
     with _login_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute("DELETE FROM v2_login_failures WHERE key=%s", ("a:" + (account if isinstance(account, str) else "")[:200],))
+        login_protection.shared_clear(conn, account)
 
 
 def _source(request) -> str:
-    """The address Cloud Run's front end saw: the LAST X-Forwarded-For entry is appended by the trusted proxy; earlier entries are client-supplied and ignored."""
-    xff = request.headers.get("x-forwarded-for", "")
-    if xff:
-        return xff.split(",")[-1].strip()
-    return request.client.host if request.client else "unknown"
+    """The caller's address under the ingress contract (RIPPLE_TRUSTED_PROXY_HOPS; `infra/login_protection.source_address`)."""
+    from infra import login_protection
+    return login_protection.source_address(request)
 
 
 def install(app) -> None:

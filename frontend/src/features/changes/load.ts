@@ -71,9 +71,13 @@ export async function loadFlow(ws: string, ids: Ids, can: (p: string) => boolean
   if (gaps) for (const g of gaps.gaps) for (const jid of (g.suggestion_jobs ?? []).slice(-1)) suggest[g.gap_id] = await getJob(ws, jid).catch(() => null);
 
   const cachedDiff = ids.proposal ? diffCache.get(ids.proposal) : undefined;
+  // the exact file diff is served to approvers and evidence readers only (SEC-01); other members get the proposal without it
+  const diffAllowed = can("evidence.read") || can("change.approve");
   const [decisions, diff, change, claims, rev, contracts, loop] = await Promise.all([
     ids.approval ? api<{ decisions: Decision[] }>("GET", `/v2/jobs/${q(ids.approval)}/decisions?workspace_id=${q(ws)}`) : Promise.resolve(null),
-    proposalDone ? (cachedDiff ? Promise.resolve(cachedDiff) : api<Rec>("GET", `/v2/proposals/${q(ids.proposal!)}/diff?workspace_id=${q(ws)}`)) : Promise.resolve(null),
+    proposalDone && diffAllowed
+      ? (cachedDiff ? Promise.resolve(cachedDiff) : api<Rec>("GET", `/v2/proposals/${q(ids.proposal!)}/diff?workspace_id=${q(ws)}`).catch((e) => (e instanceof ApiError && e.status === 403 ? null : Promise.reject(e))))
+      : Promise.resolve(null),
     ids.apply ? fetchChange(ws, ids.apply) : Promise.resolve(null),
     needClaims ? api<{ claims: Rec[] }>("GET", `/v2/knowledge/overview?workspace_id=${q(ws)}`) : Promise.resolve(null),
     needArts && head.source_revision_id ? revisionView(ws, head.source_revision_id) : Promise.resolve(null),

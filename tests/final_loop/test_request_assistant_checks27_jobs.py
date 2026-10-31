@@ -35,7 +35,7 @@ def test_r23_a_judgement_within_the_record_and_honest_absences_are_shown_while_c
     m = settle(q, q.req, t["thread_id"])["messages"][0]
     a = m["answer"]
     prompt = model.prompts[0]
-    assert model.calls == 1 and a["checks_version"] == "request-assistant-checks/30" and a["context_version"] == "request-assistant-context/14"
+    assert model.calls == 1 and a["checks_version"] == "request-assistant-checks/31" and a["context_version"] == "request-assistant-context/14"
     assert fact_id(prompt, "state") in _basis_line(prompt, "next")                                    # context/11: the next part is offered where the request is now
     shown = [b["text"] for b in a["blocks"] if b["kind"] != "authority"]
     assert shown == ["Nothing in the record shows a failure: no blocker is recorded and the current step has not started yet."]

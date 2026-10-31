@@ -53,6 +53,7 @@ each consumed from the call budget before it runs.
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import random
@@ -347,6 +348,15 @@ BUILTIN_EXECUTORS: dict = {
 
 #: Override/injection registry (tests, or a future real provider integration).
 PROVIDER_EXECUTORS: dict = {}
+_LOG = logging.getLogger("ripple.worker")
+
+#: REL-01 (2026-10-30): the outbox kinds the worker consumes under a claim, and the kinds every writer emits that have NO claim-consumer (their only
+#: readers -- `infra/adapters/v2_projection.py` and the ordering sub-selects -- read by row id, never by claim/ack), which the worker acknowledges
+#: on first claim. A kind in neither set is PARKED, payload kept, until `tools.ops_jobs replay-parked` after a consumer exists.
+#: `tests/contract/test_outbox_kind_registry.py` keeps this registry equal to the kinds the code writes.
+OUTBOX_CLAIM_CONSUMERS: frozenset = frozenset({"JOB_QUEUED", "BUSINESS_KNOWLEDGE_COMMITTED", "SOURCE_PUBLISHED"})
+OUTBOX_NO_CLAIM_CONSUMER: frozenset = frozenset({"CHANGE_COMPLETED", "BUSINESS_CHANGE_INTENT_CONFIRMED", "DECISION_RECORDED",
+                                                 "HITL_ANSWER_RECORDED", "KNOWLEDGE_PUBLISHED"})
 
 
 def resolve_executor(kind: str | None):
@@ -648,14 +658,19 @@ def _execute_admitted_claim(store: PostgresV2Store, tenant_id: str, workspace_id
             return "LEASE_LOST"
         return "DEFERRED"
 
+    fence = (claim.id, worker_id, claim.fencing_token)                     # REL-02: every write boundary of this job is taken under this claim
+
     def _terminal(terminal: str, reason: str | None, attempt: dict | None,
                   result: dict | None = None) -> str:
         try:
             written = store.finish_execution(tenant_id, workspace_id, job_id, terminal,
-                                             reason=reason, result=result, attempt=attempt)
+                                             reason=reason, result=result, attempt=attempt, fence=fence)
         except StoreConflict:
+            # the job is already terminal: a committed finish of an earlier delivery (never "an attempt row exists")
             return ("ALREADY_PROCESSED" if _ack(store, tenant_id, workspace_id, claim, worker_id)
                     else "LEASE_LOST")
+        except LeaseLost:
+            return "LEASE_LOST"                                              # reclaimed: the new owner decides; our usage (if any) is on record as a late row
         if not _ack(store, tenant_id, workspace_id, claim, worker_id):
             return "LEASE_LOST"
         return written
@@ -721,7 +736,7 @@ def _execute_admitted_claim(store: PostgresV2Store, tenant_id: str, workspace_id
         calls.before_call = lambda n: store.begin_provider_attempt(
             tenant_id, workspace_id, job_id, f"{live_prefix}:inflight:{n}", ceiling_usd=per_call_worst if per_call_worst is not None else Decimal("0"),
             context={"outbox_event_id": claim.id, "fencing_token": claim.fencing_token, "claim_attempt": claim.attempts, "worker_id": worker_id, "call": n,
-                     "cost_basis": "ceiling_until_usage_is_recorded"})
+                     "cost_basis": "ceiling_until_usage_is_recorded"}, fence=fence)
     ctx = None
     try:
         ctx = ExecutionContext(store=store, job=job, config=config,
@@ -770,7 +785,10 @@ def _execute_admitted_claim(store: PostgresV2Store, tenant_id: str, workspace_id
             return "CANCELLED" if written == "FAILED" else written
         # Retries remain: the attempt (and its cost) is durable now; the
         # claim stays CLAIMED until its lease expires and is reclaimed.
-        store.record_attempt(tenant_id, workspace_id, job_id, attempt)
+        try:
+            store.record_attempt(tenant_id, workspace_id, job_id, attempt, fence=fence)
+        except LeaseLost:
+            return "LEASE_LOST"
         delay = retry_backoff_seconds(claim.attempts, exc)
         if not delay and effective_lease_seconds(config, lease_seconds) != lease_seconds:
             # The lease was stretched to cover the provider timeout; the call is over, so the
@@ -890,8 +908,21 @@ def claim_and_admit_one(store: PostgresV2Store, tenant_id: str, workspace_id: st
             # this module.
             from infra.worker.refresh_impact import consume_refresh_published
             consume_refresh_published(store, tenant_id, workspace_id, claim, worker_id, _ack)
+        else:
+            _ack(store, tenant_id, workspace_id, claim, worker_id)             # REL-01: an import / legacy publish has no claim-consumer; its readers use the row id
         return claim
     if claim.kind != "JOB_QUEUED":
+        # REL-01 (2026-10-30): an event kind this worker has no claim-consumer for is either acknowledged (registered as such: the only readers of
+        # those kinds use the row id, never the claim) or PARKED untouched for a future consumer; never left CLAIMED to be re-claimed five times.
+        if claim.kind in OUTBOX_NO_CLAIM_CONSUMER:
+            _ack(store, tenant_id, workspace_id, claim, worker_id)
+            return claim
+        try:
+            store.park_outbox(tenant_id, workspace_id, claim.id, worker_id, claim.fencing_token,
+                              reason=f"outbox_no_consumer: kind {claim.kind!r} is not in this worker's registry")
+            _LOG.warning("outbox_parked kind=%s id=%s", claim.kind, claim.id)
+        except LeaseLost:
+            pass
         return claim
 
     job_id, job_kind = _job_id_and_kind(claim)
@@ -903,9 +934,11 @@ def claim_and_admit_one(store: PostgresV2Store, tenant_id: str, workspace_id: st
         except job_quota.JobQuotaError as exc:
             try:
                 store.cancel_execution(tenant_id, workspace_id, job_id,
-                                       f"budget_exceeded: {exc}")
+                                       f"budget_exceeded: {exc}", fence=(claim.id, worker_id, claim.fencing_token))
             except StoreConflict:
                 pass
+            except LeaseLost:
+                return None
             _ack(store, tenant_id, workspace_id, claim, worker_id)
             _notify_unrun(resolve_executor(job_kind), store, tenant_id, workspace_id, job_id, f"budget_exceeded: {exc}")
             return None

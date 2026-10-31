@@ -442,7 +442,7 @@ def test_r10_a_negated_or_questioned_status_reaches_the_reader_and_a_status_clai
     t = thread(q, approver, cid)
     assert ask(q, approver, t["thread_id"], "Is this request moving, or has it stalled?", "key-r10-0001", 0).status_code == 200
     a = settle(q, approver, t["thread_id"])["messages"][0]["answer"]
-    assert seen and a["status"] == "partial" and a["checks_version"] == "request-assistant-checks/30"
+    assert seen and a["status"] == "partial" and a["checks_version"] == "request-assistant-checks/31"
     assert [b["text"] for b in a["blocks"] if b["kind"] != "authority"] == ["This reads as a pause before the next step: nothing in the record shows the request as blocked or failed."]
     assert hedge in a["limitations"] and stopped not in a["limitations"]
     assert sorted(r["reason"] for r in a["rejected"]) == ["status_contradicts_record", "status_contradicts_record"]
@@ -600,7 +600,8 @@ def test_r11_a_worker_that_takes_over_never_repeats_the_call_and_the_first_worke
     assert m["state"] == "unavailable" and m["answer"]["reason_code"] == "attempt_limit"
     [b] = booked(q, t["thread_id"])
     assert b["status"] == "FAILED" and b["reason"].startswith("provider_attempt_limit_reached")
-    assert [(a[0], a[1], a[2] == a[3]) for a in b["attempts"]] == [("USAGE_UNKNOWN", 1, True)] and b["ledger"] == [b["attempts"][0][2]]
+    # REL-02 (2026-10-30): the ceiling marker stays the liability; the first worker's late answer is on record as a cost-0 row (usage noted, nothing booked)
+    assert [(a[0], a[1], a[2] == a[3]) for a in b["attempts"]] == [("USAGE_UNKNOWN", 1, True), ("LATE_USAGE", 0, True)] and b["ledger"] == [b["attempts"][0][2]]
     drain(q.env)
     assert model.calls == 1 and booked(q, t["thread_id"])[0]["attempts"] == b["attempts"]
 
@@ -767,7 +768,7 @@ def test_r16_answer_6_through_the_real_route_declared_names_are_verified_and_sta
     assert a["status"] == "partial" and a["limitations"] == ["Whether a Treasury Manager is involved elsewhere is not shown.", "Not answered in this answer: what closure involves."]
     assert {k: a["parts"][k] for k in ("asked", "not_answered", "unrecorded_verified")} == {"asked": ["premise", "next"], "not_answered": 1, "unrecorded_verified": ["Treasury Manager", "sign this before it can close"]}
     assert a["parts"]["supplement"]["outcome"] == "completed" and a["parts"]["supplement"]["covered"] == []                 # R17: the second pass (empty here) covered nothing
-    assert a["checks_version"] == "request-assistant-checks/30" and a["answer_schema"] == "request-assistant-answer/6" and a["context_version"] == "request-assistant-context/14"
+    assert a["checks_version"] == "request-assistant-checks/31" and a["answer_schema"] == "request-assistant-answer/6" and a["context_version"] == "request-assistant-context/14"
     b = shown[1]
     assert not [x for x in b["blocks"] if x["kind"] == "absence"] and [r["reason"] for r in b["rejected"]] == ["authority_in_free_text"]
     assert [x["text"] for x in b["blocks"] if x["kind"] != "authority"] == ["The current stage is the knowledge decision."]
@@ -839,7 +840,7 @@ def test_r17_no_supplement_when_every_part_is_answered_and_one_when_the_first_pa
     outcome, calls, cost, estimate, basis = b["attempts"][0]
     assert outcome == "COMPLETED" and calls == 2 and basis == "provider_usage" and cost == _price(q, 1800, 300) and b["ledger"] == [cost]
     rec = q.env.store.job_record(q.env.tenant, q.env.ws, b["job_id"])
-    assert rec["execution_result"]["provider_calls"] == 2 and rec["execution_result"]["model_supplement"]["asks"] and rec["execution_result"]["checks_version"] == "request-assistant-checks/30"
+    assert rec["execution_result"]["provider_calls"] == 2 and rec["execution_result"]["model_supplement"]["asks"] and rec["execution_result"]["checks_version"] == "request-assistant-checks/31"
 
 
 def test_r17_a_completion_that_still_leaves_a_part_open_or_contradicts_the_record_is_refused_part_by_part(ra_env, tmp_path):
@@ -978,7 +979,7 @@ def test_r17_a_worker_taken_over_during_the_second_call_publishes_nothing_twice_
     assert model.calls == 2 and m["state"] == "unavailable" and m["answer"]["reason_code"] == "attempt_limit"
     [b] = booked(q, tid)
     # the fenced worker's two calls each left a provisional row at the ceiling (usage unknown); the job's one ledger row is their sum; nothing was published
-    assert b["status"] == "FAILED" and [(a_[0], a_[1], a_[2] == a_[3]) for a_ in b["attempts"]] == [("USAGE_UNKNOWN", 1, True)] * 2, str(b["attempts"]) + " " + str(b["reason"])
+    assert b["status"] == "FAILED" and [(a_[0], a_[1], a_[2] == a_[3]) for a_ in b["attempts"]] == [("USAGE_UNKNOWN", 1, True)] * 2 + [("LATE_USAGE", 0, True)], str(b["attempts"]) + " " + str(b["reason"])   # REL-02: the late usage is noted at cost 0
     assert b["ledger"] == [b["attempts"][0][2] + b["attempts"][1][2]] and b["reason"].startswith("provider_attempt_limit_reached")
     drain(q.env)
     assert model.calls == 2 and booked(q, tid)[0]["attempts"] == b["attempts"]

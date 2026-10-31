@@ -137,6 +137,7 @@ No new state-machine framework is added. Knowledge acceptance, source apply and 
 |---|---|
 | read rules, graph, answers (Business view) | `project.read` |
 | read technical evidence: quotes, locators, source revisions | `evidence.read` |
+| read the exact before/after of a proposal (`GET /v2/proposals/{proposal_job_id}/diff`, lines of the source file) | `evidence.read`, **or** `change.approve` held in the proposal's own tenant and workspace (SEC-01, 2026-10-30): the exact diff is the approver's decision basis (approve only what was reviewed, `tests/pitch_brief/test_approver_basis.py`); a viewer or requester is refused before the job is read; a `change.approve` of another workspace is refused; this exception applies to no other raw-evidence endpoint (`file-diff`, source excerpts, code stay `evidence.read` only) |
 | answer a gap / confirm knowledge / resolve a conflict | `knowledge.confirm`, `conflict.resolve` |
 | state a business change, confirm one's own request | `intent.create`, `intent.confirm_own` |
 | prepare draft and impact | `change.prepare`, `ai.use` |

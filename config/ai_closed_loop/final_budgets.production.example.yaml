@@ -42,15 +42,18 @@ role_model_ids:
   source.correspondence: gemini-3.5-flash-lite
   code.diff_proposal: gemini-3.5-flash-lite
   roi.analyst: gemini-3.5-flash-lite
+# Thinking levels (AI-02, 2026-10-30): a level is SENT only by the generic pinned-role call (infra/worker/explain.py); `extraction` and
+# `retrieval.semantic` have their own executors that send none, so no level is declared for them: they run at the provider default, which is
+# not pinned and was not measured separately (every recorded evaluation run used these same executors). The roles below without an entry
+# (ma.synthesis_memo, change.risk_memo, ci.semantic_drift, source.correspondence, code.diff_proposal, roi.analyst) send none either, by decision.
+# What each executor sends is recorded by tests/contract/test_executor_request_serialization.py.
 role_thinking_levels:
-  extraction: LOW
   knowledge.qa: LOW
   knowledge.gap_proposals: LOW
   gap.answer_interpret: LOW
   change.understand: MINIMAL
   change.impact_deps: MINIMAL
   change.draft_guidance: MINIMAL
-  retrieval.semantic: MINIMAL
   ma.specialist: LOW
   knowledge.mining: LOW
   document.wording: LOW

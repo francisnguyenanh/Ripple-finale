@@ -98,7 +98,7 @@ def test_config29_states_the_contrasting_cases_and_explains_choices_and_steps():
     assert "if they do not decide it, say so" not in t                                                  # the config 28 wording that over-corrected
     assert "- A choice or a step (how to send it back, what a step involves): say what the option or the recorded step does, from its facts" in t
     assert "never present a workflow blocker as the motive for a rule change" in t and "never answer only \"not recorded\" when the facts describe the change" in t
-    assert ra.CONTEXT_VERSION == "request-assistant-context/14" and ra.CHECKS_VERSION == "request-assistant-checks/30"
+    assert ra.CONTEXT_VERSION == "request-assistant-context/14" and ra.CHECKS_VERSION == "request-assistant-checks/31"
     for word in ("high-risk", "supplier", "operations director", "finance controller", "regional compliance", "priya", "h7-", "ai draft"):
         i = t.index("- Readings:")
         assert word not in t[i:t.index("- Status (part status)")].lower()

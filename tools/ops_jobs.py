@@ -58,7 +58,8 @@ def _trace(dsn: str, request_id: str) -> int:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="List or cancel queued jobs of one workspace.")
-    ap.add_argument("command", choices=("list", "cancel-queued", "trace"))
+    ap.add_argument("command", choices=("list", "cancel-queued", "trace", "replay-parked"))
+    ap.add_argument("--kind", default="")
     ap.add_argument("--tenant", default="")
     ap.add_argument("--workspace", default="")
     ap.add_argument("--request-id", default="")
@@ -88,7 +89,31 @@ def main(argv=None) -> int:
         print(f"queued {len(queued)}, running {len(running)}")
         for jid, kind, status in rows:
             print(f"  {status:8} {kind:24} {jid}")
+        from infra.adapters.v2_postgres import PostgresV2Store as _Store
+
+        class _NB:
+            def __getattr__(self, name):
+                raise RuntimeError("no blob is read")
+
+        parked = _Store(dsn, _NB()).parked_outbox(a.tenant, a.workspace)
+        print(f"parked outbox events {len(parked)}" + ("".join(f"\n  PARKED   {p['kind']:24} id={p['id']}" for p in parked)))
         if a.command == "list":
+            return 0
+        if a.command == "replay-parked":
+            from infra.worker import job_worker
+            kind = a.kind.strip()
+            if kind not in job_worker.OUTBOX_CLAIM_CONSUMERS and kind not in job_worker.OUTBOX_NO_CLAIM_CONSUMER:
+                print(f"kind {kind!r} has no consumer in this worker's registry: nothing replayed", file=sys.stderr)
+                return 2
+            if len(a.reason.strip()) < 8:
+                print("--reason (at least 8 characters) is required: it is written to the audit", file=sys.stderr)
+                return 2
+            n = len([p for p in parked if p["kind"] == kind])
+            if not a.apply:
+                print(f"dry run: {n} parked event(s) of kind {kind} would return to PENDING")
+                return 0
+            n = _Store(dsn, _NB()).replay_parked_outbox(a.tenant, a.workspace, kind, actor_id="operator", reason=a.reason.strip())
+            print(f"replayed {n} parked event(s) of kind {kind}")
             return 0
         if not a.apply:
             print(f"dry run: {len(queued)} queued job(s) would be cancelled; running jobs are left to finish")
@@ -103,7 +128,7 @@ def main(argv=None) -> int:
         done = 0
         for jid, _kind, _status in queued:
             try:
-                store.cancel_execution(a.tenant, a.workspace, jid, f"operator_cancelled: {a.reason.strip()}")
+                store.cancel_execution(a.tenant, a.workspace, jid, f"operator_cancelled: {a.reason.strip()}", queued_only=True)   # REL-02: never a leased job
                 done += 1
             except StoreConflict:
                 pass                                   # it started or finished meanwhile: left as it is

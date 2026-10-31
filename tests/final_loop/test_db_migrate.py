@@ -69,3 +69,28 @@ def test_show_applies_nothing_apply_creates_the_schema_and_a_second_apply_is_a_n
 def test_a_missing_dsn_is_exit_2():
     r = _tool("--apply")
     assert r.returncode == 2 and "RIPPLE_V2_DSN is not set" in r.stderr
+
+
+def test_a_second_migration_waits_for_the_first_to_finish(fresh_db):
+    """REL-06 follow-up (2026-10-30): while one session holds the migration lock, `--apply` of the same database waits and then applies (serialized), instead of
+    interleaving its DDL with the other run."""
+    import threading
+    import time
+    import psycopg2
+    from tools.db_migrate import MIGRATE_LOCK_ID
+    dsn = fresh_db
+    holder = psycopg2.connect(dsn)
+    holder.autocommit = True
+    with holder.cursor() as cur:
+        cur.execute("SELECT pg_advisory_lock(%s)", (MIGRATE_LOCK_ID,))
+    done = {}
+    t0 = time.monotonic()
+    th = threading.Thread(target=lambda: done.setdefault("r", _tool("--apply", dsn=dsn)))
+    th.start()
+    time.sleep(2.0)
+    assert th.is_alive(), "the migration must wait while the lock is held"
+    with holder.cursor() as cur:
+        cur.execute("SELECT pg_advisory_unlock(%s)", (MIGRATE_LOCK_ID,))
+    holder.close()
+    th.join(120)
+    assert done["r"].returncode == 0 and "applied" in done["r"].stdout and time.monotonic() - t0 >= 2.0, done["r"].stderr[-300:]

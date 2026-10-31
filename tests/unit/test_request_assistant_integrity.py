@@ -499,7 +499,7 @@ def test_role_mentions_in_business_explanations_are_kept_and_authority_claims_ar
         out = answer5(p, [{"text": text, "fact_refs": [b], "kind": "fact"}])
         assert out["rejected"] and out["rejected"][0]["reason"] in ra.AUTHORITY_TEXT_REASONS, (text, out["rejected"])
         assert out["authority_accounting"]["model_prose_authority_refused"] == 1 and out["status"] == "refused", text
-    assert ra.CHECKS_VERSION == "request-assistant-checks/30" and "request-assistant-checks/13" in ra.COMPATIBLE_CHECKS and {"request-assistant-checks/8", "request-assistant-checks/9", "request-assistant-checks/10", "request-assistant-checks/11", "request-assistant-checks/12"} <= ra.COMPATIBLE_CHECKS
+    assert ra.CHECKS_VERSION == "request-assistant-checks/31" and "request-assistant-checks/13" in ra.COMPATIBLE_CHECKS and {"request-assistant-checks/8", "request-assistant-checks/9", "request-assistant-checks/10", "request-assistant-checks/11", "request-assistant-checks/12"} <= ra.COMPATIBLE_CHECKS
 
 
 # ---------------- checks/10: one cause rule for the model and the validator; authority claims about this request by anyone; guarded limitations ----------------

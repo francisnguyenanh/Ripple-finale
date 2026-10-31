@@ -65,7 +65,7 @@ def test_r23_a_named_step_the_record_lacks_is_answered_with_the_recorded_steps_a
     prompt = model.prompts[0]
     obls = [line.split(" ", 1)[0] for line in prompt.split("\n") if line.startswith("F") and "[obligation]" in line]
     assert obls and all(o in _basis_line(prompt, "premise") for o in obls)                         # context/13: the premise part is offered the recorded steps
-    assert a["context_version"] == "request-assistant-context/14" and a["checks_version"] == "request-assistant-checks/30"
+    assert a["context_version"] == "request-assistant-context/14" and a["checks_version"] == "request-assistant-checks/31"
     assert any(b["text"] == text for b in a["blocks"]) and not a["rejected"]
     assert any(b.get("kind") == "absence" and "Regional Compliance Lead" in b["text"] for b in a["blocks"])   # the absence is the server's
 
@@ -93,7 +93,7 @@ def test_r23_checks30_a_kept_limitation_reaches_the_reader_with_the_fact_it_rest
     ask(q, q.req, t["thread_id"], "Who signs off after this step?", "key-r23c30-0001", 0)
     m = settle(q, q.req, t["thread_id"])["messages"][0]
     a = m["answer"]
-    assert a["checks_version"] == "request-assistant-checks/30" and later in a["limitations"]               # the model's words, unchanged
+    assert a["checks_version"] == "request-assistant-checks/31" and later in a["limitations"]               # the model's words, unchanged
     sup = [s for s in a["limitation_support"] if s["text"] == later]
     assert len(sup) == 1 and sup[0]["basis"] == "later_step_holders"
     ref = sup[0]["fact_refs"][0]

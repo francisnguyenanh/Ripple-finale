@@ -250,6 +250,12 @@ def proposal_diff(request: Request, proposal_job_id: str, workspace_id: str):
     try:
         authority = _authority(identity, request, workspace_id)
         require(authority, "project.read")
+        # SEC-01 (audit 2026-10-30): the exact before/after of a proposal shows lines of the source file. It is the decision basis of the person who
+        # approves it (`change.approve`, DecisionBasis contract: approve only what was reviewed) and evidence for `evidence.read`; every other
+        # member of the workspace (viewer, requester) is refused here, before the job is even read, with the same answer whether or not the job exists.
+        granted = permissions_for(authority.get("roles"))
+        if "evidence.read" not in granted and "change.approve" not in granted:
+            raise PermissionDenied("evidence.read or change.approve")
         tenant = authority["tenant_id"]
         job = _proposal_job(store, tenant, workspace_id, proposal_job_id)
         result = job.get("execution_result") or {}

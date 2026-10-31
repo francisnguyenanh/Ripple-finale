@@ -77,4 +77,4 @@ def test_checks26_the_passive_who_acts_is_not_shown_is_authority_prose_and_prove
     for t in ("Who raised the blocker is not recorded.", "Who wrote the draft is not shown.", "When it last changed is not shown.",
               "Who the affected customers are is not stated."):
         assert ra.free_text_authority(t) is None, t
-    assert ra.CHECKS_VERSION == "request-assistant-checks/30" and "request-assistant-checks/25" in ra.COMPATIBLE_CHECKS
+    assert ra.CHECKS_VERSION == "request-assistant-checks/31" and "request-assistant-checks/25" in ra.COMPATIBLE_CHECKS

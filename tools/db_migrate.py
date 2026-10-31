@@ -24,6 +24,9 @@ def target(dsn: str) -> str:
     return f"host={p.get('host', 'localhost')} port={p.get('port', '5432')} dbname={p.get('dbname', '?')}"
 
 
+MIGRATE_LOCK_ID = 0x52495047                                   # "RIPG": the migration chain of one database runs one at a time
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Apply the Ripple schema to one PostgreSQL database.")
     ap.add_argument("--apply", action="store_true", help="apply the migrations (default: show the target only)")
@@ -39,8 +42,21 @@ def main(argv=None) -> int:
     from infra.adapters.v2_identity import PostgresIdentityStore
     from infra.adapters.v2_postgres import PostgresV2Store
     try:
-        PostgresV2Store(dsn, None).migrate()                 # the blob port is not used by migrate()
-        PostgresIdentityStore(dsn).migrate()
+        # REL-06 follow-up (2026-10-30): two migrations of the same database serialize on one session advisory lock (held on its own connection for the whole
+        # chain; released with the session, so a killed migration never blocks the next one)
+        guard = psycopg2.connect(dsn)
+        guard.autocommit = True
+        with guard.cursor() as cur:
+            cur.execute("SELECT pg_advisory_lock(%s)", (MIGRATE_LOCK_ID,))
+        try:
+            PostgresV2Store(dsn, None).migrate()             # the blob port is not used by migrate()
+            PostgresIdentityStore(dsn).migrate()
+        finally:
+            try:
+                with guard.cursor() as cur:
+                    cur.execute("SELECT pg_advisory_unlock(%s)", (MIGRATE_LOCK_ID,))
+            finally:
+                guard.close()
     except psycopg2.Error as exc:
         print(f"migration failed: {type(exc).__name__}: {str(exc.pgerror or exc).strip()[:300]}", file=sys.stderr)
         return 3

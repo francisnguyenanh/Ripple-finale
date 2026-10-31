@@ -138,11 +138,22 @@ def main() -> int:
     config = None
     if os.environ.get("RIPPLE_BUDGET_CONFIG_PATH"):
         config = job_worker._load_config_if_configured()
+    from infra.worker import execution_lease
+    lease = None
+    if execution_lease.enabled():
+        lease = execution_lease.acquire(dsn)                 # REL-04: one worker execution at a time per database (enforced, not assumed)
+        if lease is None:
+            print("another_execution_active: this execution exits, the running one keeps the work", file=sys.stderr)
+            return 0
     liveness = Liveness(busy_limit=busy_limit_for(config))
     serve_health(liveness, int(os.environ.get("PORT", "8080")))
     from infra import operator_flags
     deadline = Deadline(os.environ.get("RIPPLE_WORKER_SERVICE_DEADLINE_UTC"), set_flag=lambda k, v, actor, reason: operator_flags.set_flag(k, v, actor, reason))
-    run_service(job_worker._make_store(dsn), settings["workspaces"], poll_seconds=settings["poll_seconds"], liveness=liveness, deadline=deadline)
+    try:
+        run_service(job_worker._make_store(dsn), settings["workspaces"], poll_seconds=settings["poll_seconds"], liveness=liveness, deadline=deadline)
+    finally:
+        if lease is not None:
+            lease.release()
     return 1                                            # the loop must never return: if it does, exit non-zero so the platform restarts the container
 
 

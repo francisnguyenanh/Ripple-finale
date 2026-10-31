@@ -218,16 +218,20 @@ OFFLINE_RULES = ["This is an offline copy of one knowledge version: the current 
                  "Reconnecting re-checks your permission and the current version before any online action."]
 
 
-@router.get("/v2/business/documents/{artifact_id}/offline-manifest")
-def offline_manifest(request: Request, artifact_id: str, workspace_id: str, consent: str = "false"):
+@router.post("/v2/business/documents/{artifact_id}/offline-manifest")
+@db_route
+def offline_manifest(request: Request, artifact_id: str):
     """FS-O1 (disabled by default): a manifest that lets a trusted device keep a labelled, expiring offline copy of ONE available document. Needs the base document's permission, an
-    explicit consent flag and the deployment mode `trusted-device`; the bytes themselves still come from the ordinary content route."""
+    explicit consent flag and the deployment mode `trusted-device`; the bytes themselves still come from the ordinary content route. SEC-05 (2026-10-30): recording the consent
+    writes an audit row, so this is a POST (origin checked, human actor) with `{workspace_id, consent: true}`; a GET never writes."""
     mode = os.environ.get("RIPPLE_OFFLINE_REFERENCE", "off")
+    body = _json_body_sync(request)
+    workspace_id, consent = (body.get("workspace_id") if isinstance(body, dict) else None), (body.get("consent") if isinstance(body, dict) else None)
 
     def action(store, tenant, authority):
         if mode != "trusted-device":
             return JSONResponse({"error": "offline reference mode is off", "code": "offline_reference_off"}, status_code=503, headers=_NO_STORE)
-        if str(consent).lower() != "true":
+        if consent is not True and str(consent).lower() != "true":
             return JSONResponse({"error": "explicit consent required", "code": "consent_required", "rules": OFFLINE_RULES}, status_code=409, headers=_NO_STORE)
         from infra.adapters import v2_business_documents as docs
         from infra.v2_document_routes import _authorized_state
@@ -246,7 +250,14 @@ def offline_manifest(request: Request, artifact_id: str, workspace_id: str, cons
             cur.execute("INSERT INTO v2_audit (tenant_id, workspace_id, event_type, actor_id, payload) VALUES (%s,%s,'OFFLINE_REFERENCE_MANIFEST',%s,%s)",
                         (tenant, workspace_id, authority["account_id"], Json({"artifact_id": artifact_id, "snapshot_id": st["snapshot_id"], "expires_at": manifest["expires_at"]})))
         return manifest
-    return _shell(request, workspace_id, action, mutating=False)
+    return _shell(request, workspace_id, action)
+
+
+@router.get("/v2/business/documents/{artifact_id}/offline-manifest")
+def offline_manifest_get(request: Request, artifact_id: str, workspace_id: str = "", consent: str = "false"):
+    """A read never records consent (SEC-05): the manifest is issued by the POST above."""
+    return JSONResponse({"error": "consent is recorded by POST with {workspace_id, consent: true}", "code": "use_post"}, status_code=405,
+                        headers={**_NO_STORE, "Allow": "POST"})
 
 
 @router.post("/v2/notifications/dispatch")

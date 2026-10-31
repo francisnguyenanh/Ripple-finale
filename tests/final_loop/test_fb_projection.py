@@ -86,14 +86,16 @@ def test_the_conversation_read_model_is_redacted_per_profile_and_the_offline_man
         pj.project_conversations(q.env.store, sink, q.env.tenant, q.env.ws, profile="raw")
     assert q.admin.post("/v2/projection/conversations", json={"workspace_id": q.env.ws, "profile": "analyst"}).status_code == 503   # sink off
     aid = base_document(q, q.admin)
-    r = q.admin.get(f"/v2/business/documents/{aid}/offline-manifest", params={"workspace_id": q.env.ws, "consent": "true"})
+    r = q.admin.post(f"/v2/business/documents/{aid}/offline-manifest", json={"workspace_id": q.env.ws, "consent": True})
     assert r.status_code == 503 and r.json()["code"] == "offline_reference_off"                                             # disabled by default
     monkeypatch.setenv("RIPPLE_OFFLINE_REFERENCE", "trusted-device")
-    r = q.admin.get(f"/v2/business/documents/{aid}/offline-manifest", params={"workspace_id": q.env.ws})
+    r = q.admin.post(f"/v2/business/documents/{aid}/offline-manifest", json={"workspace_id": q.env.ws})
     assert r.status_code == 409 and r.json()["code"] == "consent_required"
-    r = q.admin.get(f"/v2/business/documents/{aid}/offline-manifest", params={"workspace_id": q.env.ws, "consent": "true"})
+    g = q.admin.get(f"/v2/business/documents/{aid}/offline-manifest", params={"workspace_id": q.env.ws, "consent": "true"})
+    assert g.status_code == 405 and g.json()["code"] == "use_post", "SEC-05: a GET records nothing"
+    r = q.admin.post(f"/v2/business/documents/{aid}/offline-manifest", json={"workspace_id": q.env.ws, "consent": True})
     assert r.status_code == 200, r.text
     m = r.json()
     assert m["current_authority_checked"] is False and "current authority not checked" in m["label"] and m["content_hash"].startswith("sha256:") and m["expires_at"] > m["downloaded_at"]
     assert "no approval" in " ".join(m["rules"]) and m["purge_on"] == ["logout", "account_switch", "workspace_switch", "expiry"]
-    assert q.req.get(f"/v2/business/documents/{aid}/offline-manifest", params={"workspace_id": q.env.ws, "consent": "true"}).status_code in (200, 403)   # the base document's permission decides
+    assert q.req.post(f"/v2/business/documents/{aid}/offline-manifest", json={"workspace_id": q.env.ws, "consent": True}).status_code in (200, 403)   # the base document's permission decides

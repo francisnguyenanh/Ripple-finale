@@ -96,7 +96,7 @@ def test_six_rule_kinds_keep_actor_condition_exception_and_stay_separate(env, mo
 
 def test_durable_snapshot_from_the_real_extraction_keeps_the_meaning(env, monkeypatch):
     run_extraction(env, monkeypatch, SIX_KINDS[:3])
-    out = backfill_observed_snapshot(env.store, env.tenant, env.ws, snapshot_id="snap-x", actor_id="system", idempotency_key="x1")
+    out = backfill_observed_snapshot(env.store, env.tenant, env.ws, snapshot_id="snap-x", actor_id=env.admin, idempotency_key="x1")
     rules = business_view(env.store, env.tenant, env.ws)["pending"]["rules"]
     capex = next(r for r in rules if r["outcome"]["predicate"] == "capex_review")
     assert capex["condition"]["all"][0]["value"] == "CAPEX" and capex["actor_ref"] == "role-finance-department"

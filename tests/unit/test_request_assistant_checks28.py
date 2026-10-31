@@ -74,4 +74,4 @@ def test_honest_absences_are_kept_whichever_unstated_form_caught_them_and_near_m
 
 
 def test_the_version_is_checks28_and_checks27_answers_stay_shown_as_stored():
-    assert ra.CHECKS_VERSION == "request-assistant-checks/30" and {"request-assistant-checks/27", "request-assistant-checks/28", "request-assistant-checks/29"} <= ra.COMPATIBLE_CHECKS
+    assert ra.CHECKS_VERSION == "request-assistant-checks/31" and {"request-assistant-checks/27", "request-assistant-checks/28", "request-assistant-checks/29"} <= ra.COMPATIBLE_CHECKS

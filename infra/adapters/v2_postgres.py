@@ -281,6 +281,7 @@ class PostgresV2Store:
         sql += "\n" + (migrations_dir / "ext_t11_preparation_runs.sql").read_text(encoding="utf-8")    # EUI-08 guided preparation runs (feature off by default)
         sql += "\n" + (migrations_dir / "ah05_job_correlation.sql").read_text(encoding="utf-8")      # AH-05 HTTP -> job correlation (additive)
         sql += "\n" + (migrations_dir / "ah02_review_note_index.sql").read_text(encoding="utf-8")    # AH-02 measured partial index for review-note lookups
+        sql += "\n" + (migrations_dir / "v2_042_login_failures.sql").read_text(encoding="utf-8")     # SEC-02 (2026-10-30): failed-login counters with lock state (additive)
         with self._tx() as cur:
             cur.execute(sql)
 
@@ -2024,6 +2025,10 @@ class PostgresV2Store:
                    "expected_version": expected_version}
         payload_hash = canonical_hash(payload)
         with self._tx() as cur:
+            if actor_id is not None:
+                # REL-05 (2026-10-30): the route's permission check is re-done under the locks of this transaction (account, membership, then the head:
+                # the AH-03 order), so a confirmer revoked between the request's authority resolution and this commit cannot publish.
+                self._recheck_actor_authority(cur, tenant_id, workspace_id, actor_id, "knowledge.confirm")
             head = self._lock_head(cur, tenant_id, workspace_id)
             prior = self._replay(cur, tenant_id, workspace_id, operation,
                                  idempotency_key, payload_hash)
@@ -3416,6 +3421,39 @@ class PostgresV2Store:
             return self._model_policy(cur, tenant_id, project_id)
 
     @staticmethod
+    def _assert_fence(cur, tenant_id: str, workspace_id: str, fence, *, alive: bool) -> None:
+        """REL-02 (2026-10-30): the write boundary of a leased job is taken only by the claim that owns it. `fence` = (outbox event id, worker id,
+        fencing token). Locks the outbox row (lock order: outbox row, then the job row, then the ledger; `begin_execution` takes workspace then job and
+        never the outbox, so no cycle). `alive=True` also requires the lease not to have expired (a provider call must not start on a stale lease);
+        `alive=False` accepts an expired lease as long as nobody reclaimed the event (the token is unchanged), so a late but unowned finish still lands.
+        Raises `LeaseLost` inside the caller's transaction, which then rolls back untouched."""
+        event_id, worker_id, token = fence
+        cur.execute("SELECT 1 FROM v2_outbox WHERE tenant_id=%s AND workspace_id=%s AND id=%s AND lease_owner=%s AND fencing_token=%s AND status='CLAIMED'"
+                    + (" AND lease_until > now()" if alive else "") + " FOR UPDATE",
+                    (tenant_id, workspace_id, event_id, worker_id, token))
+        if cur.fetchone() is None:
+            raise LeaseLost("outbox lease lost at the write boundary")
+
+    def _record_late_usage(self, tenant_id: str, workspace_id: str, job_id: str, attempt: Mapping[str, object]) -> None:
+        """REL-02: a worker whose claim was reclaimed still records the usage its provider call produced, as ONE informational row
+        (`<attempt_key>:late`, outcome `LATE_USAGE`, provider_calls 0, cost 0): the liability stays on the in-flight marker the new owner booked at its
+        ceiling (`USAGE_UNKNOWN`), nothing is settled, reduced or charged twice, no job state changes. Idempotent per key; its own transaction."""
+        attempt = _safe_attempt(attempt)
+        ctx = dict(attempt.get("request_context") or {})
+        ctx["late"] = True
+        ctx["recorded_outcome"] = attempt.get("outcome")
+        with self._tx() as cur:
+            cur.execute("""INSERT INTO v2_job_attempts
+                    (tenant_id, workspace_id, job_id, attempt_key, outcome, reason, retryable, executor_id, model_id, prompt_hash, schema_hash,
+                     request_context, provider_calls, input_tokens, output_tokens, cost_estimate_usd, cost_usd, duration_ms)
+                VALUES (%s,%s,%s,%s,'LATE_USAGE',%s,NULL,%s,%s,%s,%s,%s,0,%s,%s,'0','0',%s)
+                ON CONFLICT (tenant_id, workspace_id, job_id, attempt_key) DO NOTHING""",
+                (tenant_id, workspace_id, job_id, str(attempt["attempt_key"]) + ":late",
+                 "late_usage: the claim was reclaimed before this worker finished; usage recorded for the record, liability stays on the owner's marker",
+                 attempt.get("executor_id"), attempt.get("model_id"), attempt.get("prompt_hash"), attempt.get("schema_hash"), Json(ctx),
+                 attempt.get("input_tokens"), attempt.get("output_tokens"), attempt.get("duration_ms")))
+
+    @staticmethod
     def _insert_attempt(cur, tenant_id: str, workspace_id: str, job_id: str,
                         attempt: Mapping[str, object]) -> None:
         attempt = _safe_attempt(attempt)
@@ -3509,10 +3547,12 @@ class PostgresV2Store:
         return {"created": created, "cost_usd": str(amount), "job_id": job_id}
 
     def begin_provider_attempt(self, tenant_id: str, workspace_id: str, job_id: str, attempt_key: str, *,
-                               ceiling_usd, context: Mapping[str, object]) -> None:
+                               ceiling_usd, context: Mapping[str, object], fence=None) -> None:
         """Write, BEFORE the provider is contacted, a durable attempt row (`IN_FLIGHT`) booked at the attempt's budget ceiling, in the same transaction that
         keeps the job's ledger row at or above it. If the worker dies after this point nobody knows whether the provider charged: the row stays booked."""
         with self._tx() as cur:
+            if fence is not None:
+                self._assert_fence(cur, tenant_id, workspace_id, fence, alive=True)       # REL-02: no provider call on a lost or expired lease
             cur.execute("""INSERT INTO v2_job_attempts
                     (tenant_id, workspace_id, job_id, attempt_key, outcome, reason, retryable, request_context, provider_calls, cost_estimate_usd, cost_usd)
                 VALUES (%s,%s,%s,%s,'IN_FLIGHT',%s,NULL,%s,1,%s,%s)
@@ -3574,18 +3614,28 @@ class PostgresV2Store:
         return {"booked_usd": row[1], "actual_usd": actual_cost_usd}
 
     def record_attempt(self, tenant_id: str, workspace_id: str, job_id: str,
-                       attempt: Mapping[str, object]) -> None:
+                       attempt: Mapping[str, object], *, fence=None) -> None:
         """A NON-terminal attempt (retryable provider failure, retries
         remaining): its row and its cost land in the ledger in one
-        transaction, idempotent per `attempt_key`."""
-        with self._tx() as cur:
-            self._insert_attempt(cur, tenant_id, workspace_id, job_id, attempt)
-            self._accrue_ledger(cur, tenant_id, workspace_id, job_id, settle=False)
+        transaction, idempotent per `attempt_key`. With `fence` (REL-02) the
+        row lands only while this claim still owns the event; otherwise the
+        usage is kept as a late row and `LeaseLost` is raised."""
+        try:
+            with self._tx() as cur:
+                if fence is not None:
+                    self._assert_fence(cur, tenant_id, workspace_id, fence, alive=False)
+                self._insert_attempt(cur, tenant_id, workspace_id, job_id, attempt)
+                self._accrue_ledger(cur, tenant_id, workspace_id, job_id, settle=False)
+        except LeaseLost:
+            if int(attempt.get("provider_calls") or 0) > 0:
+                self._record_late_usage(tenant_id, workspace_id, job_id, attempt)
+            raise
 
     def finish_execution(self, tenant_id: str, workspace_id: str, job_id: str,
                          terminal: str, *, reason: str | None = None,
                          result: Mapping[str, object] | None = None,
-                         attempt: Mapping[str, object] | None = None) -> str:
+                         attempt: Mapping[str, object] | None = None,
+                         fence=None, queued_only: bool = False) -> str:
         """The ONE terminal transition of the execution axis.
 
         In a single transaction: records the attempt row (if any), applies
@@ -3605,7 +3655,18 @@ class PostgresV2Store:
             raise ValueError("terminal must be COMPLETED, FAILED or CANCELLED")
         attempt = _safe_attempt(attempt) if attempt is not None else None
         reason = sanitize_reason(reason)                                    # AH-05: typed, bounded reason; no raw exception text on the job row
+        try:
+            return self._finish_execution(tenant_id, workspace_id, job_id, terminal, reason, result, attempt, fence, queued_only)
+        except LeaseLost:
+            # REL-02 (2026-10-30): the claim was reclaimed; the usage of a call this worker made is kept as an informational row, nothing else lands
+            if attempt is not None and int(attempt.get("provider_calls") or 0) > 0:
+                self._record_late_usage(tenant_id, workspace_id, job_id, attempt)
+            raise
+
+    def _finish_execution(self, tenant_id, workspace_id, job_id, terminal, reason, result, attempt, fence, queued_only) -> str:
         with self._tx() as cur:
+            if fence is not None:
+                self._assert_fence(cur, tenant_id, workspace_id, fence, alive=False)    # REL-02: outbox row first, then the job row, then the ledger
             cur.execute("""SELECT execution_status, cancel_requested_at FROM v2_jobs
                 WHERE tenant_id=%s AND workspace_id=%s AND job_id=%s FOR UPDATE""",
                 (tenant_id, workspace_id, job_id))
@@ -3616,6 +3677,9 @@ class PostgresV2Store:
                 raise StoreConflict(
                     f"job execution cannot be {terminal.lower()} from its current state "
                     f"(execution_status={row[0]!r})")
+            if queued_only and row[0] != "QUEUED":
+                # the operator path (no lease): a job under a worker's lease is never ended from outside its fence
+                raise StoreConflict("only a QUEUED job can be ended without the lease of the claim that runs it")
             written = terminal
             if terminal == "COMPLETED" and row[1] is not None:
                 written, reason = "CANCELLED", "cancel_requested_during_execution"
@@ -3733,11 +3797,13 @@ class PostgresV2Store:
         self.finish_execution(tenant_id, workspace_id, job_id, "FAILED", reason=reason)
 
     def cancel_execution(self, tenant_id: str, workspace_id: str, job_id: str,
-                         reason: str) -> None:
+                         reason: str, *, fence=None, queued_only: bool = False) -> None:
         """Round-5 interface: terminal `CANCELLED` on the execution axis only
         (the approval `status` is left untouched unless a cancel was
-        requested, see `finish_execution`)."""
-        self.finish_execution(tenant_id, workspace_id, job_id, "CANCELLED", reason=reason)
+        requested, see `finish_execution`). REL-02: the worker passes its
+        `fence`; the operator tool passes `queued_only=True` (no lease: a
+        RUNNING job is never ended from outside its claim)."""
+        self.finish_execution(tenant_id, workspace_id, job_id, "CANCELLED", reason=reason, fence=fence, queued_only=queued_only)
 
     _quota_table_ready = False
 
@@ -4225,6 +4291,36 @@ class PostgresV2Store:
                 (worker_id, lease_seconds, token, row[0]))
             return OutboxClaim(row[0], row[1], row[2], row[3],
                                _as_object(row[4]), token, attempts_after)
+
+    def park_outbox(self, tenant_id: str, workspace_id: str, event_id: int, worker_id: str, token: int, *, reason: str) -> None:
+        """REL-01 (2026-10-30): an event of a kind this worker has no consumer for is set aside, payload untouched, `status='PARKED'` (the status
+        column is free text; nothing in the schema changes), its lease released, attempts not spent. `claim_outbox` never returns a PARKED row, so it is
+        not polled; `replay_parked_outbox` returns it to PENDING once a consumer exists. Fenced: only the claim that holds the event may park it."""
+        with self._tx() as cur:
+            cur.execute("""UPDATE v2_outbox SET status='PARKED', lease_owner=NULL, lease_until=NULL, attempts=GREATEST(attempts-1, 0)
+                WHERE tenant_id=%s AND workspace_id=%s AND id=%s AND lease_owner=%s AND fencing_token=%s AND status='CLAIMED'""",
+                (tenant_id, workspace_id, event_id, worker_id, token))
+            if cur.rowcount != 1:
+                raise LeaseLost("outbox lease lost")
+            cur.execute("""INSERT INTO v2_audit (tenant_id, workspace_id, event_type, actor_id, payload) VALUES (%s,%s,'OUTBOX_PARKED',%s,%s)""",
+                        (tenant_id, workspace_id, worker_id, Json({"event_id": event_id, "reason": sanitize_reason(reason)})))
+
+    def parked_outbox(self, tenant_id: str, workspace_id: str) -> list[dict]:
+        with self._tx() as cur:
+            cur.execute("SELECT id, kind, created_at FROM v2_outbox WHERE tenant_id=%s AND workspace_id=%s AND status='PARKED' ORDER BY id",
+                        (tenant_id, workspace_id))
+            return [{"id": r[0], "kind": r[1], "created_at": r[2].isoformat()} for r in cur.fetchall()]
+
+    def replay_parked_outbox(self, tenant_id: str, workspace_id: str, kind: str, *, actor_id: str, reason: str) -> int:
+        """Operator path (REL-01): every PARKED event of `kind` goes back to PENDING for the worker that now has a consumer for it; one audit row names
+        who, why and how many. The caller (tools.ops_jobs) checks the kind against the worker's registry first."""
+        with self._tx() as cur:
+            cur.execute("""UPDATE v2_outbox SET status='PENDING' WHERE tenant_id=%s AND workspace_id=%s AND kind=%s AND status='PARKED'""",
+                        (tenant_id, workspace_id, kind))
+            n = cur.rowcount
+            cur.execute("""INSERT INTO v2_audit (tenant_id, workspace_id, event_type, actor_id, payload) VALUES (%s,%s,'OUTBOX_REPLAYED',%s,%s)""",
+                        (tenant_id, workspace_id, actor_id, Json({"kind": kind, "replayed": n, "reason": sanitize_reason(reason)})))
+            return n
 
     def heartbeat_outbox(self, tenant_id: str, workspace_id: str,
                          event_id: int, worker_id: str, token: int, *,

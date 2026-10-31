@@ -121,7 +121,7 @@ def test_possessive_and_assigning_claims_need_a_step_that_is_the_readers():
     assert ra.authority_problem("You should ask for the AI draft.", [current_action], "suggestion") is None
     for text in ("No, the next step is not yours; it is waiting on the requester.", "The requester holds the next step.", "You may also do it, but you do not need to."):
         assert ra.authority_problem(text, [may_not_asked, waiting, permitted], "fact") is None, text
-    assert ra.CHECKS_VERSION == "request-assistant-checks/30" and "request-assistant-checks/26" in ra.COMPATIBLE_CHECKS
+    assert ra.CHECKS_VERSION == "request-assistant-checks/31" and "request-assistant-checks/26" in ra.COMPATIBLE_CHECKS
 
 
 def test_checks16_who_is_not_stated_is_authority_only_with_an_authority_verb():

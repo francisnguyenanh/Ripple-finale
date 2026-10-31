@@ -14,7 +14,7 @@ from tests.final_loop.test_kno01_business_store import KNOWLEDGE, counts, observ
 
 
 def seed(env, head, rules=None, key="seed-1", snapshot_id="snap-seed", gaps=()):
-    commit_snapshot(env.store, env.tenant, env.ws, snapshot_id=snapshot_id, actor_id="system", lifecycle_state="PENDING_HUMAN",
+    commit_snapshot(env.store, env.tenant, env.ws, snapshot_id=snapshot_id, actor_id=env.admin, lifecycle_state="PENDING_HUMAN",
                     rules=rules if rules is not None else observed(head), gaps=gaps, expected_version=head.version, expected_business_revision=0,
                     source_revision_id=head.source_revision_id, km_revision_id=head.knowledge_revision_id, decision_epoch=head.decision_epoch,
                     idempotency_key=key)

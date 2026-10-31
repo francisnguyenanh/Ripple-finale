@@ -152,4 +152,4 @@ def test_config31_states_the_three_classes_generally_and_keeps_the_earlier_contr
         assert kept in t
     for word in ("high-risk", "supplier", "director", "controller", "regional compliance", "ai draft", "h7-", "chief risk"):
         assert word not in t.lower()
-    assert ra.CONTEXT_VERSION == "request-assistant-context/14" and ra.CHECKS_VERSION == "request-assistant-checks/30"
+    assert ra.CONTEXT_VERSION == "request-assistant-context/14" and ra.CHECKS_VERSION == "request-assistant-checks/31"

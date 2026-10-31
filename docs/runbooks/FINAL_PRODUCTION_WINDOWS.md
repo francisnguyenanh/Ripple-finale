@@ -34,10 +34,22 @@ Each web process holds at most `RIPPLE_DB_POOL_MAX` connections per distinct DSN
 process does the same; operators' one-shot tools (`tools.ops_jobs`, `tools.db_migrate`) open one connection each. The sum must stay below the database's
 `max_connections` minus its reserved connections:
 
-`(max web instances x RIPPLE_DB_POOL_MAX) + (worker processes x RIPPLE_DB_POOL_MAX) + operator tools + margin < max_connections - reserved`
+`(old web instances x RIPPLE_DB_POOL_MAX) + (new web instances x RIPPLE_DB_POOL_MAX) + (worker executions x (RIPPLE_DB_POOL_MAX + 1)) + migration + operator tools + margin < max_connections - reserved`
 
-Example: an instance with 25 connections and 3 reserved, 2 web instances x 8 + 1 worker x 4 + 2 operator + margin 1 = 23 < 22 fails; use pool 6 for web
-(12 + 4 + 2 + 1 = 19). Set the platform's maximum instances so the formula holds; never rely on autoscaling defaults.
+Every term is counted during maintenance, the pre-traffic smoke and the rollout, not only in steady state (2026-10-30, REL-04):
+- *old web instances*: the previous revision's instances that are still alive while the new one is deployed; **traffic at 0 % is not evidence that it holds no
+  connections** — read `pg_stat_activity` per application and the platform's instance count, or scale the old revision to zero before counting it as 0;
+- *worker executions*: the number of worker executions that can run at once. A Cloud Run job's `tasks` / `parallelism` bounds the tasks of one execution, not the
+  executions a wake-up or the scheduler starts; the worker therefore holds an **execution lease** (`infra/worker/execution_lease.py`, a session advisory lock on
+  one dedicated connection, hence the `+ 1`): a second execution exits at once with `another_execution_active`. With the lease on, count 1 running execution plus 1
+  for the overlap of an exiting one; with the lease off (`RIPPLE_WORKER_EXECUTION_LEASE=0`) the bound is unverified and the envelope is not accepted;
+- *migration*: the one-shot `tools.db_migrate` connection while it runs.
+`python -m tools.db_envelope --max-connections 25 --reserved 3 --web-instances <N> --old-web-instances <M> --web-pool <P> --worker-executions <X> --worker-pool <Q>
+--worker-executions-verified <evidence>` prints the sum and exits 0 only when it holds and the worker bound names its evidence; on the day add
+`--observed-connections <count from pg_stat_activity>`. Example: 25 connections, 3 reserved, new web 3 x 4, worker 1 x (3 + 1), migration 1, operator 2, margin 2
+= 21 < 22 holds **only after the old revision is at zero instances**; with the old revision still alive (3 x 4 = 12 more) it does not: scale the old revision to
+zero (or use pool 2 on the web during the switch) before the new one is started. Set the platform's maximum instances so the formula holds; never rely on
+autoscaling defaults.
 - `RIPPLE_DB_WORK_SLOTS` (default: the pool size, or 16 without a pool) is how many request database units one web process runs at once off its event loop;
   keep it at or below `RIPPLE_DB_POOL_MAX` so a waiting unit waits for a slot and not inside a thread holding nothing.
 - `RIPPLE_DB_POOL_WAIT` (default 15 s) bounds how long a request waits for a connection or slot; then it gets HTTP 503 `service_busy` with `Retry-After: 2`.

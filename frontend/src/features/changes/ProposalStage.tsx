@@ -152,6 +152,9 @@ export function ProposalStage() {
               <DiffView diff={d.diff} />
             </>
           )}
+          {!d.diff && !s.can("evidence.read") && !s.can("change.approve") && (
+            <Muted data-testid="diff-withheld">The exact file diff is shown to the approver and to members who may read evidence; the fingerprints above identify the change.</Muted>
+          )}
         </>
       )}
     </StageCard>

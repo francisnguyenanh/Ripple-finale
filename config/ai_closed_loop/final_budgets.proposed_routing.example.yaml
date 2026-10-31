@@ -21,12 +21,10 @@ role_model_ids:
   retrieval.semantic: stand_in_light # three short classification calls per question; only inside the knowledge.qa budget
   document.wording: stand_in_light   # planned role, not used in Final (documents are deterministic)
 role_thinking_levels:
-  extraction: LOW
   knowledge.qa: LOW
   change.understand: MINIMAL
   change.impact_deps: MINIMAL
   change.draft_guidance: MINIMAL
-  retrieval.semantic: MINIMAL
 model_prices:
   stand_in_light:
     input_usd_per_1k: "0.00"

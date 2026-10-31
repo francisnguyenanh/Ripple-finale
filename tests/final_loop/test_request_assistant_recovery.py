@@ -200,7 +200,10 @@ def test_r19_a_worker_reclaimed_during_the_recovery_call_publishes_nothing_twice
     assert any(j == jid and n == 2 for _, j, n in taken), taken
     assert model.calls == 2 and m["state"] == "unavailable" and m["answer"]["reason_code"] == "attempt_limit"
     [b] = booked(q, tid)
-    assert b["status"] == "FAILED" and all(a[0] == "USAGE_UNKNOWN" and a[2] == a[3] for a in b["attempts"]) and b["ledger"] == [sum(a[2] for a in b["attempts"])]
+    usage = [a for a in b["attempts"] if a[0] == "USAGE_UNKNOWN"]
+    late = [a for a in b["attempts"] if a[0] != "USAGE_UNKNOWN"]
+    assert b["status"] == "FAILED" and len(usage) == 2 and all(a[2] == a[3] for a in usage) and b["ledger"] == [sum(a[2] for a in usage)]
+    assert [(a[0], a[2], a[3]) for a in late] in ([], [("LATE_USAGE", 0, 0)]), late      # REL-02: the reclaimed worker's usage is noted once at cost 0, never charged
     drain(q.env)
     assert model.calls == 2 and booked(q, tid)[0]["attempts"] == b["attempts"]
 

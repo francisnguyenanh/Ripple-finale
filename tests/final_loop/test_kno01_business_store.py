@@ -244,7 +244,7 @@ def test_cross_tenant_scope(env, ws):
     assert counts(env, "t-other-" + env.nonce) == NOTHING
     with pytest.raises(TenantScopeError):
         business_view(env.store, "t-unknown", env.ws)
-    with pytest.raises(TenantScopeError):
+    with pytest.raises((TenantScopeError, StaleAuthorityError)):          # REL-05: the actor holds no membership in that tenant, refused before the scope check
         commit_snapshot(env.store, "t-unknown", env.ws, snapshot_id="s", actor_id=env.admin, lifecycle_state="PENDING_HUMAN", rules=[], expected_version=0,
                         expected_business_revision=0, source_revision_id="x", km_revision_id=None, decision_epoch=0, idempotency_key="k")
     assert other.version == 0
@@ -276,7 +276,7 @@ def test_concurrent_accepts_from_separate_connections_have_one_winner(env, ws):
 def test_legacy_candidates_replay_into_a_pending_observed_snapshot(env, monkeypatch):
     ch = build(env, monkeypatch)                                          # real import + worker-run stub extraction (no model)
     head = env.store.head(env.tenant, env.ws)
-    out = backfill_observed_snapshot(env.store, env.tenant, env.ws, snapshot_id="snap-legacy", actor_id="system", idempotency_key="bf-1")
+    out = backfill_observed_snapshot(env.store, env.tenant, env.ws, snapshot_id="snap-legacy", actor_id=env.admin, idempotency_key="bf-1")
     view = business_view(env.store, env.tenant, env.ws)
     assert view["business_head"] == {"business_revision": 0, "accepted_snapshot_id": None} and view["accepted"] is None   # a proposal never becomes the head
     pending = view["pending"]
@@ -291,7 +291,7 @@ def test_legacy_candidates_replay_into_a_pending_observed_snapshot(env, monkeypa
         assert rule["source_bindings"][0]["revision_id"] == head.source_revision_id
         assert "condition" in rule["unknown_fields"] and "actor_ref" in rule["unknown_fields"] and rule["condition"] is None   # legacy rows carry no operator or actor
     assert {g["kind"] for g in pending["gaps"]} == {"missing_condition", "missing_actor"} and len(pending["gaps"]) == 2 * len(candidates)
-    again = backfill_observed_snapshot(env.store, env.tenant, env.ws, snapshot_id="snap-legacy", actor_id="system", idempotency_key="bf-1")
+    again = backfill_observed_snapshot(env.store, env.tenant, env.ws, snapshot_id="snap-legacy", actor_id=env.admin, idempotency_key="bf-1")
     assert again["result"].replayed and counts(env)["v2_business_snapshots"] == 1                      # re-run: same snapshot, no duplicate questions
     assert env.store.head(env.tenant, env.ws).source_revision_id == head.source_revision_id             # observed state untouched
 
@@ -302,12 +302,12 @@ def test_legacy_confirmation_needs_the_recorded_human_decision(env, monkeypatch)
     r = ch.admin.post("/v2/knowledge/confirm", json={"workspace_id": env.ws, "claim_id": tid, "rationale": "KNO-01 legacy replay"})
     assert r.status_code == 200, r.text
     decision_id = r.json()["decision_id"]
-    out = backfill_observed_snapshot(env.store, env.tenant, env.ws, snapshot_id="snap-legacy", actor_id="system", idempotency_key="bf-2",
+    out = backfill_observed_snapshot(env.store, env.tenant, env.ws, snapshot_id="snap-legacy", actor_id=env.admin, idempotency_key="bf-2",
                                      confirmations={tid: decision_id})
     rules = {r["candidate_ids"][0]: r for r in business_view(env.store, env.tenant, env.ws)["pending"]["rules"]}
     assert rules[tid]["status"] == "CONFIRMED" and {"kind": "human_decision", "decision_id": decision_id} in rules[tid]["provenance"]
     assert sum(1 for r in rules.values() if r["status"] == "CONFIRMED") == 1 and out["skipped"] == []
     with pytest.raises(BusinessKnowledgeRefused) as exc:                  # a decision id that was never recorded cannot confirm anything
-        backfill_observed_snapshot(env.store, env.tenant, env.ws, snapshot_id="snap-ghost", actor_id="system", idempotency_key="bf-3",
+        backfill_observed_snapshot(env.store, env.tenant, env.ws, snapshot_id="snap-ghost", actor_id=env.admin, idempotency_key="bf-3",
                                    confirmations={tid: "decision-never-recorded"})
     assert exc.value.code == "unknown_reference"

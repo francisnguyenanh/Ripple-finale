@@ -59,17 +59,16 @@ def _token(request: Request) -> str:
 
 
 class LoginThrottle:
-    """Bounded, in-process brute-force throttle for POST /v2/auth/login.
+    """Bounded, in-process brute-force throttle for POST /v2/auth/login (the first, approximate line; the exact shared state lives in
+    `v2_login_failures` through `infra/login_protection.py` when RIPPLE_RATE_SHARED=1).
 
-    Two independent counters of FAILED attempts inside a sliding window: per account id (any string, whether or not
-    the account exists, so the response never reveals existence) and per source address. At the limit the key is
-    locked for `lockout_seconds`; while locked every attempt (including a correct credential) gets the same generic
-    429 + Retry-After and never reaches the credential check. A successful login clears that account's counter; the
-    lock also expires by itself. Memory is bounded (`max_keys`, expired entries pruned, oldest evicted). State is per
-    process: with several Cloud Run instances each keeps its own counters (effective limit = limit x instances); a
-    shared store would be needed for an exact global limit. Config (env, read at construction): RIPPLE_LOGIN_MAX_FAILURES
-    (5), RIPPLE_LOGIN_SOURCE_MAX_FAILURES (100), RIPPLE_LOGIN_WINDOW_SECONDS (300), RIPPLE_LOGIN_LOCKOUT_SECONDS (300),
-    RIPPLE_LOGIN_MAX_TRACKED (10000); 0 for a max-failures value disables that counter."""
+    Three counters of FAILED attempts inside a sliding window (SEC-02, 2026-10-30): the (account, source) pair, the source address and the
+    account from every source (any account string, whether or not it exists, so the response never reveals existence); each with its own limit
+    and lock (`infra/login_protection.keys`). At the limit the key is locked for its lockout; while locked every attempt (including a correct
+    credential) gets the same generic 429 + Retry-After, never reaches the credential check and changes no counter; after the lock the key counts
+    again from zero. A successful login clears that account's own counters; a lock expires by itself. Memory is bounded (`max_keys`, expired
+    entries pruned, oldest evicted). State is per process: with several instances each keeps its own counters (the shared table is exact).
+    Config (env): RIPPLE_LOGIN_WINDOW_SECONDS (300), RIPPLE_LOGIN_MAX_TRACKED (10000) and the per-layer limits read by `login_protection`."""
 
     def __init__(self, clock=time.monotonic):
         def _i(name, default):
@@ -88,18 +87,16 @@ class LoginThrottle:
 
     @staticmethod
     def _keys(account, source):
-        acct = account if isinstance(account, str) else ""
-        return (("a", acct[:200]), ("s", (source or "")[:100]))
-
-    def _limit(self, key):
-        return self.account_max if key[0] == "a" else self.source_max
+        """(key, limit, lockout) of the three layers (SEC-02): the pair, the source, the account from every source; see infra/login_protection.py."""
+        from infra import login_protection
+        return login_protection.keys(account, source)
 
     def retry_after(self, account, source) -> int:
-        """Seconds until the next attempt is accepted, 0 when not locked."""
+        """Seconds until the next attempt is accepted, 0 when not locked. A locked key changes nothing (checked before the credential)."""
         now = self._clock()
         with self._lock:
             wait = 0.0
-            for key in self._keys(account, source):
+            for key, _limit, _lockout in self._keys(account, source):
                 entry = self._state.get(key)
                 if entry and entry[1] > now:
                     wait = max(wait, entry[1] - now)
@@ -108,24 +105,24 @@ class LoginThrottle:
     def failure(self, account, source) -> None:
         now = self._clock()
         with self._lock:
-            for key in self._keys(account, source):
-                limit = self._limit(key)
-                if limit <= 0:
-                    continue
+            for key, limit, lockout in self._keys(account, source):
                 entry = self._state.pop(key, None) or [[], 0.0]
                 entry[0] = [t for t in entry[0] if now - t < self.window] + [now]
                 if len(entry[0]) >= limit:
-                    entry[1] = now + self.lockout
+                    entry[1] = now + lockout                        # LOCKED; the counter restarts from 0 after the lock (re-arm needs `limit` new failures)
                     entry[0] = []
                 self._state[key] = entry
             while len(self._state) > self.max_keys:
                 self._state.popitem(last=False)
 
     def success(self, account) -> None:
+        """Clears the account's own counters (`a:` and every `as:` of it) that are not locked; a lock expires by itself."""
+        now = self._clock()
+        acct = account[:200] if isinstance(account, str) else ""
         with self._lock:
-            entry = self._state.get(("a", account[:200] if isinstance(account, str) else ""))
-            if entry is not None:
-                entry[0] = []
+            for key, entry in self._state.items():
+                if (key == "a:" + acct or key.startswith("as:" + acct + "|")) and entry[1] <= now:
+                    entry[0] = []
 
     def reset(self) -> None:
         with self._lock:
@@ -136,11 +133,9 @@ _THROTTLE = LoginThrottle()
 
 
 def _source(request: Request) -> str:
-    """Caller address. Behind Cloud Run the last X-Forwarded-For hop is the one the platform appended."""
-    fwd = request.headers.get("x-forwarded-for", "")
-    if fwd:
-        return fwd.split(",")[-1].strip()
-    return request.client.host if request.client else ""
+    """The caller's address under the ingress contract (RIPPLE_TRUSTED_PROXY_HOPS; `infra/login_protection.source_address`)."""
+    from infra import login_protection
+    return login_protection.source_address(request)
 
 
 @router.post("/v2/auth/login")
@@ -175,11 +170,15 @@ def login(request: Request):
     except (ValueError, IdentityDenied):
         _THROTTLE.failure(account, source)
         from infra import v2_http_guard as _G
+        ceiling = False
         if _G.login_enabled():
             try:
-                _G.login_failure(account, source)
+                ceiling = _G.login_failure(account, source)
             except Exception:                                # noqa: BLE001 - the in-process counter above still counted it
                 pass
+        if ceiling:                                          # SEC-02: the shared table could not count this key (row ceiling): nothing is admitted
+            return JSONResponse({"error": "too many attempts"}, status_code=429,
+                                headers={"Cache-Control": "no-store", "Retry-After": "60"})
         return _error("invalid credentials", 401)
     _THROTTLE.success(account)
     from infra import v2_http_guard as _G

@@ -9,6 +9,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application files
 COPY . .
 
+# OPS-01 (2026-10-30): the processes run as an unprivileged user. The application tree is read-only for it (nothing under /app is written at
+# run time); the directories the worker writes are its home (git configuration of the remote sync) and the system temp directory (code and
+# sandbox check-outs, staged uploads). No credential or configuration is baked in: secrets and the budget file are mounted or passed at run time.
+RUN useradd --create-home --home-dir /srv/ripple --uid 10001 --shell /usr/sbin/nologin appuser
+ENV HOME=/srv/ripple
+USER 10001
+
 # Expose standard Cloud Run port
 EXPOSE 8080
 

@@ -238,9 +238,12 @@ def _flag(store, tenant, ws, cid, account, text) -> None:
 
 
 def _guard(request, body_workspace):
-    """-> (identity, store, error response)."""
+    """-> (identity, store, error response). A body without a workspace is a client error here, before any identity or store work: every chat route
+    resolves its tenant through the workspace, and an absent one must never reach the store as a KeyError (AH-01 residual, found in the C18 image run)."""
     if not _origin_ok(request):
         return None, None, _error("origin refused", 403)
+    if not isinstance(body_workspace, str) or not body_workspace.strip():
+        return None, None, _error("workspace_id required", 400)
     identity, store = _identity_store(), _v2_store()
     if identity is None or store is None:
         return None, None, _error("v2 unavailable", 503)

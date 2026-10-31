@@ -215,6 +215,16 @@ The budget configuration names the AI job kinds this server may run. The code is
 1. Gates worker startup exactly as the spike flag did (§5), and
 2. **Must** be threaded into a real provider adapter's request as the provider's own max-output-tokens parameter when a live (`vertex`/`ai_module`) call path is used. This is an explicit requirement on that adapter, not something assumed to happen because the config value exists.
 
+**What each live executor sends (verified 2026-10-30 by `tests/contract/test_executor_request_serialization.py` against the production example; AI-02):**
+
+| Executor | Roles | `max_output_tokens` sent | thinking | schema / timeout / location |
+|---|---|---|---|---|
+| generic pinned-role call (`infra/worker/explain.py`) | 17 roles incl. the request assistant | `role_generation_max_output_tokens[role]`, else the global `generation_max_output_tokens` (6,144; 2,048 for the assistant) | `role_thinking_levels[role]` when configured, otherwise none (provider default, not pinned) | response schema; `role_request_timeouts[role]` else `request_timeout_seconds`; `role_locations[role]` for the allow-listed recovery role only |
+| `extraction` (`infra/worker/extraction.py`) | extraction | the global `generation_max_output_tokens` (6,144), never the 12,288 reservation ceiling | none, whatever the configuration declares (the example declares none since 2026-10-30) | response schema; `request_timeout_seconds`; global |
+| semantic retrieval (`infra/adapters/semantic_vertex.py`) | retrieval.semantic | the adapter's own cap (512 as constructed by `v2_business_index`) | none | no schema (JSON mime type); the caller's timeout; global |
+
+The reservation ceiling of a role (`role_max_output_tokens[role]`, else `max_output_tokens`) is at or above every sent cap, and the per-call ceiling booked before a call (`job_worker._attempt_cost` for that kind) covers the sent cap at the role's price. The 2x margin between the sent cap and the ceiling is therefore kept for every executor; a role that sends no thinking level has no measured thinking usage and is not claimed to.
+
 ### 7.1a Bounding one document's real prompt size
 
 **Decision: the worker estimates each prompt's token count itself, before every real call, and refuses (`budget_exceeded`) if the estimate exceeds `max_input_tokens_per_call` — implemented, not deferred.** The pre-job admission estimate (§5) is a worst-case *ceiling* check: it assumes every real call this job makes costs at most `max_input_tokens_per_call` worth of input, which bounds the *job's* worst case but says nothing about whether any *specific* document's actual prompt is anywhere near that size. Without a per-document check, a ~700 KB document would be admitted and sent to the provider, because the admission estimate alone never inspects the document.

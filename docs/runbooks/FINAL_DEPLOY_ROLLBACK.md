@@ -14,6 +14,8 @@ target platform, project and access model are the owner's decision. Recovery of 
 - Configuration by environment variable only; secrets from the platform's secret store, never in env files or the image:
   - database DSN and session secret (secrets);
   - `RIPPLE_JUDGE_ORIGIN` (the exact public origin), `RIPPLE_SESSION_LIFETIME_SECONDS`, `RIPPLE_DB_POOL_MAX` / `RIPPLE_DB_POOL_WAIT` / `RIPPLE_DB_WORK_SLOTS` (sized by the connection envelope in `FINAL_PRODUCTION_WINDOWS.md` section 1a);
+  - `RIPPLE_WORKER_EXECUTION_LEASE` (default on; the worker's one-execution lease, see `FINAL_PRODUCTION_WINDOWS.md` section 1a);
+  - login protection (`infra/login_protection.py`): `RIPPLE_RATE_SHARED=1` (the counters are shared by every instance through the database), `RIPPLE_LOGIN_SCHEMA_AUTO=0` (both guard tables, `v2_login_failures` and `v2_rate_windows`, come from migration v2_042; no request path issues DDL), `RIPPLE_TRUSTED_PROXY_HOPS` (the ingress contract: 0 = no trusted proxy, the peer address counts and `X-Forwarded-For` is ignored; n = the n-th entry from the end of `X-Forwarded-For` was appended by a trusted hop; a value is **configuration verified on the deployment**, never assumed: the pre-traffic step D21 sends three requests, without the header, with one forged entry and with two, and the resolved source must be the sender's address in all three; a request with fewer entries than hops is `untrusted` and refused early), `RIPPLE_LOGIN_PRIVILEGED_ACCOUNTS` (comma-separated account ids whose global layer locks earlier and longer; privileged credentials are never published), the limits `RIPPLE_LOGIN_MAX_FAILURES` / `RIPPLE_LOGIN_LOCKOUT_SECONDS` (pair, 5 / 300), `RIPPLE_LOGIN_SOURCE_MAX_FAILURES` / `RIPPLE_LOGIN_SOURCE_LOCKOUT_SECONDS` (source, 100 / 300), `RIPPLE_LOGIN_ACCOUNT_GLOBAL_MAX_FAILURES` / `RIPPLE_LOGIN_ACCOUNT_GLOBAL_LOCKOUT_SECONDS` (account from every source, 60 / 60), `RIPPLE_LOGIN_MAX_ROWS` (system ceiling of counter rows, 200000; above it a new key is refused `429` and `login_rows_ceiling_reached` is logged once a minute; recovery is retention over time or `DELETE FROM v2_login_failures WHERE locked_until < extract(epoch from now())` by an operator);
   - AI: `RIPPLE_BUDGET_CONFIG_PATH` — a **production** budget configuration with its own cap, the roles to enable and their pinned model (the evaluation configuration and
     ledger of the development runs must not be reused); `RIPPLE_PROVIDER_MODE` and the provider switch decide whether real models are called at all (off = labelled simulated
     or deterministic fallback, never a silent success);
@@ -27,7 +29,11 @@ target platform, project and access model are the owner's decision. Recovery of 
 ## 3. Database
 - **Stop writes, then back up** (a full logical dump of the target database, checksum recorded) — the only rollback for data. Writes stop before the dump (workers scaled
   to zero, provider switch off, a maintenance notice, traffic held on the old revision) and stay stopped until the migrate step and the smoke pass; otherwise rows written
-  between the dump and a restore are lost.
+  between the dump and a restore are lost. Order of the drain (2026-10-30): first close job creation (`ai_switch` off, `set_window_until(now)` so `window_creation_closed`
+  refuses new jobs, the maintenance notice), then wait for `QUEUED = 0` and `RUNNING = 0` (`tools.ops_jobs list`) with a bound of 10 minutes; a job still QUEUED is
+  cancelled by `tools.ops_jobs cancel-queued --apply` (audited); then `worker_claims` off and the wake kick budget frozen. **A lease that expired is not proof that the
+  process stopped:** before the dump, the worker's execution lease must be absent (no session holds advisory lock `0x52495057`: `SELECT count(*) FROM pg_locks WHERE
+  locktype='advisory' AND objid=1381256279`) and `pg_stat_activity` must show no worker application; only then is the backup taken and the migration run.
 - Apply the schema as a **one-shot step before the new revision takes traffic** (the stores do not migrate at web start-up): `python -m tools.db_migrate` shows the target
   (host / port / database only), `python -m tools.db_migrate --apply` applies the v2 store and identity store migrations (exit 0 done, 2 DSN missing, 3 a statement failed).
   The SQL is forward-only, additive and idempotent; the upgrade of a populated database is verified by `tests/final_loop/test_rel02_upgrade_chain.py` (rows byte-identical,
@@ -52,4 +58,4 @@ target platform, project and access model are the owner's decision. Recovery of 
 
 ## 6. Not verified for the Final build
 No deployment on any cloud; no staging; no load, latency or availability measurement; previous image on the new schema and restore checked only locally on one PostgreSQL 16
-container (no point-in-time recovery); no production budget configuration; no human acceptance of AI quality. A deploy decision weighs these explicitly.
+container (no point-in-time recovery); the production budget configuration exists only as the example `config/ai_closed_loop/final_budgets.production.example.yaml` (copied outside version control and mounted at deploy time; not deployed); no human acceptance of AI quality. A deploy decision weighs these explicitly.

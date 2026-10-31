@@ -43,7 +43,7 @@ def test_the_next_basis_holds_the_current_state_the_blocker_and_the_later_steps(
     b = set(ra.basis_map(P["facts"])["next"])
     assert {fid(P, "state"), fid(P, "blocker"), key_id("steps:later"), key_id("decision_status"), fid(P, "position")} <= b
     assert key_id("steps:later:holders") not in b and key_id("parties") not in b
-    assert ra.CONTEXT_VERSION == "request-assistant-context/14" and ra.CHECKS_VERSION == "request-assistant-checks/30"
+    assert ra.CONTEXT_VERSION == "request-assistant-context/14" and ra.CHECKS_VERSION == "request-assistant-checks/31"
 
 
 # ---- checks/27: honest absences --------------------------------------------------------------------------------------------------------------------------------

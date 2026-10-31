@@ -95,8 +95,10 @@ def commit_snapshot(store, tenant_id, workspace_id, *, snapshot_id, actor_id, li
         prior = store._replay(cur, tenant_id, workspace_id, OPERATION, idempotency_key, payload_hash)
         if prior is not None:
             return prior
-        if lifecycle_state == "ACCEPTED" or recheck_authority:
-            store._recheck_actor_authority(cur, tenant_id, workspace_id, actor_id, CONFIRM_PERMISSION)
+        # REL-05 (2026-10-30): every commit, PENDING_HUMAN included, re-checks the actor's `knowledge.confirm` under this transaction's locks (every
+        # route that reaches here required that permission); `recheck_authority` is kept for callers and means nothing stronger.
+        del recheck_authority
+        store._recheck_actor_authority(cur, tenant_id, workspace_id, actor_id, CONFIRM_PERMISSION)
         head = store._lock_head(cur, tenant_id, workspace_id)
         prior = store._replay(cur, tenant_id, workspace_id, OPERATION, idempotency_key, payload_hash)     # a commit that won the race while this one waited
         if prior is not None:

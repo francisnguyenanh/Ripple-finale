@@ -69,4 +69,5 @@ def test_without_the_record_fact_there_is_no_support_and_the_limitation_is_refus
 
 
 def test_the_version_is_checks30():
-    assert ra.CHECKS_VERSION == "request-assistant-checks/30" and {"request-assistant-checks/28", "request-assistant-checks/29"} <= ra.COMPATIBLE_CHECKS
+    """checks/30 is the version these cases were written against; checks/31 (2026-10-30, a provenance addition only) supersedes it and keeps it compatible."""
+    assert ra.CHECKS_VERSION == "request-assistant-checks/31" and "request-assistant-checks/30" in ra.COMPATIBLE_CHECKS
